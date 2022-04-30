@@ -61,7 +61,6 @@ class PWEMGrid():
         ysize: float = np.max(self._yrange) - np.min(self._yrange)
         return xsize, ysize
 
-
     """ Help functions """
 
     def has_object(self):
@@ -215,7 +214,7 @@ class GridHasNoObjectError(Exception):
 
 
 def PWEMSolve(grid: PWEMGrid,
-              block_vector: npt.NDArray[np.float64],
+              block_vector: npt.NDArray[np.floating],
               p: int,
               q: int,
               n_eig: int = 5):
@@ -235,7 +234,7 @@ def PWEMSolve(grid: PWEMGrid,
         raise ValueError("p and q should be integer numbers")
     if block_vector.shape[0] != 2:
         raise IndexError("block vector should have exactly 2 lines (x and y)")
-    if n_eig > (2*p-1) * (2*q-1):
+    if n_eig > (2 * p - 1) * (2 * q - 1):
         raise ValueError("n_eig should be smaller than (2*p-1)(2*q-1)")
     # Start calculations
     conv_e0, conv_u0 = grid.convolution_matrices(p, q)
@@ -245,7 +244,8 @@ def PWEMSolve(grid: PWEMGrid,
     logging.debug(f"Checking shapes: {kx.shape=}\t{conv_e0.shape=}")
     results = np.zeros((n_eig, block_vector.shape[1]))
     logging.debug(f"{results.shape=}")
-    for index, (block_x, block_y) in enumerate(zip(block_vector[0, :], block_vector[1, :])):
+    for index, (block_x, block_y) in enumerate(
+            zip(block_vector[0, :], block_vector[1, :])):
         # Build the Kx and Ky matrices
         kx_b = block_x - kx
         ky_b = block_y - ky
@@ -308,6 +308,7 @@ def pwem_square():
         plt.plot(eig_i)
     plt.show()
 
+
 def pwem_circle():
     grid = PWEMGrid(525, 525)  # Base grid with a=1
     grid.add_cirle(9.5, 1, 0.25)
@@ -325,6 +326,7 @@ def pwem_circle():
     for eig_i in eigs:
         plt.plot(eig_i)
     plt.show()
+
 
 def pwem_compare():
     grid1 = PWEMGrid(525, 525)  # Base grid with a=1
@@ -345,6 +347,7 @@ def pwem_compare():
         plt.plot(eig1_i, 'b--')
         plt.plot(eig2_i, 'r--')
     plt.show()
+
 
 def main():
     """Run tests
