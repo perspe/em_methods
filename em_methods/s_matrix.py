@@ -18,8 +18,8 @@ from numpy.linalg import inv
 import numpy.typing as npt
 from scipy.interpolate import interp1d
 
-from smm_core.py_smm_base import CMatrix, CSMatrix
-from smm_core.py_smm_base import SMMType as CSMMType
+from em_methods.smm_core.py_smm_base import CMatrix, CSMatrix
+from em_methods.smm_core.py_smm_base import SMMType as CSMMType
 
 # Default simulation config
 sim_config = {
