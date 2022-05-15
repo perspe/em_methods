@@ -1,3 +1,9 @@
+""" Module with the information for the PWEM method
+This file contains
+PWEMGrid: Create the grid to perform the PWEM method
+PWEMSolve: Run the PWEM method
+Block: Create the list of block wavevectors
+"""
 from typing import List, Tuple, Union
 import numpy as np
 import numpy.typing as npt
@@ -9,6 +15,52 @@ from logging.config import fileConfig
 
 fileConfig('logging.ini')
 logger = logging.getLogger('dev')
+""" Class to obtain the Block Vectors for the structure """
+
+
+class Block():
+    """ Main class that defines all the block vectors for a specific structure """
+    def __init__(self,
+                 size: float,
+                 n_points: int,
+                 sym_fraction: str = "1/8") -> None:
+        # Initial variables
+        zeros = np.zeros(n_points)
+        diag_points: int = int(np.sqrt(2) * n_points)
+        change_xy = np.linspace(0, np.pi / size, n_points)
+        # inv_change_xy = change_xy.copy()[:-1]
+        self.label_pos: List[int] = []
+        self.label_name: List[str] = []
+        if sym_fraction == "1/8":
+            self.Kx = np.r_[change_xy, zeros + np.pi/size,
+                            np.linspace(np.pi / size, 0, diag_points)]
+            self.Ky = np.r_[zeros, change_xy,
+                            np.linspace(np.pi / size, 0, diag_points)]
+            self.label_pos = [
+                0, n_points, 2 * n_points, 2 * n_points + diag_points
+            ]
+            self.label_name = ["G", "X", "M", "G"]
+        else:  # Assume "full"
+            kx = np.linspace(-size, size, 2*n_points)
+            ky = np.linspace(-size, size, 2*n_points)
+            _Kx, _Ky = np.meshgrid(kx, ky)
+            self.Kx: npt.NDArray[np.floating] = _Kx.flatten()
+            self.Ky: npt.NDArray[np.floating] = _Ky.flatten()
+        logging.debug(f"{self.Kx=}\n{self.Ky=}")
+
+    @property
+    def kx(self) -> npt.NDArray[np.floating]:
+        return self.Kx
+
+    @property
+    def ky(self) -> npt.NDArray[np.floating]:
+        return self.Ky
+
+    @property
+    def label(self) -> Tuple[List[str], List[int]]:
+        return self.label_name, self.label_pos
+
+
 """ Main Grid Classes """
 
 
@@ -45,20 +97,24 @@ class PWEMGrid():
 
     @property
     def XYgrid(self):
+        logging.debug(f"{self._XX=}::{self._YY=}")
         return self._XX, self._YY
 
     @property
     def er(self):
+        logging.debug(f"{self._e=}")
         return self._e
 
     @property
     def u0(self):
+        logging.debug(f"{self._u=}")
         return self._u
 
     @property
     def grid_size(self):
         xsize: float = np.max(self._xrange) - np.min(self._xrange)
         ysize: float = np.max(self._yrange) - np.min(self._yrange)
+        logging.debug(f"{xsize=}::{ysize}")
         return xsize, ysize
 
     """ Help functions """
@@ -66,6 +122,12 @@ class PWEMGrid():
     def has_object(self):
         """ Check if any object has been added to the grid """
         return self._has_object
+
+    def reinit(self) -> None:
+        """ Remove all objects from the grid """
+        self._has_object = False
+        self._e = np.ones_like(self._e)
+        self._u = np.ones_like(self._u)
 
     """ Functions to add the primitives """
 
@@ -214,7 +276,7 @@ class GridHasNoObjectError(Exception):
 
 
 def PWEMSolve(grid: PWEMGrid,
-              block_vector: npt.NDArray[np.floating],
+              block: Block,
               p: int,
               q: int,
               n_eig: int = 5):
@@ -232,8 +294,6 @@ def PWEMSolve(grid: PWEMGrid,
         raise GridHasNoObjectError
     if not isinstance(p, int) and not isinstance(q, int):
         raise ValueError("p and q should be integer numbers")
-    if block_vector.shape[0] != 2:
-        raise IndexError("block vector should have exactly 2 lines (x and y)")
     if n_eig > (2 * p - 1) * (2 * q - 1):
         raise ValueError("n_eig should be smaller than (2*p-1)(2*q-1)")
     # Start calculations
@@ -242,10 +302,10 @@ def PWEMSolve(grid: PWEMGrid,
     kx = 2 * np.pi * np.arange(-(p + 1), p)
     ky = 2 * np.pi * np.arange(-(q + 1), q)
     logging.debug(f"Checking shapes: {kx.shape=}\t{conv_e0.shape=}")
-    results = np.zeros((n_eig, block_vector.shape[1]))
+    results = np.zeros((n_eig, block.Kx.shape[0]))
     logging.debug(f"{results.shape=}")
     for index, (block_x, block_y) in enumerate(
-            zip(block_vector[0, :], block_vector[1, :])):
+            zip(block.Kx, block.Ky)):
         # Build the Kx and Ky matrices
         kx_b = block_x - kx
         ky_b = block_y - ky
@@ -258,8 +318,8 @@ def PWEMSolve(grid: PWEMGrid,
         # Handle the eigenvalues ordering
         eigs = np.sort(np.real(eigs))
         logging.debug(f"Five lowest eigs: {eigs[:5]=}")
-        # TODO: Consider the grid size... <29-04-22, yourname> #
-        norm_eigs = (1 / (2 * np.pi)) * np.sqrt(eigs)
+        # Normalized eigs using the grid size
+        norm_eigs = (grid.grid_size[0] / (2 * np.pi)) * np.sqrt(eigs)
         # Add results to the final structure
         for i in range(n_eig):
             results[i, index] = norm_eigs[i]
@@ -308,53 +368,33 @@ def pwem_square():
         plt.plot(eig_i)
     plt.show()
 
-
-def pwem_circle():
+def pwem_full():
     grid = PWEMGrid(525, 525)  # Base grid with a=1
     grid.add_cirle(9.5, 1, 0.25)
-    plt.imshow(np.real(grid.er))
-    plt.show()
-    num_points = 30
-    beta_x = np.r_[np.linspace(0, np.pi, num_points),
-                   np.ones((num_points)) * np.pi,
-                   np.linspace(np.pi, 0, num_points)]
-    beta_y = np.r_[np.zeros(num_points),
-                   np.linspace(0, np.pi, num_points),
-                   np.linspace(np.pi, 0, num_points)]
-    beta = np.stack([beta_x, beta_y])
-    eigs = PWEMSolve(grid, beta, 6, 6, 10)
+    block = Block(grid.grid_size[0], 25)
+    eigs = PWEMSolve(grid, block, 8, 8, 5)
+    block_label, block_place = block.label
+    plt.xticks(block_place, block_label)
     for eig_i in eigs:
-        plt.plot(eig_i)
+        plt.plot(eig_i, 'b--')
     plt.show()
-
 
 def pwem_compare():
-    grid1 = PWEMGrid(525, 525)  # Base grid with a=1
-    grid1.add_ellipse(9.5, 1, (0.1, 0.2))
-    grid2 = PWEMGrid(525, 525)  # Base grid with a=1
-    grid2.add_cirle(9.5, 1, 0.25)
-    num_points = 30
-    beta_x = np.r_[np.linspace(0, np.pi, num_points),
-                   np.ones((num_points)) * np.pi,
-                   np.linspace(np.pi, 0, num_points)]
-    beta_y = np.r_[np.zeros(num_points),
-                   np.linspace(0, np.pi, num_points),
-                   np.linspace(np.pi, 0, num_points)]
-    beta = np.stack([beta_x, beta_y])
-    eigs1 = PWEMSolve(grid1, beta, 6, 6, 2)
-    eigs2 = PWEMSolve(grid2, beta, 6, 6, 2)
-    for eig1_i, eig2_i in zip(eigs1, eigs2):
-        plt.plot(eig1_i, 'b--')
-        plt.plot(eig2_i, 'r--')
+    grid = PWEMGrid(525, 525)
+    block = Block(grid.grid_size[0], 25)
+    _, ax = plt.subplots()
+    ax.set_xticks(block.label[1], block.label[0])
+    for size_i in np.linspace(0.2, 0.7, 3):
+        grid.add_cirle(5, 1, size_i)
+        eigs = PWEMSolve(grid, block, 10, 10, 3)
+        for eig_i in eigs:
+            ax.plot(eig_i, 'b')
+        grid.reinit()
     plt.show()
-
 
 def main():
     """Run tests
     """
-    # grid_constructor()
-    # pwem_square()
-    # pwem_circle()
     pwem_compare()
 
 
