@@ -1,3 +1,5 @@
+# distutils: language=c++
+# cython: language_level=3
 from libcpp.complex cimport complex
 cimport cython
 import numpy as np
