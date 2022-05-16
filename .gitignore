@@ -1,10 +1,16 @@
-*.png
-*.log
-*.txt
+# Folders
+
 *__pycache__*
 *build*
 *.egg-info*
 *dist*
 *Tests*
-*.so
 *.cache*
+
+# Files
+
+*.png
+*.log
+*.txt
+*.so
+*cpython*
