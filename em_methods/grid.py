@@ -2,6 +2,7 @@
 PWEM and RCWA """
 
 import logging
+from logging.config import fileConfig
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -9,6 +10,10 @@ import numpy.typing as npt
 from scipy.fft import fft2, fftshift
 from scipy.linalg import convolution_matrix
 
+import matplotlib.pyplot as plt
+
+fileConfig('logging.ini')
+logger = logging.getLogger('release')
 
 class GridHasNoObjectError(Exception):
     """ Exception to raise when the grid does not have any object """
@@ -146,39 +151,48 @@ class Grid2D():
         """
         self.add_ellipse(er, u0, (radius, radius), center=center)
 
-    # def add_triangle(self, er: complex, u0: complex, a: Tuple[float, float],
-    #                  b: Tuple[float, float], c: Tuple[float, float]):
-    #     # TODO
-    #     # Sort the values according to their x value
-    #     sorted_list = [a, b, c]
-    #     sorted_list.sort(key=lambda x: x[0])
-    #     a, b, c = tuple(sorted_list)
-    #     logging.debug(f"Sorted Values:{a=}::{b=}::{c=}")
-    #     ax, ay = a
-    #     bx, by = b
-    #     cx, cy = c
-    #     # Build the linear regressions that connect each point combination
-    #     m_ab = (by - ay) / (bx - ax)
-    #     m_ac = (cy - ay) / (cx - ax)
-    #     m_bc = (cy - by) / (cx - bx)
-    #     logging.debug(f"{m_ab=}::{m_ac=}::{m_bc=}")
-    #     b_ab = ay - m_ab * ax
-    #     b_ac = ay - m_ac * ax
-    #     b_bc = by - m_bc * bx
+    def add_triangle(self, er: complex, u0: complex, a: Tuple[float, float],
+                     b: Tuple[float, float], c: Tuple[float, float]):
+        # Sort the values according to their x value
+        sorted_list = [a, b, c]
+        sorted_list.sort(key=lambda x: x[0])
+        a, b, c = tuple(sorted_list)
+        logging.debug(f"Sorted Values:{a=}::{b=}::{c=}")
+        ax, ay = a
+        bx, by = b
+        cx, cy = c
+        # Build the linear regressions that connect each point combination
+        m_ab = (by - ay) / (bx - ax) if bx != ax else 1e20
+        m_ac = (cy - ay) / (cx - ax) if cx != bx else 1e20
+        m_bc = (cy - by) / (cx - bx) if cx != bx else 1e20
+        logging.debug(f"{m_ab=}::{m_ac=}::{m_bc=}")
+        b_ab = ay - m_ab * ax
+        b_ac = ay - m_ac * ax
+        b_bc = by - m_bc * bx
+        # Determine the limits for the triangle
+        lim_ab = self._XX > (self._YY - b_ab) / m_ab
+        lim_bc = self._XX < (self._YY - b_bc) / m_bc
+        # The ambiguity is all the the AC line
+        if m_ac < 0:
+            lim_ac = self._YY > m_ac*self._XX +b_ac
+        elif m_ac == 0 and by >= ay:
+            lim_ac = self._YY > m_ac*self._XX +b_ac
+        elif m_ac == 0 and by <= ay:
+            lim_ac = self._YY > m_ac*self._XX +b_ac
+        else:
+            lim_ac = self._YY < m_ac*self._XX +b_ac
 
-    #     sign_m_ab = np.sign(m_ab * self._XX - self._YY)
-    #     sign_m_ac = np.sign(m_ac * self._XX - self._YY)
-    #     sign_m_bc = np.sign(m_bc * self._XX - self._YY)
-    #     eq1 = (sign_m_ab + 1) * (sign_m_ac - 1) * (m_ab * self._XX + b_ab -
-    #                                                self._YY)
-    #     eq2 = (sign_m_ac + 1) * (sign_m_bc + 1) * (m_ac * self._XX + b_ac -
-    #                                                self._YY)
-    #     eq3 = (sign_m_bc - 1) * (sign_m_ab - 1) * (m_bc * self._XX + b_bc -
-    #                                                self._YY)
-    #     mask = (eq1 + eq2 + eq3 < 0)
-    #     logging.debug(f"{mask=}")
-    #     self._u[mask] = u0
-    #     self._e[mask] = er
+        plt.figure()
+        plt.imshow(lim_ab)
+        plt.figure()
+        plt.imshow(lim_bc)
+        plt.figure()
+        plt.imshow(lim_ac)
+        plt.show()
+        mask = lim_ab & lim_ac & lim_bc
+        # logging.debug(f"{mask=}")
+        self._u[mask] = u0
+        self._e[mask] = er
 
     def convolution_matrices(
         self, p: int, q: int
