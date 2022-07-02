@@ -7,7 +7,7 @@
 *Tests*
 *.cache*
 
-# Files
+# General Files
 
 *.png
 *.pdf
@@ -15,3 +15,6 @@
 *.txt
 *.so
 *cpython*
+
+# Specific files
+*py_smm_base.cpp
