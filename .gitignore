@@ -1,11 +1,11 @@
 # Folders
 
-*__pycache__*
-*build*
+/__pycache__
+/build
 *.egg-info*
-*dist*
-*Tests*
-*.cache*
+/dist
+/test
+/.cache
 
 # General Files
 
