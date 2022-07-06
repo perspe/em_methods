@@ -3,21 +3,50 @@ PWEM and RCWA """
 
 import logging
 from logging.config import fileConfig
+import os
 from typing import List, Tuple, Union
 
+import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
 from scipy.fft import fft2, fftshift
 from scipy.linalg import convolution_matrix
 
-import matplotlib.pyplot as plt
+# Get module logger
+base_path = os.path.dirname(os.path.abspath(__file__))
+fileConfig(os.path.join(base_path, 'logging.ini'))
+logger = logging.getLogger('dev')
 
-fileConfig('logging.ini')
-logger = logging.getLogger('release')
 
 class GridHasNoObjectError(Exception):
     """ Exception to raise when the grid does not have any object """
     pass
+
+
+class UniformGrid():
+    """ Main Class to define non-structured layers (avoids fft) """
+    __slots__ = ("_xlen", "_ylen", "_thickness", "_e", "_u")
+
+    def __init__(self,
+                 xlen: int,
+                 ylen: int,
+                 thickness: float,
+                 e_default: complex = 1,
+                 u_default: complex = 1):
+        self._xlen = xlen
+        self._ylen = ylen
+        self._thickness = thickness
+        base_matrix: npt.NDArray = np.diag(
+            np.array([1] * xlen, dtype=np.complex64))
+        self._e = base_matrix * e_default
+        self._u = base_matrix * u_default
+
+    def convolution_matrices(
+        self
+    ) -> Tuple[npt.NDArray[np.complexfloating],
+               npt.NDArray[np.complexfloating]]:
+        """ Return the convolution matrix """
+        return self._e, self._u
 
 
 class Grid2D():
@@ -32,20 +61,27 @@ class Grid2D():
             - triangle() TODO
         convolution_matrix() (Return convolution matrix for e and u)
     """
+    __slots__ = ("_xlen", "_ylen", "_xlims", "_ylims", "_thickness", "_xrange",
+                 "_yrange", "_XX", "_YY", "_e", "_u", "_has_object")
+
     def __init__(self,
                  xlen: int,
                  ylen: int,
+                 thickness: float,
+                 e_default: complex = 1,
+                 u_default: complex = 1,
                  xlims: List[float] = [-0.5, 0.5],
                  ylims: List[float] = [-0.5, 0.5]):
         self._xlen = xlen
         self._ylen = ylen
         self._xlims = xlims
         self._ylims = ylims
+        self._thickness = thickness
         self._xrange = np.linspace(min(xlims), max(xlims), xlen)
         self._yrange = np.linspace(max(ylims), min(ylims), ylen)
         self._XX, self._YY = np.meshgrid(self._xrange, self._yrange)
-        self._e = np.ones_like(self._XX, dtype=np.complex64)
-        self._u = np.ones_like(self._XX, dtype=np.complex64)
+        self._e = np.ones_like(self._XX, dtype=np.complex64) * e_default
+        self._u = np.ones_like(self._XX, dtype=np.complex64) * u_default
         self._has_object = False
 
     """ Define the accessible properties """
@@ -68,6 +104,10 @@ class Grid2D():
         xsize: float = np.max(self._xrange) - np.min(self._xrange)
         ysize: float = np.max(self._yrange) - np.min(self._yrange)
         return xsize, ysize
+
+    @property
+    def thickness(self) -> float:
+        return self._thickness
 
     """ Help functions """
 
@@ -174,13 +214,13 @@ class Grid2D():
         lim_bc = self._XX < (self._YY - b_bc) / m_bc
         # The ambiguity is all the the AC line
         if m_ac < 0:
-            lim_ac = self._YY > m_ac*self._XX +b_ac
+            lim_ac = self._YY > m_ac * self._XX + b_ac
         elif m_ac == 0 and by >= ay:
-            lim_ac = self._YY > m_ac*self._XX +b_ac
+            lim_ac = self._YY > m_ac * self._XX + b_ac
         elif m_ac == 0 and by <= ay:
-            lim_ac = self._YY > m_ac*self._XX +b_ac
+            lim_ac = self._YY > m_ac * self._XX + b_ac
         else:
-            lim_ac = self._YY < m_ac*self._XX +b_ac
+            lim_ac = self._YY < m_ac * self._XX + b_ac
 
         plt.figure()
         plt.imshow(lim_ab)
