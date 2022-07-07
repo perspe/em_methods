@@ -43,13 +43,13 @@ class SMBase:
         return redhaf_matrix
 
     def __repr__(self) -> str:
-        return f"--------\n{str(self._S11)}\n{str(self._S12)}\n{str(self._S21)}\n{str(self._S22)}\n------"
+        return f"--------\n{repr(self._S11)}\n{repr(self._S12)}\n{repr(self._S21)}\n{repr(self._S22)}\n------"
 
 
 class SFree(SMBase):
     """ Scattering Matrix for the Free Space Region """
     def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray) -> None:
-        eye = np.eye(Kx.shape[0], Kx.shape[1])
+        eye: npt.NDArray[np.floating] = np.eye(Kx.shape[0], Kx.shape[1])
         P = np.block([[Kx @ Ky, eye - Kx @ Kx], [Ky @ Ky - eye, -Kx @ Ky]])
         eigval, self._W = eig(P @ P, check_finite=False)
         eig_matrix = np.diag(1 / np.sqrt(eigval))
@@ -182,7 +182,7 @@ def initialize_components(theta: float, phi: float, lmb: float,
                                                                complex],
                           trn_med: Tuple[complex, complex]):
     """ Initialize all the components necessary for the RCWA Algorithm """
-    logger.debug("Initialization values for SMatrix")
+    logger.info("Initialization values for SMatrix")
     k0: float = 2 * np.pi / lmb
     logger.debug(f"{k0=}")
     e_ref, u_ref = inc_med
@@ -209,6 +209,7 @@ def initialize_components(theta: float, phi: float, lmb: float,
     Kz_ref = np.diag(kz_ref.flatten())
     Kz_trn = np.diag(kz_trn.flatten())
     logger.debug(f"K_matrices:\n{kx_p=}\n{ky_q=}")
+    logger.info(f"K_matrices: {Kx.shape}::{Ky.shape}::{Kz_ref.shape}::{Kz_trn.shape}")
     logger.debug(f"K_matrices:\n{Kx=}\n{Ky=}\n{Kz_ref=}\n{Kz_trn=}")
     # Determine the Free Space Scattering Matrix
     sfree = SFree(Kx, Ky)
@@ -225,4 +226,5 @@ def initialize_components(theta: float, phi: float, lmb: float,
     # Create the composite polariztion vector
     p_vector = np.add(pol[1] * ate, pol[0] * atm)
     p_vector: npt.NDArray = p_vector[[0, 1]]
+    logger.debug(f"{p_vector=}")
     return k0, sfree, Kx, Ky, Kz_ref, Kz_trn, kz_inc, p_vector

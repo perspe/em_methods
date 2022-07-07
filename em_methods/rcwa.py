@@ -35,6 +35,7 @@ def rcwa(layer_stack: List[Layer], theta: float, phi: float, lmb: float,
     for layer in layer_stack:
         lim_i = layer.limits
         if not np.array_equal(lims, lim_i):
+            logger.error("All layers must have the same limits")
             raise LayerNotProperlyDefined(
                 "All layers must have the same limits")
 
@@ -55,7 +56,7 @@ def rcwa(layer_stack: List[Layer], theta: float, phi: float, lmb: float,
     delta: npt.NDArray = np.zeros((2 * p + 1) * (2 * q + 1))
     delta[int(delta.size / 2)] = 1
     e_src = np.r_[p_vector[0] * delta, p_vector[1] * delta]
-    logger.info(f"{e_src=}")
+    logger.debug(f"{e_src=}")
     r, t = r_t_fields(sglobal, sref, strn, e_src, Kx, Ky, Kz_ref, Kz_trn)
     R = np.sum(np.real(Kz_ref / kz_inc) * r)
     T = np.sum(np.real(inc_med[1] * Kz_trn / (trn_med[1] * kz_inc)) * t)
