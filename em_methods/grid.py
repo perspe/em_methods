@@ -25,28 +25,57 @@ class GridHasNoObjectError(Exception):
 
 class UniformGrid():
     """ Main Class to define non-structured layers (avoids fft) """
-    __slots__ = ("_xlen", "_ylen", "_thickness", "_e", "_u")
+    __slots__ = ("_xlen", "_ylen", "_xlims", "_ylims", "_thickness", "_e",
+                 "_u")
 
     def __init__(self,
                  xlen: int,
                  ylen: int,
                  thickness: float,
                  e_default: complex = 1,
-                 u_default: complex = 1):
+                 u_default: complex = 1,
+                 xlims: List[float] = [-0.5, 0.5],
+                 ylims: List[float] = [-0.5, 0.5]):
         self._xlen = xlen
         self._ylen = ylen
+        self._xlims = xlims
+        self._ylims = ylims
         self._thickness = thickness
-        base_matrix: npt.NDArray = np.diag(
-            np.array([1] * xlen, dtype=np.complex64))
-        self._e = base_matrix * e_default
-        self._u = base_matrix * u_default
+        self._e = e_default
+        self._u = u_default
+
+    """ Define Accessible properties """
+
+    @property
+    def er(self) -> complex:
+        return self._e
+
+    @property
+    def u0(self) -> complex:
+        return self._u
+
+    @property
+    def limits(self) -> npt.NDArray:
+        return np.array(
+            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]])
+
+    @property
+    def grid_size(self) -> Tuple[float, float]:
+        xsize: float = max(self._xlims) - min(self._xlims)
+        ysize: float = max(self._ylims) - min(self._ylims)
+        return xsize, ysize
+
+    @property
+    def thickness(self) -> float:
+        return self._thickness
 
     def convolution_matrices(
-        self
+        self, p: int, q: int
     ) -> Tuple[npt.NDArray[np.complexfloating],
                npt.NDArray[np.complexfloating]]:
         """ Return the convolution matrix """
-        return self._e, self._u
+        base_matrix = np.eye((2 * p+1) * (2 * q +1))
+        return base_matrix * self._e, base_matrix * self._u
 
 
 class Grid2D():
@@ -98,6 +127,11 @@ class Grid2D():
     @property
     def u0(self) -> npt.NDArray[np.complexfloating]:
         return self._u
+
+    @property
+    def limits(self) -> npt.NDArray:
+        return np.array(
+            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]])
 
     @property
     def grid_size(self) -> Tuple[float, float]:
