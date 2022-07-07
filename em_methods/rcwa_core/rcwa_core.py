@@ -119,6 +119,7 @@ class SMatrix(SMBase):
                  u0: npt.NDArray, sfree: SFree, k0: float, L: float) -> None:
         inv_er = inv(er, check_finite=False)
         inv_u0 = inv(u0, check_finite=False)
+        logger.info(f"{Kx.shape}::{Ky.shape}::{inv_er.shape}::{inv_u0.shape}")
         P = np.block([[Kx @ inv_er @ Ky, u0 - Kx @ inv_er @ Kx],
                       [Ky @ inv_er @ Ky - u0, -Ky @ inv_er @ Kx]])
         Q = np.block([[Kx @ inv_u0 @ Ky, er - Kx @ inv_u0 @ Kx],
@@ -159,7 +160,7 @@ def r_t_fields(s_global: SMBase, s_ref: SMBase, s_trn: SMBase,
                Kz_trn: npt.NDArray) -> Tuple[complex, complex]:
     """ Calculate the Reflected and Transmited fields """
     # Calculate reflected and transmited fields
-    c_src = inv(s_ref._W) @ e_src
+    c_src = inv(s_ref._W) @ e_src.T
     e_ref = s_ref._W @ s_global._S11 @ c_src
     e_trn = s_trn._W @ s_global._S21 @ c_src
     logger.debug(f"e_ref: {e_ref}")
@@ -187,19 +188,28 @@ def initialize_components(theta: float, phi: float, lmb: float,
     e_ref, u_ref = inc_med
     e_trn, u_trn = trn_med
     # Determine the incidence k vector
-    kx_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.cos(phi)
-    ky_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.sin(phi)
-    kz_inc: float = np.sqrt(u_ref*e_ref - k0*(kx_inc**2 + ky_inc**2))
+    kx_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.cos(phi) / k0
+    ky_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.sin(phi) / k0
+    kz_inc: float = np.sqrt(u_ref * e_ref - k0 * (kx_inc**2 + ky_inc**2))
     logger.debug(f"k_inc: [{kx_inc} {ky_inc} {kz_inc}]")
     # Determine the wavevector matrices from the number of harmonics
-    kx_p = kx_inc - np.arange(-p + 1, p) * 2 * np.pi / dx
-    ky_q = ky_inc - np.arange(-q + 1, q) * 2 * np.pi / dy
-    kz_ref = np.conjugate(np.sqrt(k0**2 * u_ref * e_ref - kx_p**2 - ky_q**2))
-    kz_trn = np.conjugate(np.sqrt(k0**2 * u_trn * e_trn - kx_p**2 - ky_q**2))
-    Kx = np.diag(kx_p) / k0
-    Ky = np.diag(ky_q) / k0
-    Kz_ref = np.diag(kz_ref) / k0
-    Kz_trn = np.diag(kz_trn) / k0
+    kx_p = kx_inc - np.arange(-p, p + 1) * 2 * np.pi / (dx * k0)
+    ky_q = ky_inc - np.arange(-q, q + 1) * 2 * np.pi / (dy * k0)
+    kx_mesh, ky_mesh = np.meshgrid(kx_p, ky_q)
+    kz_ref_int = np.array(u_ref.conjugate() * e_ref.conjugate() - kx_mesh**2 -
+                          ky_mesh**2,
+                          dtype=np.complex64)
+    kz_trn_int = np.array(u_trn.conjugate() * e_trn.conjugate() - kx_mesh**2 -
+                          ky_mesh**2,
+                          dtype=np.complex64)
+    kz_ref = -np.conjugate(np.sqrt(kz_ref_int))
+    kz_trn = np.conjugate(np.sqrt(kz_trn_int))
+    Kx = np.diag(kx_mesh.flatten())
+    Ky = np.diag(ky_mesh.flatten())
+    Kz_ref = np.diag(kz_ref.flatten())
+    Kz_trn = np.diag(kz_trn.flatten())
+    logger.debug(f"K_matrices:\n{kx_p=}\n{ky_q=}")
+    logger.debug(f"K_matrices:\n{Kx=}\n{Ky=}\n{Kz_ref=}\n{Kz_trn=}")
     # Determine the Free Space Scattering Matrix
     sfree = SFree(Kx, Ky)
     # Reduced polarization vector
@@ -214,5 +224,5 @@ def initialize_components(theta: float, phi: float, lmb: float,
         ])
     # Create the composite polariztion vector
     p_vector = np.add(pol[1] * ate, pol[0] * atm)
-    p = p_vector[[0, 1]]
-    return k0, sfree, Kx, Ky, Kz_ref, Kz_trn, p
+    p_vector: npt.NDArray = p_vector[[0, 1]]
+    return k0, sfree, Kx, Ky, Kz_ref, Kz_trn, kz_inc, p_vector
