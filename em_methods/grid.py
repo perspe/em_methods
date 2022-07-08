@@ -9,8 +9,8 @@ from typing import List, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
-from scipy.fft import fft2, fftshift
-from scipy.linalg import convolution_matrix
+from scipy.fft import fft2
+from scipy.linalg import toeplitz
 
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -276,19 +276,46 @@ class Grid2D():
         # Obtain the p*q area of the 2D fft
         fft_e0 = fft2(self._e, norm="forward", workers=-2)
         fft_u0 = fft2(self._u, norm="forward", workers=-2)
-        fft_e0_shift = fftshift(fft_e0)
-        fft_u0_shift = fftshift(fft_u0)
-        center_x = int(self._xlen / 2)
-        center_y = int(self._ylen / 2)
-        logging.debug(f"{center_x=}::{center_y}")
-        fft_e0_zoom = fft_e0_shift[center_x - (p - 1):center_x + p,
-                                   center_y - (q - 1):center_y + q]
-        fft_u0_zoom = fft_u0_shift[center_x - (p - 1):center_x + p,
-                                   center_y - (q - 1):center_y + q]
-        conv_e0 = convolution_matrix(fft_e0_zoom.flatten(),
-                                     (2 * p + 1) * (2 * q + 1),
-                                     mode="same")
-        conv_u0 = convolution_matrix(fft_u0_zoom.flatten(),
-                                     (2 * p + 1) * (2 * q + 1),
-                                     mode="same")
+        fft_e0_zoom = fft_e0[:2 * p + 1, :2 * q + 1]
+        fft_u0_zoom = fft_u0[:2 * p + 1, :2 * q + 1]
+        conv_e0 = toeplitz(fft_e0_zoom.flatten())
+        conv_u0 = toeplitz(fft_u0_zoom.flatten())
+        logger.debug(f"{conv_e0=}\n{conv_u0=}")
         return conv_e0, conv_u0
+
+    """ Function for testing purposes """
+
+    def _test_triangle(self):
+        from math import floor
+        # Initial variables
+        Nx = 512
+        Lx = 0.0175
+        Ly = 0.015
+        Ny = round(Nx * Ly / Lx)
+        self._xlen = Nx
+        self._ylen = Ny
+        w = 0.8 * Ly
+        # Base values
+        self._e = 6 * np.ones((Ny, Nx))
+        self._u = np.ones((Ny, Nx))
+        self._thickness = 0.005
+        # SEtup grid
+        dx = Lx / Nx
+        dy = Ly / Ny
+        logger.info(f"{dx=}::{dy=}")
+        xa = np.arange(Nx - 1) * dx
+        xa = xa - np.mean(xa)
+        ya = np.arange(Ny - 1) * dy
+        ya = ya - np.mean(ya)
+        # Build Device
+        h = 0.5 * np.sqrt(3) * w
+        ny = round(h / dy)
+        ny1 = round((Ny - ny) / 2)
+        ny2 = ny1 + ny - 1
+        logger.info(f"{ny=}::{h=}::{ny1=}::{ny2=}")
+        for ny in range(ny1, ny2):
+            f = (ny - ny1) / (ny2 - ny1)
+            nx = round(f * w / Lx * Nx)
+            nx1 = 1 + floor((Nx - nx) / 2)
+            nx2 = nx1 + nx
+            self._e[ny, nx1:nx2] = 2
