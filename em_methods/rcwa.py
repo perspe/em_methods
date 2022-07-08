@@ -59,6 +59,6 @@ def rcwa(layer_stack: List[Layer], theta: float, phi: float, lmb: float,
     e_src = np.r_[p_vector[0] * delta, p_vector[1] * delta]
     logger.debug(f"{e_src=}")
     r, t = r_t_fields(sglobal, sref, strn, e_src, Kx, Ky, Kz_ref, Kz_trn)
-    R = np.sum(np.real(Kz_ref / kz_inc) * r)
-    T = np.sum(np.real(inc_med[1] * Kz_trn / (trn_med[1] * kz_inc)) * t)
+    R = np.sum(np.real(-Kz_ref / kz_inc)@r)
+    T = np.sum(np.real(inc_med[1] * Kz_trn / (trn_med[1] * kz_inc)) @ t)
     return R, T
