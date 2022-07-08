@@ -174,7 +174,8 @@ def r_t_fields(s_global: SMBase, s_ref: SMBase, s_trn: SMBase,
                Kz_trn: npt.NDArray) -> Tuple[complex, complex]:
     """ Calculate the Reflected and Transmited fields """
     # Calculate reflected and transmited fields
-    c_src = inv(s_ref._W) @ e_src.T
+    c_src = inv(s_ref._W, check_finite=False) @ e_src
+    logger.debug(f"c_src: {c_src}")
     e_ref = s_ref._W @ s_global._S11 @ c_src
     e_trn = s_trn._W @ s_global._S21 @ c_src
     logger.debug(f"e_ref: {e_ref}")
@@ -182,11 +183,13 @@ def r_t_fields(s_global: SMBase, s_ref: SMBase, s_trn: SMBase,
     # Compute the longitudinal components
     e_ref_x, e_ref_y = e_ref[:int(e_ref.size / 2)], e_ref[int(e_ref.size / 2):]
     e_trn_x, e_trn_y = e_trn[:int(e_trn.size / 2)], e_trn[int(e_trn.size / 2):]
-    rz = -inv(Kz_ref) @ (Kx @ e_ref_x + Ky @ e_ref_y)
-    tz = -inv(Kz_trn) @ (Kx @ e_trn_x + Ky @ e_trn_y)
-    logger.debug(f"[{e_ref_x} {e_ref_y} {rz}]::[{e_trn_x} {e_trn_y} {tz}]")
-    r2 = np.sum(np.abs([e_ref_x, e_ref_y, rz])**2)
-    t2 = np.sum(np.abs([e_trn_x, e_trn_y, tz])**2)
+    rz = -inv(Kz_ref, check_finite=False) @ (Kx @ e_ref_x + Ky @ e_ref_y)
+    tz = -inv(Kz_trn, check_finite=False) @ (Kx @ e_trn_x + Ky @ e_trn_y)
+    logger.debug(
+        f"E_ref:[{e_ref_x} {e_ref_y} {rz}]\n E_Trn:[{e_trn_x} {e_trn_y} {tz}]")
+    r2 = np.abs(e_ref_x)**2 + np.abs(e_ref_y)**2 + np.abs(rz)**2
+    t2 = np.abs(e_trn_x)**2 + np.abs(e_trn_y)**2 + np.abs(tz)**2
+    logger.debug(f"{r2=}\n{t2=}")
     return r2, t2
 
 
@@ -223,7 +226,8 @@ def initialize_components(theta: float, phi: float, lmb: float,
     Kz_ref = np.diag(kz_ref.flatten())
     Kz_trn = np.diag(kz_trn.flatten())
     logger.debug(f"K_matrices:\n{kx_p=}\n{ky_q=}")
-    logger.info(f"K_matrices: {Kx.shape}::{Ky.shape}::{Kz_ref.shape}::{Kz_trn.shape}")
+    logger.info(
+        f"K_matrices: {Kx.shape}::{Ky.shape}::{Kz_ref.shape}::{Kz_trn.shape}")
     logger.debug(f"K_matrices:\n{Kx=}\n{Ky=}\n{Kz_ref=}\n{Kz_trn=}")
     # Determine the Free Space Scattering Matrix
     sfree = SFree(Kx, Ky)
