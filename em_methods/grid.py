@@ -25,19 +25,15 @@ class GridHasNoObjectError(Exception):
 
 class UniformGrid():
     """ Main Class to define non-structured layers (avoids fft) """
-    __slots__ = ("_xlen", "_ylen", "_xlims", "_ylims", "_thickness", "_e",
+    __slots__ = ("_xlims", "_ylims", "_thickness", "_e",
                  "_u")
 
     def __init__(self,
-                 xlen: int,
-                 ylen: int,
                  thickness: float,
                  e_default: complex = 1,
                  u_default: complex = 1,
                  xlims: List[float] = [-0.5, 0.5],
                  ylims: List[float] = [-0.5, 0.5]):
-        self._xlen = xlen
-        self._ylen = ylen
         self._xlims = xlims
         self._ylims = ylims
         self._thickness = thickness
@@ -74,7 +70,7 @@ class UniformGrid():
     ) -> Tuple[npt.NDArray[np.complexfloating],
                npt.NDArray[np.complexfloating]]:
         """ Return the convolution matrix """
-        base_matrix = np.eye((2 * p+1) * (2 * q +1))
+        base_matrix = np.eye((2 * p + 1) * (2 * q + 1))
         return base_matrix * self._e, base_matrix * self._u
 
 
@@ -231,7 +227,7 @@ class Grid2D():
         sorted_list = [a, b, c]
         sorted_list.sort(key=lambda x: x[0])
         a, b, c = tuple(sorted_list)
-        logging.debug(f"Sorted Values:{a=}::{b=}::{c=}")
+        logger.debug(f"Sorted Values:{a=}::{b=}::{c=}")
         ax, ay = a
         bx, by = b
         cx, cy = c
@@ -239,7 +235,7 @@ class Grid2D():
         m_ab = (by - ay) / (bx - ax) if bx != ax else 1e20
         m_ac = (cy - ay) / (cx - ax) if cx != bx else 1e20
         m_bc = (cy - by) / (cx - bx) if cx != bx else 1e20
-        logging.debug(f"{m_ab=}::{m_ac=}::{m_bc=}")
+        logger.debug(f"{m_ab=}::{m_ac=}::{m_bc=}")
         b_ab = ay - m_ab * ax
         b_ac = ay - m_ac * ax
         b_bc = by - m_bc * bx
@@ -264,7 +260,7 @@ class Grid2D():
         plt.imshow(lim_ac)
         plt.show()
         mask = lim_ab & lim_ac & lim_bc
-        # logging.debug(f"{mask=}")
+        # logger.debug(f"{mask=}")
         self._u[mask] = u0
         self._e[mask] = er
 
