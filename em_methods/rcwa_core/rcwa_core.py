@@ -204,14 +204,16 @@ def initialize_components(theta: float, phi: float, lmb: float,
     logger.debug(f"{k0=}")
     e_ref, u_ref = inc_med
     e_trn, u_trn = trn_med
+    theta = np.radians(theta)
+    phi = np.radians(phi)
     # Determine the incidence k vector
-    kx_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.cos(phi) / k0
-    ky_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.sin(phi) / k0
-    kz_inc: float = np.sqrt(u_ref * e_ref - k0 * (kx_inc**2 + ky_inc**2))
+    kx_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.cos(phi)
+    ky_inc: float = np.sqrt(e_ref * u_ref) * np.sin(theta) * np.sin(phi)
+    kz_inc: float = np.sqrt(u_ref * e_ref) * np.cos(theta)
     logger.debug(f"k_inc: [{kx_inc} {ky_inc} {kz_inc}]")
     # Determine the wavevector matrices from the number of harmonics
-    kx_p = kx_inc - np.arange(-p, p + 1) * 2 * np.pi / (dx * k0)
-    ky_q = ky_inc - np.arange(-q, q + 1) * 2 * np.pi / (dy * k0)
+    kx_p = kx_inc - (2*np.pi*np.arange(-p, p + 1)) / (dx * k0)
+    ky_q = ky_inc - (2*np.pi*np.arange(-q, q + 1)) / (dy * k0)
     kx_mesh, ky_mesh = np.meshgrid(kx_p, ky_q)
     kz_ref_int = np.array(u_ref.conjugate() * e_ref.conjugate() - kx_mesh**2 -
                           ky_mesh**2,
