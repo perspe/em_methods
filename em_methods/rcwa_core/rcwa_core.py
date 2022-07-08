@@ -1,7 +1,7 @@
 import logging
 import numpy as np
 import numpy.typing as npt
-from scipy.linalg import inv, eig
+from scipy.linalg import inv, eig, expm
 from typing import Tuple
 from em_methods.grid import Grid2D
 import os
@@ -132,19 +132,25 @@ class SMatrix(SMBase):
                       [Ky @ inv_er @ Ky - u0, -Ky @ inv_er @ Kx]])
         Q = np.block([[Kx @ inv_u0 @ Ky, er - Kx @ inv_u0 @ Kx],
                       [Ky @ inv_u0 @ Ky - er, -Ky @ inv_u0 @ Kx]])
-        self._W = np.array(P @ Q, dtype=np.complex128)
-        eigs, self._W = eig(self._W, check_finite=False)
+        logger.debug(f"P =\n{P}\n{Q=}")
+        self._W = (P @ Q).astype(np.complex64)
         logger.debug(f"self._W =\n{self._W}")
+        eigs, self._W = eig(self._W, check_finite=False)
+        # Dumb hack for negative complex numbers ~ 0
+        eigs = np.round(eigs, 9) + 0
+        eigs = np.sqrt(eigs)
+        eig_matrix = np.diag(eigs)
         inv_W = inv(self._W, check_finite=False)
-        eig_matrix = np.diag(1 / np.sqrt(eigs))
-        self._V = Q @ self._W @ (eig_matrix)
+        self._V = Q @ self._W @ inv(eig_matrix, check_finite=False)
         inv_V = inv(self._V, check_finite=False)
-        logger.debug(f"Eig_Matrix:\n{eig_matrix}\nEiv_Matrix:\n{self._W}")
+        logger.debug(
+            f"Eig_Matrix:\n{eig_matrix}\nEiv_Matrix:\n{self._W}\nV:\n{self._V}"
+        )
         # Calculate the SMM elements
         A = inv_W @ sfree._W + inv_V @ sfree._V
         B = inv_W @ sfree._W - inv_V @ sfree._V
         logger.debug(f"A\n{A}\nB\n{B}")
-        X = np.diag(np.exp(-np.sqrt(eigs) * k0 * L))
+        X = expm(-eig_matrix * k0 * L)
         logger.debug(f"X\n{X}")
         inv_A = inv(A)
         XB = X @ B
