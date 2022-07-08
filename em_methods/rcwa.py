@@ -44,13 +44,14 @@ def rcwa(layer_stack: List[Layer], theta: float, phi: float, lmb: float,
                                        inc_med, trn_med)
     k0, sfree, Kx, Ky, Kz_ref, Kz_trn, kz_inc, p_vector = components
     # Update loop for the scattering matrices
-    sref = SRef(Kx, Ky, inc_med[0], inc_med[1], sfree)
+    sref = SRef(Kx, Ky, Kz_ref, inc_med[0], inc_med[1], sfree)
     sglobal = sref
     for layer in layer_stack:
+        logger.debug("------------------ New Layer ----------------------")
         erc, urc = layer.convolution_matrices(p, q)
         smatrix = SMatrix(Kx, Ky, erc, urc, sfree, k0, layer.thickness)
         sglobal = sglobal * smatrix
-    strn = STrn(Kx, Ky, trn_med[0], trn_med[1], sfree)
+    strn = STrn(Kx, Ky, Kz_trn, trn_med[0], trn_med[1], sfree)
     sglobal = sglobal * strn
     # Determine the R, T
     delta: npt.NDArray = np.zeros((2 * p + 1) * (2 * q + 1))

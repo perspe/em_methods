@@ -49,27 +49,36 @@ class SMBase:
 class SFree(SMBase):
     """ Scattering Matrix for the Free Space Region """
     def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray) -> None:
-        eye: npt.NDArray[np.floating] = np.eye(Kx.shape[0], Kx.shape[1])
-        P = np.block([[Kx @ Ky, eye - Kx @ Kx], [Ky @ Ky - eye, -Kx @ Ky]])
-        eigval, self._W = eig(P @ P, check_finite=False)
-        eig_matrix = np.diag(1 / np.sqrt(eigval))
-        self._V = P @ self._W @ eig_matrix
+        eye: npt.NDArray[np.floating] = np.eye(Kx.shape[0],
+                                               Kx.shape[1],
+                                               dtype=np.complex64)
+        Kz = np.conjugate(np.sqrt(eye - Kx @ Kx - Ky @ Ky))
+        logger.debug(f"{Kz=}")
+        Q = np.block([[Kx @ Ky, eye - Kx @ Kx], [Ky @ Ky - eye, -Kx @ Ky]])
+        self._W = np.block([[eye, np.zeros_like(eye)],
+                            [np.zeros_like(eye), eye]])
+        eig_matrix = np.block([[1j * Kz, np.zeros_like(eye)],
+                               [np.zeros_like(eye), 1j * Kz]])
+        logger.debug(f"{eig_matrix=}")
+        self._V = Q @ inv(eig_matrix, check_finite=False)
         logger.debug(f"SFree V0:\n{self._V}")
 
 
 class SRef(SMBase):
     """ Reflection Region Scattering Matrix """
-    def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, e_ref: complex,
-                 u_ref: complex, sfree: SFree) -> None:
+    def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, Kz_ref: npt.NDArray,
+                 e_ref: complex, u_ref: complex, sfree: SFree) -> None:
+        logger.debug("Sref")
         eye = np.eye(Kx.shape[0], Kx.shape[1])
+        zeros = np.zeros_like(eye)
         matrix = np.block([[Kx @ Ky, e_ref * u_ref * eye - Kx @ Kx],
                            [Ky @ Ky - e_ref * u_ref * eye, -Kx @ Ky]])
-        P, Q = matrix / e_ref, matrix / u_ref
-        self._W = P @ Q
-        eigs, self._W = eig(self._W, check_finite=False)
-        eig_matrix = np.diag(1 / np.sqrt(eigs))
-        self._V = Q @ self._W @ eig_matrix
-        logger.debug(f"\nEig_Matrix:\n{eigs}\n Eiv Matrix:\n{self._W}")
+        Q = matrix / u_ref
+        logger.debug(f"\nQ:\n{Q}")
+        self._W = np.block([[eye, zeros], [zeros, eye]])
+        eig_matrix = np.block([[-1j * Kz_ref, zeros], [zeros, -1j * Kz_ref]])
+        logger.debug(f"\nEig_Matrix:\n{eig_matrix}\n Eiv Matrix:\n{self._W}")
+        self._V = Q @ inv(eig_matrix, check_finite=False)
         logger.debug(f"\nVref:\n{self._V}")
         # Calculate Scattering Matrix
         inv_W0 = inv(sfree._W, check_finite=False)
@@ -81,35 +90,34 @@ class SRef(SMBase):
         self._S12 = 2 * inv_A
         self._S21 = 0.5 * (A - B @ inv_A @ B)
         self._S22 = B @ inv_A
-        logger.debug("SMatrix")
         logger.debug(self)
 
 
 class STrn(SMBase):
     """ Transmission Region Scattering Matrix """
-    def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, e_trn: complex,
-                 u_trn: complex, sfree: SFree) -> None:
+    def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, Kz_trn: npt.NDArray,
+                 e_trn: complex, u_trn: complex, sfree: SFree) -> None:
         eye = np.eye(Kx.shape[0], Kx.shape[1])
+        zeros = np.zeros_like(eye)
         matrix = np.block([[Kx @ Ky, e_trn * u_trn * eye - Kx @ Kx],
                            [Ky @ Ky - e_trn * u_trn * eye, -Kx @ Ky]])
-        P, Q = matrix / e_trn, matrix / u_trn
-        self._W = P @ Q
-        eigs, self._W = eig(self._W, check_finite=False)
-        eig_matrix = np.diag(1 / np.sqrt(eigs))
-        self._V = Q @ self._W @ eig_matrix
-        logger.debug(f"\nEig_Matrix:\n{eigs}\n Eiv Matrix:\n{self._W}")
-        logger.debug(f"\nVref:\n{self._V}")
+        Q = matrix / u_trn
+        self._W = np.block([[eye, zeros], [zeros, eye]])
+        eig_matrix = np.block([[1j * Kz_trn, zeros], [zeros, 1j * Kz_trn]])
+        self._V = Q @ inv(eig_matrix, check_finite=False)
+        logger.debug(f"\nEig_Matrix:\n{eig_matrix}\n Eiv Matrix:\n{self._W}")
+        logger.debug(f"\nVtrn:\n{self._V}")
         # Calculate Scattering Matrix
         inv_W0 = inv(sfree._W, check_finite=False)
         inv_V0 = inv(sfree._V, check_finite=False)
         A = inv_W0 @ self._W + inv_V0 @ self._V
         B = inv_W0 @ self._W - inv_V0 @ self._V
         inv_A = inv(A, check_finite=False)
+        logger.debug("STrn")
         self._S11 = B @ inv_A
         self._S12 = 0.5 * (A - B @ inv_A @ B)
         self._S21 = 2 * inv_A
         self._S22 = -inv_A @ B
-        logger.debug("SMatrix")
         logger.debug(self)
 
 
