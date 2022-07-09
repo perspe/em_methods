@@ -1,12 +1,11 @@
 import logging
+from logging.config import fileConfig
+import os
+from typing import Tuple
+
 import numpy as np
 import numpy.typing as npt
-from scipy.linalg import inv, eig, expm
-from typing import Tuple
-from em_methods.grid import Grid2D
-import os
-
-from logging.config import fileConfig
+from scipy.linalg import eig, expm, inv
 
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -25,16 +24,20 @@ class SMBase:
     __slots__ = ('_S11', '_S12', '_S21', '_S22', '_V', '_W')
 
     def __init__(self, m: int, n: int) -> None:
-        self._S11 = np.zeros((m, n))
-        self._S12 = np.eye(m, n)
-        self._S21 = np.eye(m, n)
-        self._S22 = np.zeros((m, n))
+        self._S11 = np.zeros((m, n), dtype=np.complex64)
+        self._S12 = np.eye(m, n, dtype=np.complex64)
+        self._S21 = np.eye(m, n, dtype=np.complex64)
+        self._S22 = np.zeros((m, n), dtype=np.complex64)
 
     def __mul__(self, SB):
-        eye = np.eye(self._S11.shape[0], self._S11.shape[1])
+        eye = np.eye(self._S11.shape[0],
+                     self._S11.shape[1],
+                     dtype=np.complex64)
         redhaf_matrix = SMBase(self._S11.shape[0], self._S11.shape[1])
-        inv_1 = self._S12 @ inv(eye - SB._S11 @ self._S22, check_finite=False)
-        inv_2 = SB._S21 @ inv(eye - self._S22 @ SB._S11, check_finite=False)
+        term_1 = np.asfortranarray(eye - SB._S11 @ self._S22)
+        term_2 = np.asfortranarray(eye - self._S22 @ SB._S11)
+        inv_1 = self._S12 @ inv(term_1, check_finite=False, overwrite_a=True)
+        inv_2 = SB._S21 @ inv(term_2, check_finite=False, overwrite_a=True)
         redhaf_matrix._S11 = self._S11 + inv_1 @ SB._S11 @ self._S21
         redhaf_matrix._S12 = inv_1 @ SB._S12
         redhaf_matrix._S21 = inv_2 @ self._S21
@@ -51,16 +54,19 @@ class SFree(SMBase):
     def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray) -> None:
         eye: npt.NDArray[np.floating] = np.eye(Kx.shape[0],
                                                Kx.shape[1],
-                                               dtype=np.complex64)
-        Kz = np.conjugate(np.sqrt(eye - Kx @ Kx - Ky @ Ky))
+                                               dtype=np.complex64,
+                                               order="F")
+        zeros = np.zeros_like(eye, order="F", dtype=np.complex64)
+        Kz = np.asfortranarray(np.conjugate(np.sqrt(eye - Kx @ Kx - Ky @ Ky)),
+                               dtype=np.complex64)
         logger.debug(f"{Kz=}")
         Q = np.block([[Kx @ Ky, eye - Kx @ Kx], [Ky @ Ky - eye, -Kx @ Ky]])
-        self._W = np.block([[eye, np.zeros_like(eye)],
-                            [np.zeros_like(eye), eye]])
-        eig_matrix = np.block([[1j * Kz, np.zeros_like(eye)],
-                               [np.zeros_like(eye), 1j * Kz]])
+        self._W = np.block([[eye, zeros], [zeros, eye]])
+        eig_matrix = np.block([[1j * Kz, zeros], [zeros, 1j * Kz]])
         logger.debug(f"{eig_matrix=}")
-        self._V = Q @ inv(eig_matrix, check_finite=False)
+        self._V = np.asfortranarray(
+            Q @ inv(eig_matrix, check_finite=False, overwrite_a=True),
+            dtype=np.complex64)
         logger.debug(f"SFree V0:\n{self._V}")
 
 
@@ -69,8 +75,8 @@ class SRef(SMBase):
     def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, Kz_ref: npt.NDArray,
                  e_ref: complex, u_ref: complex, sfree: SFree) -> None:
         logger.debug("Sref")
-        eye = np.eye(Kx.shape[0], Kx.shape[1])
-        zeros = np.zeros_like(eye)
+        eye = np.eye(Kx.shape[0], Kx.shape[1], dtype=np.complex64, order="F")
+        zeros = np.zeros_like(eye, dtype=np.complex64, order="F")
         matrix = np.block([[Kx @ Ky, e_ref * u_ref * eye - Kx @ Kx],
                            [Ky @ Ky - e_ref * u_ref * eye, -Kx @ Ky]])
         Q = matrix / u_ref
@@ -78,8 +84,10 @@ class SRef(SMBase):
         self._W = np.block([[eye, zeros], [zeros, eye]])
         eig_matrix = np.block([[-1j * Kz_ref, zeros], [zeros, -1j * Kz_ref]])
         logger.debug(f"\nEig_Matrix:\n{eig_matrix}\n Eiv Matrix:\n{self._W}")
-        self._V = Q @ inv(eig_matrix, check_finite=False)
-        logger.debug(f"\nVref:\n{self._V}")
+        self._V = np.asfortranarray(
+            Q @ inv(eig_matrix, check_finite=False, overwrite_a=True),
+            dtype=np.complex64)
+        logger.debug(f"\nVref({np.isfortran(self._V)}):\n{self._V}")
         # Calculate Scattering Matrix
         inv_W0 = inv(sfree._W, check_finite=False)
         inv_V0 = inv(sfree._V, check_finite=False)
@@ -97,16 +105,18 @@ class STrn(SMBase):
     """ Transmission Region Scattering Matrix """
     def __init__(self, Kx: npt.NDArray, Ky: npt.NDArray, Kz_trn: npt.NDArray,
                  e_trn: complex, u_trn: complex, sfree: SFree) -> None:
-        eye = np.eye(Kx.shape[0], Kx.shape[1])
-        zeros = np.zeros_like(eye)
+        eye = np.eye(Kx.shape[0], Kx.shape[1], dtype=np.complex64, order="F")
+        zeros = np.zeros_like(eye, dtype=np.complex64, order="F")
         matrix = np.block([[Kx @ Ky, e_trn * u_trn * eye - Kx @ Kx],
                            [Ky @ Ky - e_trn * u_trn * eye, -Kx @ Ky]])
         Q = matrix / u_trn
         self._W = np.block([[eye, zeros], [zeros, eye]])
         eig_matrix = np.block([[1j * Kz_trn, zeros], [zeros, 1j * Kz_trn]])
-        self._V = Q @ inv(eig_matrix, check_finite=False)
+        self._V = np.asfortranarray(
+            Q @ inv(eig_matrix, check_finite=False, overwrite_a=True),
+            dtype=np.complex64)
         logger.debug(f"\nEig_Matrix:\n{eig_matrix}\n Eiv Matrix:\n{self._W}")
-        logger.debug(f"\nVtrn:\n{self._V}")
+        logger.debug(f"\nVtrn({np.isfortran(self._V)}):\n{self._V}")
         # Calculate Scattering Matrix
         inv_W0 = inv(sfree._W, check_finite=False)
         inv_V0 = inv(sfree._V, check_finite=False)
@@ -133,32 +143,38 @@ class SMatrix(SMBase):
         Q = np.block([[Kx @ inv_u0 @ Ky, er - Kx @ inv_u0 @ Kx],
                       [Ky @ inv_u0 @ Ky - er, -Ky @ inv_u0 @ Kx]])
         logger.debug(f"P =\n{P}\n{Q=}")
-        self._W = (P @ Q).astype(np.complex64)
+        self._W = np.asfortranarray(P @ Q, dtype=np.complex64)
         logger.debug(f"self._W =\n{self._W}")
-        eigs, self._W = eig(self._W, check_finite=False)
+        eigs, self._W = eig(self._W, check_finite=False, overwrite_a=True)
         # Dumb hack for negative complex numbers ~ 0
         eigs = np.round(eigs, 9) + 0
         eigs = np.sqrt(eigs)
-        eig_matrix = np.diag(eigs)
+        eig_matrix = np.asfortranarray(np.diag(eigs), dtype=np.complex64)
         inv_W = inv(self._W, check_finite=False)
-        self._V = Q @ self._W @ inv(eig_matrix, check_finite=False)
+        self._V = np.asfortranarray(
+            Q @ self._W @ inv(eig_matrix, check_finite=False),
+            dtype=np.complex64)
         inv_V = inv(self._V, check_finite=False)
         logger.debug(
             f"Eig_Matrix:\n{eig_matrix}\nEiv_Matrix:\n{self._W}\nV:\n{self._V}"
         )
         # Calculate the SMM elements
-        A = inv_W @ sfree._W + inv_V @ sfree._V
-        B = inv_W @ sfree._W - inv_V @ sfree._V
+        A = np.asfortranarray(inv_W @ sfree._W + inv_V @ sfree._V,
+                              dtype=np.complex64)
+        B = np.asfortranarray(inv_W @ sfree._W - inv_V @ sfree._V,
+                              dtype=np.complex64)
         logger.debug(f"A\n{A}\nB\n{B}")
-        X = expm(-eig_matrix * k0 * L)
+        X = np.asfortranarray(expm(-eig_matrix * k0 * L), dtype=np.complex64)
         logger.debug(f"X\n{X}")
-        inv_A = inv(A)
+        inv_A = inv(A, check_finite=False)
         XB = X @ B
         XA = X @ A
         self._S11 = inv(A - XB @ inv_A @ XB,
-                        check_finite=False) @ (XB @ inv_A @ XA - B)
+                        check_finite=False,
+                        overwrite_a=True) @ (XB @ inv_A @ XA - B)
         self._S12 = inv(A - XB @ inv_A @ XB,
-                        check_finite=False) @ X @ (A - B @ inv_A @ B)
+                        check_finite=False,
+                        overwrite_a=True) @ X @ (A - B @ inv_A @ B)
         self._S21 = self._S12
         self._S22 = self._S11
         logger.debug("SMatrix")
@@ -212,21 +228,23 @@ def initialize_components(theta: float, phi: float, lmb: float,
     kz_inc: float = np.sqrt(u_ref * e_ref) * np.cos(theta)
     logger.debug(f"k_inc: [{kx_inc} {ky_inc} {kz_inc}]")
     # Determine the wavevector matrices from the number of harmonics
-    kx_p = kx_inc - (2*np.pi*np.arange(-p, p + 1)) / (dx * k0)
-    ky_q = ky_inc - (2*np.pi*np.arange(-q, q + 1)) / (dy * k0)
+    kx_p = kx_inc - (2 * np.pi * np.arange(-p, p + 1)) / (dx * k0)
+    ky_q = ky_inc - (2 * np.pi * np.arange(-q, q + 1)) / (dy * k0)
     kx_mesh, ky_mesh = np.meshgrid(kx_p, ky_q)
     kz_ref_int = np.array(u_ref.conjugate() * e_ref.conjugate() - kx_mesh**2 -
                           ky_mesh**2,
-                          dtype=np.complex64)
+                          dtype=np.complex64,
+                          order="F")
     kz_trn_int = np.array(u_trn.conjugate() * e_trn.conjugate() - kx_mesh**2 -
                           ky_mesh**2,
-                          dtype=np.complex64)
+                          dtype=np.complex64,
+                          order="F")
     kz_ref = -np.conjugate(np.sqrt(kz_ref_int))
     kz_trn = np.conjugate(np.sqrt(kz_trn_int))
-    Kx = np.diag(kx_mesh.flatten())
-    Ky = np.diag(ky_mesh.flatten())
-    Kz_ref = np.diag(kz_ref.flatten())
-    Kz_trn = np.diag(kz_trn.flatten())
+    Kx = np.asfortranarray(np.diag(kx_mesh.flatten()), dtype=np.complex64)
+    Ky = np.asfortranarray(np.diag(ky_mesh.flatten()), dtype=np.complex64)
+    Kz_ref = np.asfortranarray(np.diag(kz_ref.flatten()), dtype=np.complex64)
+    Kz_trn = np.asfortranarray(np.diag(kz_trn.flatten()), dtype=np.complex64)
     logger.debug(f"K_matrices:\n{kx_p=}\n{ky_q=}")
     logger.info(
         f"K_matrices: {Kx.shape}::{Ky.shape}::{Kz_ref.shape}::{Kz_trn.shape}")

@@ -70,7 +70,7 @@ class UniformGrid():
     ) -> Tuple[npt.NDArray[np.complexfloating],
                npt.NDArray[np.complexfloating]]:
         """ Return the convolution matrix """
-        base_matrix = np.eye((2 * p + 1) * (2 * q + 1))
+        base_matrix = np.eye((2 * p + 1) * (2 * q + 1), dtype=np.complex64, order="F")
         return base_matrix * self._e, base_matrix * self._u
 
 
@@ -207,7 +207,7 @@ class Grid2D():
         self._e[mask] = er
         self._has_object = True
 
-    def add_cirle(self,
+    def add_circle(self,
                   er: complex,
                   u0: complex,
                   radius: float,
@@ -281,6 +281,8 @@ class Grid2D():
         conv_e0 = toeplitz(fft_e0_zoom.flatten())
         conv_u0 = toeplitz(fft_u0_zoom.flatten())
         logger.debug(f"{conv_e0=}\n{conv_u0=}")
+        conv_e0 = np.asfortranarray(conv_e0, dtype=np.complex64)
+        conv_u0 = np.asfortranarray(conv_u0, dtype=np.complex64)
         return conv_e0, conv_u0
 
     """ Function for testing purposes """
