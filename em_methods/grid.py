@@ -283,6 +283,8 @@ class Grid2D():
         logger.debug(f"{conv_e0=}\n{conv_u0=}")
         conv_e0 = np.asfortranarray(conv_e0, dtype=np.complex64)
         conv_u0 = np.asfortranarray(conv_u0, dtype=np.complex64)
+        # plt.imshow(np.real(conv_e0))
+        # plt.show()
         return conv_e0, conv_u0
 
     """ Function for testing purposes """

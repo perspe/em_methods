@@ -11,15 +11,21 @@ Functions:
     smm_layer: Calculate the absorption for a specific layer
 """
 import logging
+from logging.config import fileConfig
 from typing import Any, List, Tuple, Union
 
 import numpy as np
 from numpy.linalg import inv
 import numpy.typing as npt
 from scipy.interpolate import interp1d
+import os
 
 from em_methods.smm_core.py_smm_base import CMatrix, CSMatrix
 from em_methods.smm_core.py_smm_base import SMMType as CSMMType
+
+base_path = os.path.dirname(os.path.abspath(__file__))
+fileConfig(os.path.join(base_path, 'logging.ini'))
+logger = logging.getLogger('dev')
 
 # Default simulation config
 sim_config = {
@@ -58,7 +64,7 @@ class Layer1D():
         self.thickness: float = thickness
         self.n: float = n_val
         self.k: float = k_val
-        logging.debug(f"Layer: {self} created...")
+        logger.debug(f"Layer: {self} created...")
 
     def e_value(self, lmb: npt.ArrayLike) -> npt.ArrayLike:
         """ Return e_value for specific wavelength """
@@ -99,14 +105,14 @@ class Layer3D():
         self._og_k = k_array
         self.n = interp1d(lmb, n_array, **kwargs)
         self.k = interp1d(lmb, k_array, **kwargs)
-        logging.debug(f"Layer: {self} created...")
+        logger.debug(f"Layer: {self} created...")
 
     def e_value(self, lmb: npt.ArrayLike) -> npt.ArrayLike:
         """ Calculate e_values for a range of wavelengths """
         try:
             e_data: npt.ArrayLike = (self.n(lmb) + 1j * self.k(lmb))**2
         except ValueError:
-            logging.error("Invalid Wavelength Value/Range")
+            logger.error("Invalid Wavelength Value/Range")
             if isinstance(lmb, float):
                 raise MatOutsideBounds(self.name, f"{lmb}")
             elif isinstance(lmb, np.ndarray):
@@ -160,7 +166,7 @@ def _initialize_smm(theta, phi, lmb, pol, inc_medium):
     # Create the composite polariztion vector
     p_vector = np.add(pol[1] * ate, pol[0] * atm)
     p = p_vector[[0, 1]]
-    logging.debug(
+    logger.debug(
         f"Initialization Values for SMM: {k0=}\n{kx=}\n{ky=}\n{V0=}\n{p=}")
     return k0, kx, ky, V0, np.array(p, dtype=np.complex128)
 
@@ -183,10 +189,10 @@ def smm(layer_list: List[Layer_Type], theta: float, phi: float, lmb: float,
     Returns:
         R, T: Arrays with the Reflection and transmission for the layer setup
     """
-    logging.debug(f"SMM for {theta}:{phi}:{lmb}:{pol}:{i_med}:{t_med}")
+    logger.debug(f"SMM for {theta}:{phi}:{lmb}:{pol}:{i_med}:{t_med}")
     if not isinstance(lmb, (float, int)) or not isinstance(
             theta, (float, int)) or not isinstance(phi, (int, float)):
-        logging.error("Invalid input parameter...")
+        logger.error("Invalid input parameter...")
         raise InvalidParameter("Invalid Input parameter")
     # Inicialize necessary values
     k0, kx, ky, V0, p = _initialize_smm(theta, phi, lmb, pol, i_med)
@@ -226,7 +232,7 @@ def smm_broadband(layer_list: List[Layer_Type],
     Returns:
         R, T: Arrays with the Reflection and transmission for the layer setup
     """
-    logging.debug(
+    logger.debug(
         f"SMM Broadband for {theta}:{phi}:{pol}:{i_med}:{t_med}:{override_thick}"
     )
     if not isinstance(theta,
@@ -237,7 +243,7 @@ def smm_broadband(layer_list: List[Layer_Type],
             for thick_i, layer in zip(override_thick, layer_list):
                 layer.thickness = thick_i
         else:
-            logging.warning("Invalid Thickness provided")
+            logger.warning("Invalid Thickness provided")
             raise InvalidParameter(
                 "Override Thickness does not match Layer List")
     k0, kx, ky, V0, p = _initialize_smm(theta, phi, lmb, pol, i_med)
@@ -283,7 +289,7 @@ def smm_angle(layer_list: List[Layer_Type],
     Returns:
         R, T: Arrays with the Reflection and transmission for the layer setup
     """
-    logging.debug(
+    logger.debug(
         f"SMM Angle for {phi}:{lmb}:{pol}:{i_med}:{t_med}:{override_thick}")
     if not isinstance(lmb, (float, int)) or not isinstance(phi, (int, float)):
         raise InvalidParameter("Invalid Input parameter")
@@ -334,7 +340,7 @@ def smm_layer(layer_list: List[Layer_Type],
     Returns:
         Abs: Absorption fonumpy typing unionr a particular layer
     """
-    logging.debug(
+    logger.debug(
         f"SMM Layer for {theta}:{phi}:{pol}:{i_med}:{t_med}:{override_thick}")
     if not isinstance(theta,
                       (int, float)) or not isinstance(phi, (int, float)):
@@ -421,5 +427,5 @@ def smm_layer(layer_list: List[Layer_Type],
                  sum_right_p) / int_power
         Abs.append(i_abs * (1 - R - T))
     if non_invertable_matrix:
-        logging.warning(f"Non Invertable Matrix Found in.. Considered 0")
+        logger.warning(f"Non Invertable Matrix Found in.. Considered 0")
     return np.array(Abs)

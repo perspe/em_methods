@@ -1,4 +1,5 @@
 # distutils: language=c++
+# # distutils: undef_macros= NDEBUG
 # cython: language_level=3
 from libcpp.complex cimport complex
 cimport cython

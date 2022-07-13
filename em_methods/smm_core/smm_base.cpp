@@ -106,9 +106,12 @@ void SMatrix::mat_elements() {
   complex<double> mu_eps = e * u;
   Matrix eye;
   Matrix Qi{kx * ky / u, e - kx * kx / u, ky * ky / u - e, -kx * ky / u};
+  debug_array(Qi, "Qi");
   this->Omega_i = eye * 1i * sqrt(mu_eps - kx * kx - ky * ky);
+  debug_array(Omega_i, "Omega_i");
   Vi = Qi * this->Omega_i.inv();
   debug_array(Vi, "Vi");
+  debug_array(Vi.inv(), "invVi");
 }
 
 void SMatrix::smm_norm() {
@@ -118,6 +121,8 @@ void SMatrix::smm_norm() {
   Ai = eye + iVi_V0;
   Bi = eye - iVi_V0;
   Xi = mexp(this->Omega_i * this->k0 * this->thickness);
+  debug_array(Ai, "Ai");
+  debug_array(Bi, "Bi");
   debug_array(Xi, "Xi");
   iA_i = Ai.inv();
   X_BiA_X = Xi * Bi * iA_i * Xi;

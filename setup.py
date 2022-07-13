@@ -2,7 +2,6 @@ from distutils.core import Extension
 import os
 
 from Cython.Build import cythonize
-import numpy as np
 from setuptools import setup
 
 # File shortcuts
@@ -16,9 +15,9 @@ cpp_smm_base = os.path.join(smm_core, "smm_base.cpp")
 
 ext = [
     Extension("em_methods.smm_core.py_smm_base", [py_smm_base, cpp_smm_base],
-              include_dirs=[smm_core, np.get_include()]),
+              include_dirs=[smm_core]),
     # Extension("em_methods.rcwa_core.rcwa_core", [py_rcwa_base],
     #           include_dirs=[np.get_include()])
 ]
 
-setup(ext_modules=cythonize(ext))
+setup(ext_modules=cythonize(ext, gdb_debug=False))
