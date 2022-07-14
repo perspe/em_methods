@@ -14,8 +14,12 @@ from scipy.sparse.base import spmatrix
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
 fileConfig(os.path.join(base_path, '..', 'logging.ini'))
-logger = logging.getLogger('dev')
+logger = logging.getLogger('dev_file')
 """ Matrices for the Scattering Matrix Connection """
+
+# Other useful variables
+spm_format = {"dtype": np.complex64, "format": "csc"}
+np.set_printoptions(precision=3, linewidth=225)
 
 
 class SMBase:
@@ -29,6 +33,7 @@ class SMBase:
     __slots__ = ('_S11', '_S12', '_S21', '_S22', '_V', '_W')
 
     def __init__(self, m: int, n: int) -> None:
+        logger.info("Initializing SMBase")
         self._S11: npt.NDArray = np.zeros((m, n), dtype=np.complex64)
         self._S12: npt.NDArray = np.eye(m, n, dtype=np.complex64)
         self._S21: npt.NDArray = np.eye(m, n, dtype=np.complex64)
@@ -50,7 +55,7 @@ class SMBase:
 
     def __repr__(self) -> str:
         return f"""
--------------
+----------------- SMatrix ---------------------
 S11 ({self._S11.shape}):
 {self._S11}
 S12 ({self._S12.shape}):
@@ -59,13 +64,14 @@ S21 ({self._S21.shape}):
 {self._S21}
 S22 ({self._S22.shape}):
 {self._S22}
--------------
+-----------------------------------------------
 """
 
 
 class SFree(SMBase):
     """ Scattering Matrix for the Free Space Region """
     def __init__(self, Kx: spmatrix, Ky: spmatrix) -> None:
+        logger.info("Starting to build SFree...")
         eye = scs.eye(Kx.shape[0], Kx.shape[1], **spm_format)
         KxKy = Kx @ Ky
         Kx2 = Kx @ Kx
@@ -78,15 +84,17 @@ class SFree(SMBase):
         self._W: spmatrix = scs.block_diag((eye, eye), **spm_format)
         eig_matrix: spmatrix = scs.block_diag((1j * Kz, 1j * Kz), **spm_format)
         logger.debug(f"Eig_Matrix({eig_matrix.shape}):\n{eig_matrix}")
+        logger.info("Calculating SFree V...")
         self._V: spmatrix = Q @ (scsl.inv(eig_matrix))
         logger.debug(f"SFree V0({self._V.shape}):\n{self._V}")
+        logger.info("Finished SFree...")
 
 
 class SRef(SMBase):
     """ Reflection Region Scattering Matrix """
     def __init__(self, Kx: spmatrix, Ky: spmatrix, Kz_ref: spmatrix,
                  e_ref: complex, u_ref: complex, sfree: SFree) -> None:
-        logger.debug("Sref")
+        logger.info("Initializing SRef...")
         eye: spmatrix = scs.eye(Kx.shape[0], Kx.shape[1], **spm_format)
         KxKy = Kx @ Ky
         Kx2 = Kx @ Kx
@@ -99,6 +107,7 @@ class SRef(SMBase):
         self._W: spmatrix = scs.block_diag((eye, eye), **spm_format)
         eig_matrix: spmatrix = scs.block_diag((-1j * Kz_ref, -1j * Kz_ref),
                                               **spm_format)
+        logger.info("Calculating SRef V")
         self._V: spmatrix = Q @ scsl.inv(eig_matrix)
         logger.debug(f"""
 Eig_Matrix ({eig_matrix.shape}):
@@ -116,18 +125,20 @@ V ({self._V.shape}):
         A: spmatrix = inv_W0 @ self._W + inv_V0 @ self._V
         B: spmatrix = inv_W0 @ self._W - inv_V0 @ self._V
         inv_A: spmatrix = scsl.inv(A)
+        logger.info("Calculating SRef SMatrix Elements")
         self._S11 = (-inv_A @ B).toarray()
         self._S12 = (2 * inv_A).toarray()
         self._S21 = (0.5 * (A - B @ inv_A @ B)).toarray()
         self._S22 = (B @ inv_A).toarray()
         logger.debug(self)
+        logger.info("Finished initializing SRef...")
 
 
 class STrn(SMBase):
     """ Transmission Region Scattering Matrix """
     def __init__(self, Kx: spmatrix, Ky: spmatrix, Kz_trn: spmatrix,
                  e_trn: complex, u_trn: complex, sfree: SFree) -> None:
-        logger.debug("STrn")
+        logger.info("Initializing STrn...")
         eye: spmatrix = scs.eye(Kx.shape[0], Kx.shape[1], **spm_format)
         KxKy = Kx @ Ky
         Kx2 = Kx @ Kx
@@ -138,6 +149,7 @@ class STrn(SMBase):
         self._W: spmatrix = scs.block_diag((eye, eye), **spm_format)
         eig_matrix: spmatrix = scs.block_diag((1j * Kz_trn, 1j * Kz_trn),
                                               **spm_format)
+        logger.info("Calculating STrn V")
         self._V: spmatrix = Q @ scsl.inv(eig_matrix)
         logger.debug(f"""
 Eig_Matrix ({eig_matrix.shape}):
@@ -155,18 +167,20 @@ V ({self._V.shape}):
         A = inv_W0 @ self._W + inv_V0 @ self._V
         B = inv_W0 @ self._W - inv_V0 @ self._V
         inv_A = scsl.inv(A)
+        logger.info("Calculating STrn SMatrix Elements")
         self._S11 = (B @ inv_A).toarray()
         self._S12 = (0.5 * (A - B @ inv_A @ B)).toarray()
         self._S21 = (2 * inv_A).toarray()
         self._S22 = (-inv_A @ B).toarray()
         logger.debug(self)
+        logger.info("Finished initializing STrn...")
 
 
 class SMatrix(SMBase):
     """ General Scattering Matrix for the Layered Stack """
     def __init__(self, Kx: spmatrix, Ky: spmatrix, er: npt.NDArray,
                  u0: npt.NDArray, sfree: SFree, k0: float, L: float) -> None:
-        logger.info(f"{Kx.shape}::{Ky.shape}::{er.shape}::{u0.shape}")
+        logger.info(f"Initializing SMatrix...")
         inv_er = scs.csc_matrix(inv(er, check_finite=False),
                                 dtype=np.complex64)
         inv_u0 = scs.csc_matrix(inv(u0, check_finite=False),
@@ -177,6 +191,7 @@ inv_er ({inv_er.shape}):
 inv_u0 ({inv_u0.shape})
 {inv_u0}
 """)
+        logger.info(f"Initializing P/Q Matrices...")
         inv_erKx = inv_er @ Kx
         inv_erKy = inv_er @ Ky
         inv_u0Kx = inv_u0 @ Kx
@@ -201,6 +216,7 @@ Q ({Q.shape}::{Q.count_nonzero()})
         self._W = P @ Q
         logger.debug(
             f"Omega2({self._W.shape}::{self._W.count_nonzero()})\n{self._W}")
+        logger.info("Solve for eigenvalues")
         eigs, self._W = eig(np.asfortranarray(self._W.toarray()),
                             check_finite=False,
                             overwrite_a=True)
@@ -210,6 +226,7 @@ Q ({Q.shape}::{Q.count_nonzero()})
         eigs = np.round(eigs, 9) + 0
         eigs = -np.sqrt(eigs)
         eig_matrix: spmatrix = scs.diags(eigs, **spm_format)
+        logger.info("Determine SMatrix V")
         self._V: npt.NDArray = Q @ self._W @ scsl.inv(eig_matrix).toarray()
         self._V: npt.NDArray = np.asfortranarray(self._V, dtype=np.complex64)
         logger.debug(f"""
@@ -220,6 +237,7 @@ Eiv_Matrix ({self._W.shape}):
 V ({self._V.shape}):
 {self._V}
 """)
+        logger.info("Determine SMatrix Pre-Elements")
         # Calculate the SMM elements
         inv_W: npt.NDArray = inv(self._W, check_finite=False)
         inv_V: npt.NDArray = inv(self._V, check_finite=False)
@@ -239,12 +257,13 @@ B({B.shape})
         XB = X.toarray() @ B
         XA = X.toarray() @ A
         D = inv(np.asfortranarray(A - XB @ inv_A @ XB), check_finite=False)
+        logger.info("Determine SMatrix Elements")
         self._S11 = D @ (XB @ inv_A @ XA - B)
         self._S12 = D @ X.toarray() @ (A - B @ inv_A @ B)
         self._S21 = self._S12
         self._S22 = self._S11
-        logger.debug("SMatrix")
         logger.debug(self)
+        logger.info(f"Finished Initializing SMatrix...")
 
 
 """ Intermediary functions for calculations """
