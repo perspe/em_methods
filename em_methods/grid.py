@@ -14,26 +14,29 @@ from scipy.linalg import toeplitz
 
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, 'logging.ini'))
-logger = logging.getLogger('dev')
+fileConfig(os.path.join(base_path, "logging.ini"))
+logger = logging.getLogger("dev_file")
 
 
 class GridHasNoObjectError(Exception):
-    """ Exception to raise when the grid does not have any object """
+    """Exception to raise when the grid does not have any object"""
+
     pass
 
 
-class UniformGrid():
-    """ Main Class to define non-structured layers (avoids fft) """
-    __slots__ = ("_xlims", "_ylims", "_thickness", "_e",
-                 "_u")
+class UniformGrid:
+    """Main Class to define non-structured layers (avoids fft)"""
 
-    def __init__(self,
-                 thickness: float,
-                 e_default: complex = 1,
-                 u_default: complex = 1,
-                 xlims: List[float] = [-0.5, 0.5],
-                 ylims: List[float] = [-0.5, 0.5]):
+    __slots__ = ("_xlims", "_ylims", "_thickness", "_e", "_u")
+
+    def __init__(
+        self,
+        thickness: float,
+        e_default: complex = 1,
+        u_default: complex = 1,
+        xlims: List[float] = [-0.5, 0.5],
+        ylims: List[float] = [-0.5, 0.5],
+    ):
         self._xlims = xlims
         self._ylims = ylims
         self._thickness = thickness
@@ -53,7 +56,8 @@ class UniformGrid():
     @property
     def limits(self) -> npt.NDArray:
         return np.array(
-            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]])
+            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]]
+        )
 
     @property
     def grid_size(self) -> Tuple[float, float]:
@@ -67,14 +71,13 @@ class UniformGrid():
 
     def convolution_matrices(
         self, p: int, q: int
-    ) -> Tuple[npt.NDArray[np.complexfloating],
-               npt.NDArray[np.complexfloating]]:
-        """ Return the convolution matrix """
+    ) -> Tuple[npt.NDArray[np.complexfloating], npt.NDArray[np.complexfloating]]:
+        """Return the convolution matrix"""
         base_matrix = np.eye((2 * p + 1) * (2 * q + 1), dtype=np.complex64, order="F")
         return base_matrix * self._e, base_matrix * self._u
 
 
-class Grid2D():
+class Grid2D:
     """Main class to create the grid
     This class is initialized with the x/y lengths and x/y max and min values
     Methods:
@@ -86,17 +89,32 @@ class Grid2D():
             - triangle() TODO
         convolution_matrix() (Return convolution matrix for e and u)
     """
-    __slots__ = ("_xlen", "_ylen", "_xlims", "_ylims", "_thickness", "_xrange",
-                 "_yrange", "_XX", "_YY", "_e", "_u", "_has_object")
 
-    def __init__(self,
-                 xlen: int,
-                 ylen: int,
-                 thickness: float,
-                 e_default: complex = 1,
-                 u_default: complex = 1,
-                 xlims: List[float] = [-0.5, 0.5],
-                 ylims: List[float] = [-0.5, 0.5]):
+    __slots__ = (
+        "_xlen",
+        "_ylen",
+        "_xlims",
+        "_ylims",
+        "_thickness",
+        "_xrange",
+        "_yrange",
+        "_XX",
+        "_YY",
+        "_e",
+        "_u",
+        "_has_object",
+    )
+
+    def __init__(
+        self,
+        xlen: int,
+        ylen: int,
+        thickness: float,
+        e_default: complex = 1,
+        u_default: complex = 1,
+        xlims: List[float] = [-0.5, 0.5],
+        ylims: List[float] = [-0.5, 0.5],
+    ):
         self._xlen = xlen
         self._ylen = ylen
         self._xlims = xlims
@@ -112,8 +130,7 @@ class Grid2D():
     """ Define the accessible properties """
 
     @property
-    def XYgrid(
-            self) -> Tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+    def XYgrid(self) -> Tuple[npt.NDArray[np.floating], npt.NDArray[np.floating]]:
         return self._XX, self._YY
 
     @property
@@ -127,7 +144,8 @@ class Grid2D():
     @property
     def limits(self) -> npt.NDArray:
         return np.array(
-            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]])
+            [self._xlims[0], self._xlims[1], self._ylims[0], self._ylims[1]]
+        )
 
     @property
     def grid_size(self) -> Tuple[float, float]:
@@ -142,31 +160,35 @@ class Grid2D():
     """ Help functions """
 
     def has_object(self) -> bool:
-        """ Check if any object has been added to the grid """
+        """Check if any object has been added to the grid"""
         return self._has_object
 
     def reinit(self) -> None:
-        """ Remove all objects from the grid """
+        """Remove all objects from the grid"""
         self._has_object = False
         self._e = np.ones_like(self._e)
         self._u = np.ones_like(self._u)
 
     """ Functions to add the primitives """
 
-    def add_rectangle(self,
-                      er: complex,
-                      u0: complex,
-                      size: Tuple[float, float],
-                      *,
-                      center: Union[float, Tuple[float, float]] = 0,
-                      rotation: float = 0) -> None:
+    def add_rectangle(
+        self,
+        er: complex,
+        u0: complex,
+        size: Tuple[float, float],
+        *,
+        center: Union[float, Tuple[float, float]] = 0,
+        rotation: float = 0,
+    ) -> None:
         angle = np.radians(rotation)
         xcenter = center[0] if isinstance(center, tuple) else center
         ycenter = center[1] if isinstance(center, tuple) else center
-        XX_new = (self._XX - xcenter) * np.cos(angle) - (
-            self._YY - ycenter) * np.sin(angle)
-        YY_new = (self._XX - xcenter) * np.sin(angle) + (
-            self._YY - ycenter) * np.cos(angle)
+        XX_new = (self._XX - xcenter) * np.cos(angle) - (self._YY - ycenter) * np.sin(
+            angle
+        )
+        YY_new = (self._XX - xcenter) * np.sin(angle) + (self._YY - ycenter) * np.cos(
+            angle
+        )
         mask_x = (XX_new <= size[0] / 2) & (XX_new >= -size[0] / 2)
         mask_y = (YY_new <= size[1] / 2) & (YY_new >= -size[1] / 2)
         mask = mask_x & mask_y
@@ -174,44 +196,49 @@ class Grid2D():
         self._e[mask] = er
         self._has_object = True
 
-    def add_square(self,
-                   er: complex,
-                   u0: complex,
-                   size: float,
-                   *,
-                   center: Union[float, Tuple[float, float]] = 0,
-                   rotation: float = 0) -> None:
-        """ Add a square to the grid """
-        self.add_rectangle(er,
-                           u0, (size, size),
-                           center=center,
-                           rotation=rotation)
+    def add_square(
+        self,
+        er: complex,
+        u0: complex,
+        size: float,
+        *,
+        center: Union[float, Tuple[float, float]] = 0,
+        rotation: float = 0,
+    ) -> None:
+        """Add a square to the grid"""
+        self.add_rectangle(er, u0, (size, size), center=center, rotation=rotation)
 
-    def add_ellipse(self,
-                    er: complex,
-                    u0: complex,
-                    radius: Tuple[float, float],
-                    *,
-                    center: Union[float, Tuple[float, float]] = 0,
-                    rotation: float = 0) -> None:
+    def add_ellipse(
+        self,
+        er: complex,
+        u0: complex,
+        radius: Tuple[float, float],
+        *,
+        center: Union[float, Tuple[float, float]] = 0,
+        rotation: float = 0,
+    ) -> None:
         angle = np.radians(rotation)
         xcenter = center[0] if isinstance(center, tuple) else center
         ycenter = center[1] if isinstance(center, tuple) else center
-        XX_new = (self._XX - xcenter) * np.cos(angle) - (
-            self._YY - ycenter) * np.sin(angle)
-        YY_new = (self._XX - xcenter) * np.sin(angle) + (
-            self._YY - ycenter) * np.cos(angle)
+        XX_new = (self._XX - xcenter) * np.cos(angle) - (self._YY - ycenter) * np.sin(
+            angle
+        )
+        YY_new = (self._XX - xcenter) * np.sin(angle) + (self._YY - ycenter) * np.cos(
+            angle
+        )
         a, b = radius
-        mask = ((XX_new / a)**2 + (YY_new / b)**2 <= 1)
+        mask = (XX_new / a) ** 2 + (YY_new / b) ** 2 <= 1
         self._u[mask] = u0
         self._e[mask] = er
         self._has_object = True
 
-    def add_circle(self,
-                  er: complex,
-                  u0: complex,
-                  radius: float,
-                  center: Union[float, Tuple[float, float]] = 0) -> None:
+    def add_circle(
+        self,
+        er: complex,
+        u0: complex,
+        radius: float,
+        center: Union[float, Tuple[float, float]] = 0,
+    ) -> None:
         """
         Add a circle to the grid
         Args:
@@ -221,8 +248,14 @@ class Grid2D():
         """
         self.add_ellipse(er, u0, (radius, radius), center=center)
 
-    def add_triangle(self, er: complex, u0: complex, a: Tuple[float, float],
-                     b: Tuple[float, float], c: Tuple[float, float]):
+    def add_triangle(
+        self,
+        er: complex,
+        u0: complex,
+        a: Tuple[float, float],
+        b: Tuple[float, float],
+        c: Tuple[float, float],
+    ):
         # Sort the values according to their x value
         sorted_list = [a, b, c]
         sorted_list.sort(key=lambda x: x[0])
@@ -266,8 +299,7 @@ class Grid2D():
 
     def convolution_matrices(
         self, p: int, q: int
-    ) -> Tuple[npt.NDArray[np.complexfloating],
-               npt.NDArray[np.complexfloating]]:
+    ) -> Tuple[npt.NDArray[np.complexfloating], npt.NDArray[np.complexfloating]]:
         """
         Return the convolution matrices for e and u
         Args:
@@ -276,8 +308,8 @@ class Grid2D():
         # Obtain the p*q area of the 2D fft
         fft_e0 = fft2(self._e, norm="forward", workers=-2)
         fft_u0 = fft2(self._u, norm="forward", workers=-2)
-        fft_e0_zoom = fft_e0[:2 * p + 1, :2 * q + 1]
-        fft_u0_zoom = fft_u0[:2 * p + 1, :2 * q + 1]
+        fft_e0_zoom = fft_e0[: 2 * p + 1, : 2 * q + 1]
+        fft_u0_zoom = fft_u0[: 2 * p + 1, : 2 * q + 1]
         conv_e0 = toeplitz(fft_e0_zoom.flatten())
         conv_u0 = toeplitz(fft_u0_zoom.flatten())
         logger.debug(f"{conv_e0=}\n{conv_u0=}")
@@ -291,6 +323,7 @@ class Grid2D():
 
     def _test_triangle(self):
         from math import floor
+
         # Initial variables
         Nx = 512
         Lx = 0.0175
