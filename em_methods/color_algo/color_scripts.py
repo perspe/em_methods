@@ -1,9 +1,14 @@
 import numpy as np
-
 import os
+import time
+from pathlib import Path
 
+# Get module paths
+file_path = Path(os.path.abspath(__file__))
+parent_path = file_path.parent.parent
+data_path = os.path.join(parent_path, "data")
 # File with CIE color matching function
-CIE_CMF = "cie-cmf.txt"
+CIE_CMF = os.path.join(data_path, "cie-cmf.txt")
 
 
 def xyz_from_xy(x, y):
@@ -104,6 +109,8 @@ cs_hdtv = ColourSystem(
     white=illuminant_D65,
 )
 
+cs = cs_hdtv
+
 cs_smpte = ColourSystem(
     red=xyz_from_xy(0.63, 0.34),
     green=xyz_from_xy(0.31, 0.595),
@@ -118,16 +125,9 @@ cs_srgb = ColourSystem(
     white=illuminant_D65,
 )
 
-cs = cs_hdtv
-
-
 def rgb2hex(r, g, b):
     """Return color as #rrggbb for the given color values."""
     return "#%02x%02x%02x" % (r, g, b)
-
-
-import time
-
 
 def hex2rgb(hex_string):  # FUNÇÃO DE CONVERSÃO DO HEXCODE
     if type(hex_string) == str:
@@ -152,7 +152,6 @@ def timeelapsed(start, end):  # TAKES IN SECONDS
         + f"{hours} hours, {minutes} minutes and {seconds} seconds."
     )
 
-
 def satcolorgen(T):  # TAKES IN A LIST FOR X=[380:781:5]
     cs = cs_hdtv
     spec = np.array(T)
@@ -160,11 +159,12 @@ def satcolorgen(T):  # TAKES IN A LIST FOR X=[380:781:5]
     satcolor = hex2rgb(satcolor)
     return satcolor
 
-
 def colordist(current, desired):  # TAKES IN CURRENT AS RGB, DESIRED AS HEX
-
     desired_rgb = hex2rgb(desired)
     R, G, B = [*desired_rgb]
     r, g, b = [*current]
     colordistance = ((R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2) ** (1 / 2)
     return colordistance
+
+if __name__ == "__main__":
+    satcolorgen(list(range(380, 781,5)))
