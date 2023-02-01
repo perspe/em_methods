@@ -1,11 +1,13 @@
 # Folders
 
-/__pycache__
-/build
+__pycache__
+build
 *.egg-info*
-/dist
-/test
-/.cache
+dist
+.cache
+Profile
+PWEM
+Slab\ Waveguide
 
 # General Files
 
