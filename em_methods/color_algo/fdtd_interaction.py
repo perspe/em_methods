@@ -18,7 +18,7 @@ logging.basicConfig(**{
 
 # E costume colocar variaveis constantes no topo do codigo em letra
 # maiuscula. Assim fica tambem tudo num ponto fácil de usar
-COLOR: str = "#FF69B4"  # must be hexcode
+COLOR: str = "#FF0000"  # must be hexcode
 SATURATION: bool = True
 BASEFILE: str = "nanopillar.fsp"
 PARTICLES=25
