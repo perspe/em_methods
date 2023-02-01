@@ -17,17 +17,7 @@ import pandas as pd
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
 fileConfig(os.path.join(base_path, "..", "logging.ini"))
-logger = logging.getlogging("root")
-logger.setLevel(logging.WARN)
-
-logger.basicConfig(
-    filename="logs.txt",
-    filemode="a",
-    level=logger.INFO,
-    format="%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
+logger = logging.getLogger("simulation")
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
