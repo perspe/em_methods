@@ -15,6 +15,7 @@
 *.txt
 *.so
 *cpython*
+*.gp
 
 # Specific files
 *py_smm_base.cpp
