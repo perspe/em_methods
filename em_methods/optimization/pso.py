@@ -4,6 +4,7 @@ Functions:
     - particle_swarm: Implements the algorithm
 """
 import logging
+from logging.config import fileConfig
 import os
 from random import random
 from typing import Dict, List, Tuple
@@ -13,17 +14,19 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-# Get module logging
-# base_path = os.path.dirname(os.path.abspath(__file__))
-# fileConfig(os.path.join(base_path, "..", "logging.ini"))
-# logging = logging.getlogging("root")
-# logging.setLevel(logging.WARN)
+# Get module logger
+base_path = os.path.dirname(os.path.abspath(__file__))
+fileConfig(os.path.join(base_path, "..", "logging.ini"))
+logger = logging.getlogging("root")
+logger.setLevel(logging.WARN)
 
-logging.basicConfig(filename='logs.txt',
-                    filemode='a',
-                    level=logging.INFO,
-                    format='%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S')
+logger.basicConfig(
+    filename="logs.txt",
+    filemode="a",
+    level=logger.INFO,
+    format="%(asctime)s.%(msecs)03d %(levelname)s %(module)s - %(funcName)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 
 
 def _update_parameters(
@@ -48,39 +51,39 @@ def _update_parameters(
     Return:
         Updated parameters and velocities
     """
-    logging.debug("Update Properties --------------")
-    logging.debug("Initialization -----------")
-    logging.debug(f"Init values: {inertia_w}, {ind_cog}, {soc_learning}")
-    logging.debug(f"vel=\n{vel}")
-    logging.debug(f"pbest=\n{pbest}")
-    logging.debug(f"gbest=\n{gbest}")
+    logger.debug("Update Properties --------------")
+    logger.debug("Initialization -----------")
+    logger.debug(f"Init values: {inertia_w}, {ind_cog}, {soc_learning}")
+    logger.debug(f"vel=\n{vel}")
+    logger.debug(f"pbest=\n{pbest}")
+    logger.debug(f"gbest=\n{gbest}")
     r1 = random()
     r2 = random()
     max_param = np.broadcast_to(max_param[:, np.newaxis], param.shape)
     min_param = np.broadcast_to(min_param[:, np.newaxis], param.shape)
-    logging.debug(f"min_param:\n{min_param}")
-    logging.debug(f"max_param:\n{max_param}")
-    logging.debug("Calculations -----------")
+    logger.debug(f"min_param:\n{min_param}")
+    logger.debug(f"max_param:\n{max_param}")
+    logger.debug("Calculations -----------")
     # Update velocity
     part_1 = inertia_w * vel
     part_2 = ind_cog * r1 * (pbest - param)
     part_3 = soc_learning * r2 * (gbest - param)
     v_new = part_1 + part_2 + part_3
-    logging.debug(f"v_new:\n{v_new}")
+    logger.debug(f"v_new:\n{v_new}")
     # Check if no parameters are outside the allowed ranges for the parameters
-    logging.debug(f"param=\n{param}")
+    logger.debug(f"param=\n{param}")
     param_new = param + v_new
-    logging.debug(f"param_new:\n{param_new}")
+    logger.debug(f"param_new:\n{param_new}")
     mask_min = param_new < min_param
     mask_max = param_new > max_param
-    logging.debug(f"mask_min:\n{mask_min}")
-    logging.debug(f"mask_max:\n{mask_max}")
+    logger.debug(f"mask_min:\n{mask_min}")
+    logger.debug(f"mask_max:\n{mask_max}")
     param_new[mask_min] = min_param[mask_min]
     param_new[mask_max] = max_param[mask_max]
-    logging.debug(f"Parameter Space:\n{param_new}")
+    logger.debug(f"Parameter Space:\n{param_new}")
     v_new[mask_min & mask_max] = 0
     # v_new[mask_min ^ mask_max] = -v_new[mask_min ^ mask_max]
-    logging.debug(f"Velocity space:\n{v_new}")
+    logger.debug(f"Velocity space:\n{v_new}")
     return param_new, v_new
 
 
@@ -108,7 +111,7 @@ def _preview_results(
             fontsize=10,
         )
     plt.savefig("pso_update_res.png", dpi=200)
-    logging.debug("Updated Summary Figure")
+    logger.debug("Updated Summary Figure")
 
 
 def particle_swarm(
@@ -152,7 +155,7 @@ def particle_swarm(
     # np.random.seed(1)
     # Create export path
     if export and not os.path.isdir(basepath):
-        logging.info(f"Creating {basepath=}...")
+        logger.info(f"Creating {basepath=}...")
         os.mkdir(basepath)
     min_iteration, max_iteration, iteration_check = iterations
     if max_iteration < min_iteration:
@@ -169,14 +172,14 @@ def particle_swarm(
         inert_factor = np.r_[inert_factor, inert_factor_remaining]
     else:
         inert_factor = np.ones(max_iteration) * inert_factor_up
-    logging.info(f"Inert_factor array:\n{inert_factor}")
+    logger.info(f"Inert_factor array:\n{inert_factor}")
     # Variable initialization
     param_names = list(param_dict.keys())
     vparam_names = [f"v{param_name_i}" for param_name_i in param_names]
     export_names = param_names.copy()
     export_names.append("FoM")
     export_names.extend(vparam_names)
-    logging.debug(f"Parameters in study:\n{export_names}")
+    logger.debug(f"Parameters in study:\n{export_names}")
     param_max = np.array([p_max[1] for p_max in param_dict.values()])
     param_min = np.array([p_min[0] for p_min in param_dict.values()])
     # Random array with the start value for the parameters
@@ -221,7 +224,7 @@ def particle_swarm(
             figsize=(5, 4),
             gridspec_kw={"wspace": 0.1, "width_ratios": [0.7, 0.3]},
         )
-        logging.debug(f"{np.arange(iteration)}::{gbest_array}")
+        logger.debug(f"{np.arange(iteration)}::{gbest_array}")
         _preview_results(
             ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names
         )
@@ -237,14 +240,14 @@ def particle_swarm(
         # tolerance array
         if iteration > min_iteration + tolerance_num:
             last_tolerances = np.array(tol_array)[-tolerance_num:]
-            logging.debug(f"tol_array: {tol_array}\n{len(tol_array)}")
-            logging.debug(f"last_tolerances: {last_tolerances}\n{len(last_tolerances)}")
+            logger.debug(f"tol_array: {tol_array}\n{len(tol_array)}")
+            logger.debug(f"last_tolerances: {last_tolerances}\n{len(last_tolerances)}")
             avg_tol = np.average(last_tolerances)
-            logging.debug(f"avg_tol: {avg_tol}")
+            logger.debug(f"avg_tol: {avg_tol}")
             if avg_tol < tolerance_percent:
-                logging.warn(f"Tolerance reached at {iteration}... Exiting")
+                logger.warn(f"Tolerance reached at {iteration}... Exiting")
                 break
-        logging.info(f"PSO Running Iteration: {iteration}")
+        logger.info(f"PSO Running Iteration: {iteration}")
         param_space, vel_space = _update_parameters(
             param_space,
             vel_space,
@@ -277,13 +280,13 @@ def particle_swarm(
         # Add error values to array
         tol_array.append((gfitness - gfitness_old) / gfitness_old)
         # Update gbest, pfitness and pbest
-        logging.debug(f"Global best list:\n{gbest}")
+        logger.debug(f"Global best list:\n{gbest}")
         gbest_array.append(gfitness)
         # Update the FoM plot
         pfitness[pfitness_mask] = func_results[pfitness_mask]
         pbest[:, pfitness_mask] = param_space[:, pfitness_mask]
-        logging.debug(f"Particle Best Values:\n{pfitness}")
-        logging.debug(f"Particle Global best list:\n{pbest}")
+        logger.debug(f"Particle Best Values:\n{pfitness}")
+        logger.debug(f"Particle Global best list:\n{pbest}")
         iteration += 1
         if progress:
             _preview_results(
@@ -297,7 +300,7 @@ def particle_swarm(
                 sep=" ",
                 index=False,
             )
-    logging.debug(
+    logger.debug(
         f"Results:\ngfitness:{gfitness}\ngbest:\n{gbest}\npbest:\n{pbest}\ngbest_array:\n{gbest_array}"
     )
     return gfitness, gbest, pbest, gbest_array
