@@ -6,6 +6,7 @@ Block: Create the list of block wavevectors
 """
 import logging
 from logging.config import fileConfig
+import os
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -13,10 +14,12 @@ import numpy as np
 import numpy.typing as npt
 from scipy.linalg import eig, inv
 
-from .grid import Grid2D, GridHasNoObjectError
+from grid import Grid2D, GridHasNoObjectError
 
-fileConfig('logging.ini')
-logger = logging.getLogger('release')
+# Get module logger
+base_path = os.path.dirname(os.path.abspath(__file__))
+fileConfig(os.path.join(base_path, "logging.ini"))
+logger = logging.getLogger("dev_file")
 """ Class to obtain the Block Vectors for the structure """
 
 
@@ -117,13 +120,13 @@ def PWEMSolve2D(grid: Grid2D, block: Block, p: int, q: int, n_eig: int = 5):
 def grid_constructor():
     """ Test several elements of the grid """
     # Test adding objects to the grid
-    grid = Grid2D(525, 525)  # Base grid with a=1
+    grid = Grid2D(525, 525, 10)  # Base grid with a=1
     logging.debug(f"Before adding objects: {grid.has_object()=}")
     grid.add_square(2.5, 2, 0.5)
     logging.debug(f"After adding objects: {grid.has_object()=}")
     grid.add_rectangle(3, 2.5, (0.15, 0.1))
     grid.add_rectangle(3.5, 3, (0.15, 0.1), rotation=45)
-    grid.add_cirle(4, 3.5, 0.15, 0.25)
+    grid.add_circle(4, 3.5, 0.15, 0.25)
     grid.add_ellipse(4, 3.5, (0.15, 0.1), center=-0.25)
     grid.add_ellipse(4, 3.5, (0.15, 0.1), center=(-0.25, 0.25))
     plt.imshow(np.real(grid.er))
@@ -132,7 +135,7 @@ def grid_constructor():
 
 def pwem_square():
     """ Calculate a simple Band Diagram """
-    grid = Grid2D(525, 525)  # Base grid with a=1
+    grid = Grid2D(525, 525, 10)  # Base grid with a=1
     grid.add_square(9, 2, 0.5)
     plt.imshow(np.real(grid.er))
     plt.show()
@@ -165,23 +168,38 @@ def pwem_full():
         plt.plot(eig_i, 'b--')
     plt.show()
 
-
-def pwem_compare():
-    grid = Grid2D(525, 525)
-    block = Block(grid.grid_size[0], 25)
-    _, ax = plt.subplots()
-    ax.set_xticks(block.label[1], block.label[0])
-    for size_i in np.linspace(0.2, 0.7, 3):
-        grid.add_cirle(5, 1, size_i)
-        eigs = PWEMSolve2D(grid, block, 10, 10, 3)
-        for eig_i in eigs:
-            ax.plot(eig_i, 'b')
-        grid.reinit()
+def pwem_particle():
+    grid = Grid2D(1050, 1050, 100)
+    grid.add_circle(10, 10, 0.1)
+    e0, u0 = grid.convolution_matrices(2, 2)
+    plt.imshow(np.real(e0))
+    plt.show()
+    grid.reinit()
+    grid.add_circle(10, 10, 0.25)
+    e0, u0 = grid.convolution_matrices(2, 2)
+    plt.imshow(np.real(e0))
     plt.show()
 
 
+def pwem_compare():
+    grid = Grid2D(525, 525, 10)
+    block = Block(grid.grid_size[0], 25)
+    # _, ax = plt.subplots()
+    # ax.set_xticks(block.label[1], block.label[0])
+    print(block.label[0], block.label[1])
+
+    for size_i in np.linspace(0.2, 0.7, 5):
+        grid.add_circle(3, 1, size_i)
+        eigs = PWEMSolve2D(grid, block, 10, 10, 3)
+        np.savetxt(f"Eig_{size_i}.txt", eigs.T)
+        # for index, eig_i in enumerate(eigs):
+            # ax.plot(eig_i, 'b')
+        grid.reinit()
+    # plt.show()
+
+
 def conv_compare():
-    grid = Grid2D(1025, 1025)
+    grid = Grid2D(1025, 1025, 10)
     grid.add_square(3 + 0.5j, 1, 0.15, center=(-0.15, 0))
     for _ in range(10):
         grid.convolution_matrices(10, 10)
@@ -190,7 +208,8 @@ def conv_compare():
 def main():
     """Run tests
     """
-    conv_compare()
+    # pwem_compare()
+    pwem_particle()
 
 
 if __name__ == "__main__":
