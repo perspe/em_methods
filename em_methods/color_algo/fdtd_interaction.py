@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from color_scripts import satcolorgen,colordist
+from em_methods.color_algo.color_scripts import satcolorgen,colordist
 from em_methods.optimization.pso import particle_swarm
 import logging
 import shutil
@@ -18,7 +18,7 @@ logging.basicConfig(**{
 
 # E costume colocar variaveis constantes no topo do codigo em letra
 # maiuscula. Assim fica tambem tudo num ponto fácil de usar
-COLOR: str = "#FF0000"  # must be hexcode
+COLOR: str = "#00FF"  # must be hexcode
 SATURATION: bool = True
 BASEFILE: str = "nanopillar.fsp"
 PARTICLES=25
