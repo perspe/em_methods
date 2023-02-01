@@ -1,22 +1,24 @@
-# Folders
+# Files/Folder to ignore in git
 
+# Folders
 __pycache__
 build
-*.egg-info*
 dist
+*.egg-info
 .cache
+.spyproject
+# Test Folders
 Profile
 PWEM
 Slab\ Waveguide
-.spyproject
 
 # General Files
-
-*.png
-*.pdf
 *.log
 *.so
+*.pyd
 *cpython*
+*.png
+*.pdf
 *.gp
 
 # Specific files
