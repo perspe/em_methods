@@ -1,0 +1,23 @@
+import unittest
+import os
+from em_methods.fdtd.fdtd import fdtd_run, fdtd_add_material
+
+class TestFDTD(unittest.TestCase):
+    def test_single_run(self):
+        """ Make a single run of a test file with everything default """
+        fdtd_file: str = os.path.join("test", "fdtd", "test_planar.fsp")
+        properties = {
+            "::model":
+		{"RT_mode": 1},
+            "Planar_layers":
+		{"Perovskite": 250e-9,
+		 "Spiro": 100e-9}
+        }
+        results = {
+            "data":
+                {"solar_generation": "Jsc"},
+            "results":
+                {"T": "T",
+                "R": "T"}
+        }
+        fdtd_run(fdtd_file, properties, results)
