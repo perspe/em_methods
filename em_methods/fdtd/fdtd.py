@@ -1,0 +1,149 @@
+import os
+import shutil
+from typing import Union, Dict, List
+from uuid import uuid4
+import logging
+from logging.config import fileConfig
+import time
+
+import numpy as np
+import numpy.typing as npt
+import pandas as pd
+
+import scipy.constants as scc
+
+# Get module logger
+BASEPATH: str = os.path.dirname(os.path.abspath(__file__))
+fileConfig(os.path.join(BASEPATH, "..", "logging.ini"))
+logger = logging.getLogger("simulations")
+
+# Connect to Lumerical
+import sys
+# Determine the base path for lumerical
+if os.name == "nt":
+    LM_BASE: str = os.path.join("C:\\", "Program Files", "Lumerical")
+elif os.name == "posix":
+    LM_BASE: str = os.path.join("/opt", "Lumerical")
+else:
+    raise Exception("Operating system not supported...")
+# Determine the newest version
+LM_API: str = os.path.join("api", "python")
+lm_dir_list: List[str] = os.listdir(LM_BASE)
+if len(lm_dir_list) == 1:
+    LUMAPI_PATH: str = os.path.join(LM_BASE, lm_dir_list[0], LM_API)
+else:
+    v_num: List[float] = [float(v_i) for v_i in lm_dir_list]
+    LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
+logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
+sys.path.append(LUMAPI_PATH)
+import lumapi
+
+def fdtd_run(basefile: str,
+             properties: Dict[str, Dict[str, float]],
+             get_results: Dict[str, Dict[str, str]],
+             *,
+             savepath: Union[None, str] = None,
+             override_prefix: Union[None, str] = None,
+             delete: bool = False
+             ):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+            basefile: Path to the original file
+            properties: Dictionary with the property object and property names and values
+            get_results: Dictionary with the properties to be calculated
+            savepath (default=.): Override default savepath for the new file
+            override_prefix (default=None): Override prefix for the new file
+            delete (default=False): Delete newly generated file
+    Return:
+            results: Dictionary with all the results
+            time: Time to run the simulation
+    """
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(
+        savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Update simulation properties, run and get results
+    results = {}
+    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
+        # Update structures
+        for structure_key, structure_value in properties.items():
+            logger.debug(f"Editing: {structure_key}")
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                logger.debug(
+                    f"Updating: {parameter_key} to {parameter_value}")
+                fdtd.set(parameter_key, parameter_value)
+        logger.debug(f"Running...")
+        start_time = time.time()
+        fdtd.run()
+        fdtd_runtime = time.time() - start_time
+        start_time = time.time()
+        fdtd.runanalysis()
+        analysis_runtime = time.time() - start_time
+        logger.info(
+            f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
+        # Obtain results
+        get_results_info = list(get_results.keys())
+        if "data" in get_results_info:
+            for key, value in get_results["data"].items():
+                logger.debug(f"Getting result for: '{key}':'{value}'")
+                results["data."+key] = fdtd.getdata(key, value)
+        if "results" in get_results_info:
+            for key, value in get_results["results"].items():
+                logger.debug(f"Getting result for: '{key}':'{value}'")
+                results["data."+key] = fdtd.getresult(key, value)
+    if delete:
+        os.remove(new_filepath)
+        os.remove(os.path.join(
+            savepath,
+            override_prefix + "_" + os.path.splitext(basename)[0] + "_p0.log"))
+    return results, fdtd_runtime, analysis_runtime
+
+
+def fdtd_add_material(basefile: str,
+                      name: str,
+                      freq: npt.ArrayLike,
+                      permitivity: npt.NDArray[np.complex128],
+                      *,
+                      savefit: Union[None, str] = None,
+                      edit: bool = False,
+                      **kwargs):
+    """
+    Add a new material to the database of a specific file
+    Args:
+        - basefile: Name/path o the fsp file to add the material
+        - name: Name for the new material in the DB (should be unique)
+        - freq: Array with the frequency values (in Hz)
+        - permitivity: complex array with the permitivity for the material
+        - savefit (None or filename): Save the fit data to a new file
+        - edit: edit an already present material in the D
+        - kwargs: provide extra arguments for the material function (tolerance and max_coefficients)
+    """
+    basepath, _ = os.path.split(basefile)
+    with lumapi.FDTD(filename=basefile, hide=True) as fdtd:
+        if not edit:
+            material = fdtd.addmaterial("Sampled 3D data")
+            fdtd.setmaterial(material, "name", name)
+            fdtd.setmaterial(name, "sampled data", np.c_[
+                            freq, permitivity])
+        for key, value in kwargs.items():
+            fdtd.setmaterial(name, key, value)
+        if savefit is not None:
+            fit_res = fdtd.getfdtdindex(
+                name, np.array(freq), min(freq), max(freq))
+            fit_res = fit_res.flatten()
+            export_df = pd.DataFrame(
+                {"Wvl": scc.c/freq,
+                "n_og":np.real(np.sqrt(permitivity)),
+                "k_ok": np.imag(np.sqrt(permitivity)),
+                "n_fit": np.real(fit_res),
+                "k_fit": np.imag(fit_res)})
+            logger.debug(f"Export_array:\n{export_df}")
+            export_df.to_csv(os.path.join(basepath, savefit), sep=" ", index=False)
+        fdtd.save()
