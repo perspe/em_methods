@@ -3,8 +3,8 @@ import shutil
 from typing import Union, Dict, List
 from uuid import uuid4
 import logging
-from logging.config import fileConfig
 import time
+import re
 
 import numpy as np
 import numpy.typing as npt
@@ -13,9 +13,7 @@ import pandas as pd
 import scipy.constants as scc
 
 # Get module logger
-BASEPATH: str = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(BASEPATH, "..", "logging.ini"))
-logger = logging.getLogger("simulations")
+logger = logging.getLogger('simulation')
 
 # Connect to Lumerical
 import sys
@@ -98,12 +96,22 @@ def fdtd_run(basefile: str,
             for key, value in get_results["results"].items():
                 logger.debug(f"Getting result for: '{key}':'{value}'")
                 results["data."+key] = fdtd.getresult(key, value)
+    # Gather info from log and the delete it
+    log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
+    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
+    autoshut_off_list: List[Tuple[float, float]] = []
+    with open(log_file, mode="r") as log:
+        for log_line in log.readlines():
+            match = re.search(autoshut_off_re, log_line)
+            if match:
+                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
+                autoshut_off_val = float(log_line.split(" ")[-1])
+                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
+    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
     if delete:
         os.remove(new_filepath)
-        os.remove(os.path.join(
-            savepath,
-            override_prefix + "_" + os.path.splitext(basename)[0] + "_p0.log"))
-    return results, fdtd_runtime, analysis_runtime
+        os.remove(log_file)
+    return results, fdtd_runtime, analysis_runtime, autoshut_off_list
 
 
 def fdtd_add_material(basefile: str,
