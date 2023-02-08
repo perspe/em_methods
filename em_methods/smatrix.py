@@ -11,21 +11,17 @@ Functions:
     smm_layer: Calculate the absorption for a specific layer
 """
 import logging
-from logging.config import fileConfig
 from typing import Any, List, Tuple, Union
 
 import numpy as np
 from numpy.linalg import inv
 import numpy.typing as npt
 from scipy.interpolate import interp1d
-import os
 
 from em_methods.smm_core.py_smm_base import CMatrix, CSMatrix
 from em_methods.smm_core.py_smm_base import SMMType as CSMMType
 
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, 'logging.ini'))
-logger = logging.getLogger('dev')
+logger = logging.getLogger('simulation')
 
 # Default simulation config
 sim_config = {

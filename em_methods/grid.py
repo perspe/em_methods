@@ -2,8 +2,6 @@
 PWEM and RCWA """
 
 import logging
-from logging.config import fileConfig
-import os
 from typing import List, Tuple, Union
 
 import matplotlib.pyplot as plt
@@ -13,9 +11,7 @@ from scipy.fft import fft2
 from scipy.linalg import toeplitz
 
 # Get module logger
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, "logging.ini"))
-logger = logging.getLogger("dev_file")
+logger = logging.getLogger("simulation")
 
 
 class GridHasNoObjectError(Exception):

@@ -1,8 +1,6 @@
 """ Main RCWA Functions - utilizing the core structure from rcwa_core """
 
 import logging
-from logging.config import fileConfig
-import os
 from typing import List, Tuple, Union
 
 import numpy as np
@@ -13,9 +11,7 @@ from em_methods.rcwa_core.rcwa_core import SMatrix, SPMatrix, SRef, STrn
 from em_methods.rcwa_core.rcwa_core import initialize_components, r_t_fields
 
 # Get module logger
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, "logging.ini"))
-logger = logging.getLogger("dev_file")
+logger = logging.getLogger("simulation")
 
 Layer = Union[UniformGrid, Grid2D]
 

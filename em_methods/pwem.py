@@ -5,8 +5,6 @@ PWEMSolve: Run the PWEM method
 Block: Create the list of block wavevectors
 """
 import logging
-from logging.config import fileConfig
-import os
 from typing import List, Tuple
 
 import matplotlib.pyplot as plt
@@ -17,9 +15,7 @@ from scipy.linalg import eig, inv
 from grid import Grid2D, GridHasNoObjectError
 
 # Get module logger
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, "logging.ini"))
-logger = logging.getLogger("dev_file")
+logger = logging.getLogger("simulation")
 """ Class to obtain the Block Vectors for the structure """
 
 

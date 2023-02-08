@@ -1,10 +1,9 @@
-"""
+"""     
 Implementation of the particle swarm optimization algorithm
 Functions:
     - particle_swarm: Implements the algorithm
 """
 import logging
-from logging.config import fileConfig
 import os
 from random import random
 from typing import Dict, List, Tuple
@@ -14,9 +13,6 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-# Get module logger
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, "..", "logging.ini"))
 logger = logging.getLogger("simulation")
 
 def _update_parameters(
