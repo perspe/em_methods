@@ -61,6 +61,7 @@ def fdtd_run(basefile: str,
     # Build the name of the new file and copy to a new location
     basepath, basename = os.path.split(basefile)
     savepath: str = savepath or basepath
+    teste_string = "ASDFASDF"
     override_prefix: str = override_prefix or str(uuid4())[0:5]
     new_filepath: str = os.path.join(
         savepath, override_prefix + "_" + basename)
