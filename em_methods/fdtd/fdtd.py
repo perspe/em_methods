@@ -30,7 +30,7 @@ lm_dir_list: List[str] = os.listdir(LM_BASE)
 if len(lm_dir_list) == 1:
     LUMAPI_PATH: str = os.path.join(LM_BASE, lm_dir_list[0], LM_API)
 else:
-    v_num: List[float] = [float(v_i) for v_i in lm_dir_list]
+    v_num: List[int] = [int(v_i[1:]) for v_i in lm_dir_list if v_i[0] == "v"]
     LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
 logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
