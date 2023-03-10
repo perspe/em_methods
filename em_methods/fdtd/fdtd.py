@@ -155,3 +155,44 @@ def fdtd_add_material(basefile: str,
             logger.debug(f"Export_array:\n{export_df}")
             export_df.to_csv(os.path.join(basepath, savefit), sep=" ", index=False)
         fdtd.save()
+
+def fdtd_get_material(basefile: str,
+                      names: Union[str, List[str]],
+                      freq: npt.ArrayLike,
+                      *,
+                      fit=True,
+                      data=True,
+                      save: Union[None, str] = None,
+                      **kwargs):
+    """
+    Extract data from materials from the database
+    Args:
+        - basefile: Name/path o the fsp file to add the material
+        - name: Names of the materials to extract from the database
+        - freq: Array with the frequency values (in Hz)
+        - fit: Extract the fitted data
+        - data: Extract the original data
+        - save: (None or filename): Save the fit data to a new file
+        - kwargs: provide extra arguments for the material function (tolerance and max_coefficients)
+    """
+    basepath, _ = os.path.split(basefile)
+    if isinstance(names, str):
+        names: List[str] = [names]
+    with lumapi.FDTD(filename=basefile, hide=True) as fdtd:
+        for key, value in kwargs.items():
+            fdtd.setmaterial(name, key, value)
+        return_res = pd.DataFrame({"Wvl": scc.c/freq})
+        for name in names:
+            if fit:
+                fit_res = fdtd.getfdtdindex(
+                    name, np.array(freq), min(freq), max(freq))
+                return_res[f"n_fit_{name}"] = np.real(fit_res)
+                return_res[f"k_fit_{name}"] = np.imag(fit_res)
+            if data:
+                base_data = fdtd.getindex(name, np.array(freq))
+                return_res[f"n_og_{name}"] = np.real(base_data)
+                return_res[f"k_og_{name}"] = np.imag(base_data)
+        logger.debug(f"Export_array:\n{return_res.columns}")
+        if save:
+            return_res.to_csv(os.path.join(basepath, save), sep=" ", index=False)
+    return return_res
