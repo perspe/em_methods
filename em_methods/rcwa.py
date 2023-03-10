@@ -11,7 +11,7 @@ from em_methods.rcwa_core.rcwa_core import SMatrix, SPMatrix, SRef, STrn
 from em_methods.rcwa_core.rcwa_core import initialize_components, r_t_fields
 
 # Get module logger
-logger = logging.getLogger("simulation")
+logger = logging.getLogger()
 
 Layer = Union[UniformGrid, Grid2D]
 

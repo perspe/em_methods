@@ -13,7 +13,7 @@ import pandas as pd
 import scipy.constants as scc
 
 # Get module logger
-logger = logging.getLogger('simulation')
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 import sys

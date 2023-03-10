@@ -21,7 +21,7 @@ from scipy.interpolate import interp1d
 from em_methods.smm_core.py_smm_base import CMatrix, CSMatrix
 from em_methods.smm_core.py_smm_base import SMMType as CSMMType
 
-logger = logging.getLogger('simulation')
+logger = logging.getLogger()
 
 # Default simulation config
 sim_config = {

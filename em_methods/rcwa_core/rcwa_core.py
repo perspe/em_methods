@@ -12,9 +12,7 @@ import scipy.sparse.linalg as scsl
 from scipy.sparse.base import spmatrix
 
 # Get module logger
-base_path = os.path.dirname(os.path.abspath(__file__))
-fileConfig(os.path.join(base_path, "..", "logging.ini"))
-logger = logging.getLogger("dev_file")
+logger = logging.getLogger()
 """ Matrices for the Scattering Matrix Connection """
 
 # Other useful variables

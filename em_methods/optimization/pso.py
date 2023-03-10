@@ -13,7 +13,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-logger = logging.getLogger("simulation")
+logger = logging.getLogger()
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest

@@ -15,7 +15,7 @@ from scipy.linalg import eig, inv
 from grid import Grid2D, GridHasNoObjectError
 
 # Get module logger
-logger = logging.getLogger("simulation")
+logger = logging.getLogger()
 """ Class to obtain the Block Vectors for the structure """
 
 
