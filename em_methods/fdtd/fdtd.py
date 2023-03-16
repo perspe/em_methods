@@ -38,7 +38,7 @@ import lumapi
 
 def fdtd_run(basefile: str,
              properties: Dict[str, Dict[str, float]],
-             get_results: Dict[str, Dict[str, str]],
+             get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
              savepath: Union[None, str] = None,
              override_prefix: Union[None, str] = None,
@@ -90,12 +90,18 @@ def fdtd_run(basefile: str,
         get_results_info = list(get_results.keys())
         if "data" in get_results_info:
             for key, value in get_results["data"].items():
-                logger.debug(f"Getting result for: '{key}':'{value}'")
-                results["data."+key] = fdtd.getdata(key, value)
+                if not isinstance(value, list):
+                    value = [value]
+                for value_i in value:
+                    logger.debug(f"Getting result for: '{key}':'{value_i}'")
+                    results["data."+key+"."+value_i] = fdtd.getdata(key, value_i)
         if "results" in get_results_info:
             for key, value in get_results["results"].items():
-                logger.debug(f"Getting result for: '{key}':'{value}'")
-                results["data."+key] = fdtd.getresult(key, value)
+                if not isinstance(value, list):
+                    value = [value]
+                for value_i in value:
+                    logger.debug(f"Getting result for: '{key}':'{value_i}'")
+                    results["results."+key+"."+value_i] = fdtd.getresult(key, value_i)
     # Gather info from log and the delete it
     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
     autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
@@ -179,10 +185,10 @@ def fdtd_get_material(basefile: str,
     if isinstance(names, str):
         names: List[str] = [names]
     with lumapi.FDTD(filename=basefile, hide=True) as fdtd:
-        for key, value in kwargs.items():
-            fdtd.setmaterial(name, key, value)
         return_res = pd.DataFrame({"Wvl": scc.c/freq})
         for name in names:
+            for key, value in kwargs.items():
+                fdtd.setmaterial(name, key, value)
             if fit:
                 fit_res = fdtd.getfdtdindex(
                     name, np.array(freq), min(freq), max(freq))
