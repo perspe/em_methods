@@ -1,4 +1,4 @@
-"""     
+"""
 Implementation of the particle swarm optimization algorithm
 Functions:
     - particle_swarm: Implements the algorithm
@@ -14,6 +14,7 @@ import numpy.typing as npt
 import pandas as pd
 
 logger = logging.getLogger()
+
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
@@ -37,14 +38,20 @@ def _update_parameters(
     Return:
         Updated parameters and velocities
     """
+    # Parameter Setup
+    # --> Particles ↓ Parameters
+    # | Param1_Part1 Param1_Part2 Param1_Part3 ...|
+    # | Param2_Part1 Param2_Part2 Param2_Part3 ...|
+    # | Param3_Part1 Param3_Part2 Param3_Part3 ...|
+    # |      ...          ...         ...      ...|
     logger.debug("Update Properties --------------")
-    logger.debug("Initialization -----------")
     logger.debug(f"Init values: {inertia_w}, {ind_cog}, {soc_learning}")
     logger.debug(f"vel=\n{vel}")
     logger.debug(f"pbest=\n{pbest}")
     logger.debug(f"gbest=\n{gbest}")
     r1 = random()
     r2 = random()
+    logger.debug(f"R1:{r1}|R2:{r2}")
     max_param = np.broadcast_to(max_param[:, np.newaxis], param.shape)
     min_param = np.broadcast_to(min_param[:, np.newaxis], param.shape)
     logger.debug(f"min_param:\n{min_param}")
@@ -55,11 +62,14 @@ def _update_parameters(
     part_2 = ind_cog * r1 * (pbest - param)
     part_3 = soc_learning * r2 * (gbest - param)
     v_new = part_1 + part_2 + part_3
-    logger.debug(f"v_new:\n{v_new}")
-    # Check if no parameters are outside the allowed ranges for the parameters
-    logger.debug(f"param=\n{param}")
+    logger.debug(f"part_1:\n{part_1}")
+    logger.debug(f"part_2:\n{part_2}")
+    logger.debug(f"part_3:\n{part_3}")
+    # Update position
     param_new = param + v_new
     logger.debug(f"param_new:\n{param_new}")
+    logger.debug(f"v_new:\n{v_new}")
+    # Check if no parameters are outside the allowed ranges for the parameters
     mask_min = param_new < min_param
     mask_max = param_new > max_param
     logger.debug(f"mask_min:\n{mask_min}")
@@ -67,8 +77,8 @@ def _update_parameters(
     param_new[mask_min] = min_param[mask_min]
     param_new[mask_max] = max_param[mask_max]
     logger.debug(f"Parameter Space:\n{param_new}")
-    v_new[mask_min & mask_max] = 0
-    # v_new[mask_min ^ mask_max] = -v_new[mask_min ^ mask_max]
+    v_new[mask_min ^ mask_max] = 0
+    # Option to invert velocity: v_new[mask_min ^ mask_max] = -v_new[mask_min ^ mask_max]
     logger.debug(f"Velocity space:\n{v_new}")
     return param_new, v_new
 
@@ -115,7 +125,7 @@ def particle_swarm(
     export: bool = False,
     basepath: str = "PSO_Results",
     **func_kwargs,
-):
+) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
     """Implementation of the particle swarm algorithm
     Args:
         - func: optimization function
@@ -137,14 +147,12 @@ def particle_swarm(
         - pbest: Best parameters for each particle
         - gbest_array: Array with the gfitness value for each iteration
     """
-    # # Fix seed
-    # np.random.seed(1)
     # Create export path
     if export and not os.path.isdir(basepath):
         logger.info(f"Creating {basepath=}...")
         os.mkdir(basepath)
     min_iteration, max_iteration, iteration_check = iterations
-    if max_iteration < min_iteration:
+    if max_iteration < min_iteration and iteration_check:
         raise Exception("max_iteration must be bigger than min_iteration")
     if not iteration_check:
         max_iteration = min_iteration
@@ -157,8 +165,8 @@ def particle_swarm(
         )
         inert_factor = np.r_[inert_factor, inert_factor_remaining]
     else:
-        inert_factor = np.ones(max_iteration) * inert_factor_up
-    logger.info(f"Inert_factor array:\n{inert_factor}")
+        inert_factor = np.ones(max_iteration) * inert_factor_low
+    logger.debug(f"Inert_factor array:\n{inert_factor}")
     # Variable initialization
     param_names = list(param_dict.keys())
     vparam_names = [f"v{param_name_i}" for param_name_i in param_names]
@@ -170,26 +178,29 @@ def particle_swarm(
     param_min = np.array([p_min[0] for p_min in param_dict.values()])
     # Random array with the start value for the parameters
     param_space = [
-        np.random.uniform(param_dict[param][0], param_dict[param][1], size=(particles))
-        for param in param_names
+        np.random.uniform(param[0], param[1], size=(particles))
+        for param in param_dict.values()
     ]
     param_space = np.stack(param_space)
     # Random array with the start value for the velocities
     vel_space = [
         np.random.uniform(
-            -np.abs(max(param_dict[param]) - min(param_dict[param])),
-            np.abs(max(param_dict[param]) - min(param_dict[param])),
+            -np.abs(max(param) - min(param)),
+            np.abs(max(param) - min(param)),
             size=(particles),
         )
-        for param in param_names
+        for param in param_dict.values()
     ]
     vel_space = np.stack(vel_space)
+    logger.debug(f"Initial Parameter Space:\n{param_space}")
+    logger.debug(f"Initial Velocity Space:\n{vel_space}")
     # First run of the PSO outside loop
     iteration = 1
     func_input = {
         param_name: param_space[i] for i, param_name in enumerate(param_names)
     }
     func_results = func(**func_input, **func_kwargs)
+    logger.debug(f"Initial Function Results:\n{func_results}")
     if maximize:
         fitness_arg = np.argmax(func_results)
     else:
@@ -231,7 +242,7 @@ def particle_swarm(
             avg_tol = np.average(last_tolerances)
             logger.debug(f"avg_tol: {avg_tol}")
             if avg_tol < tolerance_percent:
-                logger.warn(f"Tolerance reached at {iteration}... Exiting")
+                logger.warning(f"Tolerance reached at {iteration}... Exiting")
                 break
         logger.info(f"PSO Running Iteration: {iteration}")
         param_space, vel_space = _update_parameters(
@@ -250,6 +261,7 @@ def particle_swarm(
             param_name: param_space[i] for i, param_name in enumerate(param_names)
         }
         func_results = func(**func_input, **func_kwargs)
+        logger.debug(f"Function Results:\n{func_results}")
         gfitness_old = gfitness
         if maximize:
             fitness_candidate_ind = np.argmax(func_results)
@@ -264,6 +276,8 @@ def particle_swarm(
                 gbest = param_space[:, fitness_candidate_ind].flatten()
             pfitness_mask = func_results < pfitness
         # Add error values to array
+        if gfitness_old == 0:
+            gfitness_old = 1e-9
         tol_array.append((gfitness - gfitness_old) / gfitness_old)
         # Update gbest, pfitness and pbest
         logger.debug(f"Global best list:\n{gbest}")
