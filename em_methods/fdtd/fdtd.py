@@ -1,3 +1,4 @@
+import sys
 import os
 import shutil
 from typing import Union, Dict, List, Tuple
@@ -16,12 +17,11 @@ import scipy.constants as scc
 logger = logging.getLogger("sim")
 
 # Connect to Lumerical
-import sys
 # Determine the base path for lumerical
 if os.name == "nt":
     LM_BASE: str = os.path.join("C:\\", "Program Files", "Lumerical")
 elif os.name == "posix":
-    LM_BASE: str = os.path.join("/opt", "Lumerical")
+    LM_BASE: str = os.path.join("/opt", "lumerical")
 else:
     raise Exception("Operating system not supported...")
 # Determine the newest version
