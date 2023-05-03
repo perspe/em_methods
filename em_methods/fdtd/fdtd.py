@@ -36,6 +36,33 @@ logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
 import lumapi
 
+""" Helper functions """
+
+def _get_fdtd_results(fdtd_handler: lumapi.FDTD, get_results: Dict[str, Dict[str, float]]) -> Dict:
+    """
+    Alias function to extract results from FDTD file (to avoid code redundancy)
+    """
+    # Obtain results
+    results = {}
+    get_results_info = list(get_results.keys())
+    if "data" in get_results_info:
+        for key, value in get_results["data"].items():
+            if not isinstance(value, list):
+                value = [value]
+            for value_i in value:
+                logger.debug(f"Getting result for: '{key}':'{value_i}'")
+                results["data."+key+"."+value_i] = fdtd_handler.getdata(key, value_i)
+    if "results" in get_results_info:
+        for key, value in get_results["results"].items():
+            if not isinstance(value, list):
+                value = [value]
+            for value_i in value:
+                logger.debug(f"Getting result for: '{key}':'{value_i}'")
+                results["results."+key+"."+value_i] = fdtd_handler.getresult(key, value_i)
+    return results
+
+""" Main functions """
+
 def fdtd_run(basefile: str,
              properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
@@ -67,7 +94,6 @@ def fdtd_run(basefile: str,
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
     # Update simulation properties, run and get results
-    results = {}
     with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
         # Update structures
         for structure_key, structure_value in properties.items():
@@ -86,22 +112,7 @@ def fdtd_run(basefile: str,
         analysis_runtime = time.time() - start_time
         logger.info(
             f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
-        # Obtain results
-        get_results_info = list(get_results.keys())
-        if "data" in get_results_info:
-            for key, value in get_results["data"].items():
-                if not isinstance(value, list):
-                    value = [value]
-                for value_i in value:
-                    logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                    results["data."+key+"."+value_i] = fdtd.getdata(key, value_i)
-        if "results" in get_results_info:
-            for key, value in get_results["results"].items():
-                if not isinstance(value, list):
-                    value = [value]
-                for value_i in value:
-                    logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                    results["results."+key+"."+value_i] = fdtd.getresult(key, value_i)
+        results = _get_fdtd_results(fdtd, get_results)
     # Gather info from log and the delete it
     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
     autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
@@ -119,6 +130,20 @@ def fdtd_run(basefile: str,
         os.remove(log_file)
     return results, fdtd_runtime, analysis_runtime, autoshut_off_list
 
+def fdtd_run_analysis(basefile: str, get_results: Dict[str, Dict[str, Union[str, List]]]):
+    """
+    Generic function gather simulation data from already simulated files
+    Args:
+            basefile: Path to the original file
+            get_results: Dictionary with the properties to be calculated
+    Return:
+            results: Dictionary with all the results
+            time: Time to run the simulation
+    """
+    with lumapi.FDTD(filename=basefile, hide=True) as fdtd:
+        # Obtain results
+        results = _get_fdtd_results(fdtd, get_results)
+    return results
 
 def fdtd_add_material(basefile: str,
                       name: str,
