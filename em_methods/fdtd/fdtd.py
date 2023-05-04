@@ -69,7 +69,8 @@ def fdtd_run(basefile: str,
              *,
              savepath: Union[None, str] = None,
              override_prefix: Union[None, str] = None,
-             delete: bool = False
+             delete: bool = False,
+             fdtd_kw: bool = {"hide": True}
              ):
     """
     Generic function to run lumerical files from python
@@ -94,7 +95,7 @@ def fdtd_run(basefile: str,
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
     # Update simulation properties, run and get results
-    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
+    with lumapi.FDTD(filename=new_filepath, **fdtd_kw) as fdtd:
         # Update structures
         for structure_key, structure_value in properties.items():
             logger.debug(f"Editing: {structure_key}")
@@ -130,7 +131,9 @@ def fdtd_run(basefile: str,
         os.remove(log_file)
     return results, fdtd_runtime, analysis_runtime, autoshut_off_list
 
-def fdtd_run_analysis(basefile: str, get_results: Dict[str, Dict[str, Union[str, List]]]):
+def fdtd_run_analysis(basefile: str,
+                      get_results: Dict[str, Dict[str, Union[str, List]]],
+                      fdtd_kw={"hide": True}):
     """
     Generic function gather simulation data from already simulated files
     Args:
@@ -140,8 +143,7 @@ def fdtd_run_analysis(basefile: str, get_results: Dict[str, Dict[str, Union[str,
             results: Dictionary with all the results
             time: Time to run the simulation
     """
-    with lumapi.FDTD(filename=basefile, hide=True) as fdtd:
-        # Obtain results
+    with lumapi.FDTD(filename=basefile, **fdtd_kw) as fdtd:
         results = _get_fdtd_results(fdtd, get_results)
     return results
 

@@ -83,3 +83,23 @@ class TestFDTD(unittest.TestCase):
         }
         res = fdtd_run_analysis(fdtd_file, results)
         self.assertAlmostEqual(res["results.solar_generation.Jsc"], 183.453, 3)
+
+    def test_fdtd_graphical(self):
+        """ Test if FDTD interface opens with the proper arguments """
+        fdtd_file: str = os.path.join(BASETESTPATH, "test_planar.fsp")
+        properties = {
+            "::model":
+		        {"RT_mode": 1},
+            "Planar_layers":
+		        {"Perovskite": 250e-9,
+		            "Spiro": 100e-9}
+        }
+        results = {
+            "data":
+                {"solar_generation": "Jsc"},
+            "results":
+                {"T": "T",
+                 "R": "T"}
+        }
+        fdtd_kw = {"hide": False}
+        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw=fdtd_kw)
