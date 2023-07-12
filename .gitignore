@@ -21,6 +21,7 @@ Slab\ Waveguide
 *.pdf
 *.gp
 *.fsp
+*.mat
 
 # Specific files
 *py_smm_base.cpp
