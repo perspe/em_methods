@@ -3,6 +3,7 @@ This file contains severall functions used for optics purposes
 """
 
 import scipy.optimize as sco
+import numpy as np
 
 def _bruggerman(n_eff, n_qd: complex, n_pvk: complex, p_qd: float):
     """ Bruggerman equation:
