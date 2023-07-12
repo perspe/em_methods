@@ -2,6 +2,8 @@
 This file contains severall functions used for optics purposes
 """
 
+import scipy.optimize as sco
+
 def _bruggerman(n_eff, n_qd: complex, n_pvk: complex, p_qd: float):
     """ Bruggerman equation:
     n_eff is similar to x in a function
