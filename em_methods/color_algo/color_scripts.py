@@ -2,6 +2,11 @@ import numpy as np
 import os
 import time
 from pathlib import Path
+from scipy.interpolate import interp1d
+import logging
+from typing import Tuple
+
+logger = logging.getLogger()
 
 # Get module paths
 file_path = Path(os.path.abspath(__file__))
@@ -11,57 +16,95 @@ data_path = os.path.join(parent_path, "data")
 CIE_CMF = os.path.join(data_path, "cie-cmf.txt")
 
 
-def xyz_from_xy(x, y):
+def __xyz_from_xy(x, y):
     """Return the vector (x, y, 1-x-y)."""
     return np.array((x, y, 1 - x - y))
 
+def rgb_to_hex(r: int, g: int, b: int) -> str:
+    """
+    Convert RGB values into Hex color format
+    """
+    return "#%02x%02x%02x" % (r, g, b)
+
+def hex_to_rgb(hex_string: str) -> Tuple[int, int, int]: 
+    """"
+    Convert Hex code to RGB
+    """
+    hex_string = hex_string.upper()
+    r_hex = hex_string[1:3]
+    g_hex = hex_string[3:5]
+    b_hex = hex_string[5:7]
+    return int(r_hex, 16), int(g_hex, 16), int(b_hex, 16)
+
+# The CIE colour matching function for 380 - 780 nm in 5 nm intervals
+# with the respective interpolation functions
+cmf = np.loadtxt(CIE_CMF)
+_cmf_interp_red = interp1d(cmf[:, 0], cmf[:, 1])
+_cmf_interp_green = interp1d(cmf[:, 0], cmf[:, 2])
+_cmf_interp_blue = interp1d(cmf[:, 0], cmf[:, 3])
+
 
 class ColourSystem:
-    """A class representing a colour system.
-
-    A colour system defined by the CIE x, y and z=1-x-y coordinates of
-    its three primary illuminants and its "white point".
-
-    TODO: Implement gamma correction
-
     """
-
-    # The CIE colour matching function for 380 - 780 nm in 5 nm intervals
-    cmf = np.loadtxt(CIE_CMF, usecols=(1, 2, 3))
-
-    def __init__(self, red, green, blue, white):
-        """Initialise the ColourSystem object.
-
+    Representation of the {CS} color system.
+    The color system is defined by the CIE x, y, and z=1-x-y coordinates
+    of its three primary illuminants and its "white point"
+    Properties:
+        - T (transformation matrix to convert to XYZ coordinates)
+    Methods:
+        - spec2xyz, spec2rgb, spec2html: convert spectrum to XYZ or RGB coordinates
+        - xyz2rgb, xyz2hex: Convert XYZ values to RGB and HEX
+    """
+    # TODO: Implement gamma correction
+    def __init__(self, red, green, blue, white) -> None:
+        """
+        Initialise the ColourSystem object.
         Pass vectors (ie NumPy arrays of shape (3,)) for each of the
         red, green, blue  chromaticities and the white illuminant
         defining the colour system.
-
         """
-
         # Chromaticities
-        self.red, self.green, self.blue = red, green, blue
-        self.white = white
-        # The chromaticity matrix (rgb -> xyz) and its inverse
-        self.M = np.vstack((self.red, self.green, self.blue)).T
-        self.MI = np.linalg.inv(self.M)
-        # White scaling array
-        self.wscale = self.MI.dot(self.white)
-        # xyz -> rgb transformation matrix
-        self.T = self.MI / self.wscale[:, np.newaxis]
+        self._red, self._green, self._blue = red, green, blue
+        self._white = white
+        self._determine_T_matrix(self._red, self._blue, self._green, self._white)
+        self._cmf_interp_list = [
+            _cmf_interp_red,
+            _cmf_interp_green,
+            _cmf_interp_blue,
+        ]
 
-    def xyz_to_rgb(self, xyz, out_fmt=None):
-        """Transform from xyz to rgb representation of colour.
-
-        The output rgb components are normalized on their maximum
-        value. If xyz is out the rgb gamut, it is desaturated until it
-        comes into gamut.
-
-        By default, fractional rgb components are returned; if
-        out_fmt='html', the HTML hex string '#rrggbb' is returned.
-
+    def _frac_rgb_to_hex(self, r: float, g: float, b: float) -> str:
         """
+        Convert from fractional rgb values to HTML-style hex string.
+        This is needed for the XYZ to RGB convertion
+        """
+        rgb = np.array([r, g, b])
+        hex_rgb = (255 * rgb).astype(int)
+        return "#{:02x}{:02x}{:02x}".format(*hex_rgb)
 
-        rgb = self.T.dot(xyz)
+    def _determine_T_matrix(self, red, green, blue, white) -> None:
+        """
+        Internal function to determine the transformation matrix
+        """
+        # The chromaticity matrix (rgb -> xyz) and its inverse 
+        M = np.c_[red, blue, green] # similar to np.vstack((red, green, blue)).T
+        MI = np.linalg.inv(M)
+        # White scaling array
+        wscale = MI@white
+        # xyz -> rgb transformation matrix
+        self._T = MI / wscale[:, np.newaxis]
+
+    @property
+    def T(self):
+        """ Transformation matrix to convert xyz to rgb """
+        return self._T
+
+    def xyz_to_hex(self, x: float, y: float, z: float) -> str:
+        """
+        Transform XYZ to HTML/HEX representation of colour.
+        """
+        xyz = [x, y, z]
+        rgb = self.T@xyz
         if np.any(rgb < 0):
             # We're not in the RGB gamut: approximate by desaturating
             w = -np.min(rgb)
@@ -69,76 +112,97 @@ class ColourSystem:
         if not np.all(rgb == 0):
             # Normalize the rgb vector
             rgb /= np.max(rgb)
+        # The calculated rgb components are normalized on their maximum
+        # value. If xyz is out the rgb gamut, it is desaturated until it
+        # comes into gamut.
+        return self._frac_rgb_to_hex(*rgb)
 
-        if out_fmt == "html":
-            return self.rgb_to_hex(rgb)
-        return rgb
+    def xyz_to_rgb(self, x: float, y: float, z: float) -> Tuple[int, int, int]:
+        """ Convert XYZ values to RGB values """
+        hex_string = self.xyz_to_hex(x, y, z)
+        return hex_to_rgb(hex_string)
 
-    def rgb_to_hex(self, rgb):
-        """Convert from fractional rgb values to HTML-style hex string."""
-
-        hex_rgb = (255 * rgb).astype(int)
-        return "#{:02x}{:02x}{:02x}".format(*hex_rgb)
-
-    def spec_to_xyz(self, spec):
-        """Convert a spectrum to an xyz point.
-
-        The spectrum must be on the same grid of points as the colour-matching
-        function, self.cmf: 380-780 nm in 5 nm steps.
-
+    def spec_to_xyz(self, wavelength, spec, units="nm") -> Tuple[float, float, float]:
         """
-
-        XYZ = np.sum(spec[:, np.newaxis] * self.cmf, axis=0)
-        den = np.sum(XYZ)
+        Convert a spectrum to an xyz point.
+        This only considers if the results are between 380-780 nm
+        Args:
+            - wavelength: array of wavelengths from the spectrum
+            - spec: array with the spectrum
+            - units (default: nm): units for the wavelength
+        Return:
+            X, Y, Z
+        """
+        # Check all the arguments
+        if units == "nm":
+            pass
+        elif units == "um":
+            logger.debug("Updated wavelength calculation to nm from um")
+            wavelength *= 1e4
+        elif units == "m":
+            logger.debug("Wavelength updated to nm from m")
+            wavelength *= 1e9
+        else:
+            logger.error("Unknown units")
+            raise Exception("Unknown units (avilable: nm, um)")
+        if np.min(wavelength) < 380 or np.max(wavelength) > 780:
+            logger.warning(f"Determined data limits: {np.min(wavelength)}::{np.max(wavelength)}")
+            raise Exception("Wavelength range outside allowed bounds (380, 780)")
+        XYZ = np.sum([spec * cmf_color(wavelength) for cmf_color in self._cmf_interp_list], axis=1)
+        logging.debug(f"XYZ values: {XYZ}")
+        den = np.sum(XYZ)        
+        logging.debug(f"den: {den}")
         if den == 0.0:
-            return XYZ
-        return XYZ / den
+            return XYZ[0], XYZ[0], XYZ[0]
+        XYZ /= den
+        return XYZ[0], XYZ[1], XYZ[2]
 
-    def spec_to_rgb(self, spec, out_fmt=None):
+    def spec_to_rgb(self, wavelength, spec, units="nm") -> Tuple[int, int, int]:
         """Convert a spectrum to an rgb value."""
+        x, y, z = self.spec_to_xyz(wavelength, spec, units=units)
+        return self.xyz_to_rgb(x, y, z)
 
-        xyz = self.spec_to_xyz(spec)
-        return self.xyz_to_rgb(xyz, out_fmt)
+    def spec_to_hex(self, wavelength, spec, units="nm") -> str:
+        """Convert a spectrum intro an html/hex code"""
+        x, y, z = self.spec_to_xyz(wavelength, spec, units=units)
+        return self.xyz_to_hex(x, y, z)
 
 
-illuminant_D65 = xyz_from_xy(0.3127, 0.3291)
+illuminant_D65 = __xyz_from_xy(0.3127, 0.3291)
 cs_hdtv = ColourSystem(
-    red=xyz_from_xy(0.67, 0.33),
-    green=xyz_from_xy(0.21, 0.71),
-    blue=xyz_from_xy(0.15, 0.06),
+    red=__xyz_from_xy(0.67, 0.33),
+    green=__xyz_from_xy(0.21, 0.71),
+    blue=__xyz_from_xy(0.15, 0.06),
     white=illuminant_D65,
 )
 
-cs = cs_hdtv
-
 cs_smpte = ColourSystem(
-    red=xyz_from_xy(0.63, 0.34),
-    green=xyz_from_xy(0.31, 0.595),
-    blue=xyz_from_xy(0.155, 0.070),
+    red=__xyz_from_xy(0.63, 0.34),
+    green=__xyz_from_xy(0.31, 0.595),
+    blue=__xyz_from_xy(0.155, 0.070),
     white=illuminant_D65,
 )
 
 cs_srgb = ColourSystem(
-    red=xyz_from_xy(0.64, 0.33),
-    green=xyz_from_xy(0.30, 0.60),
-    blue=xyz_from_xy(0.15, 0.06),
+    red=__xyz_from_xy(0.64, 0.33),
+    green=__xyz_from_xy(0.30, 0.60),
+    blue=__xyz_from_xy(0.15, 0.06),
     white=illuminant_D65,
 )
 
-def rgb2hex(r, g, b):
-    """Return color as #rrggbb for the given color values."""
-    return "#%02x%02x%02x" % (r, g, b)
+# cs = cs_hdtv
 
-def hex2rgb(hex_string):  # FUNÇÃO DE CONVERSÃO DO HEXCODE
-    if type(hex_string) == str:
-        hex_string = hex_string.upper()
-        r_hex = hex_string[1:3]
-        g_hex = hex_string[3:5]
-        b_hex = hex_string[5:7]
-        return int(r_hex, 16), int(g_hex, 16), int(b_hex, 16)
-    else:
-        return hex_string
+# Update the docstring for the different colorspace functions
+def __update_cs_docstring(cs_function, replacement: str):
+    """ Replaces the {CS} in the doctring with the updated value """
+    cs_function.__doc__ = cs_function.__doc__.replace("{CS}", replacement)
 
+__update_cs_docstring(cs_srgb, "SRGB")
+__update_cs_docstring(cs_hdtv, "HDTV")
+__update_cs_docstring(cs_smpte, "SMTPE")
+
+
+""" Other functions"""
 
 def timeelapsed(start, end):  # TAKES IN SECONDS
     timeelapsed = end - start
