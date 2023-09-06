@@ -220,11 +220,11 @@ def satcolorgen(T):  # TAKES IN A LIST FOR X=[380:781:5]
     cs = cs_hdtv
     spec = np.array(T)
     satcolor = cs.spec_to_rgb(spec, out_fmt="html")
-    satcolor = hex2rgb(satcolor)
+    satcolor = hex_to_rgb(satcolor)
     return satcolor
 
 def colordist(current, desired):  # TAKES IN CURRENT AS RGB, DESIRED AS HEX
-    desired_rgb = hex2rgb(desired)
+    desired_rgb = hex_to_rgb(desired)
     R, G, B = [*desired_rgb]
     r, g, b = [*current]
     colordistance = ((R - r) ** 2 + (G - g) ** 2 + (B - b) ** 2) ** (1 / 2)
