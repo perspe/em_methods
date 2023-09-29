@@ -99,13 +99,13 @@ def lambertian_thickness(thicknesses, wavelength, n, k):
     astm_interp = interp1d(solar_spectrum["WVL"], solar_spectrum["IRR"])
     # The factor includes the conversion from nm to m
     # It also includes the final conversion from A/m2 to mA/cm2
-    factor = scc.h * scc.c / (scc.e * wavelength * 1e-10)
+    wvl_units = (scc.h * scc.c) / (scc.e * 1e-10)
     return np.array(
         [
             trapz(
                 lambertian_bulk_absorption(wavelength, n, k, t_i)
                 * astm_interp(wavelength)
-                / factor,
+                * wavelength/wvl_units,
                 wavelength,
             )
             for t_i in thicknesses
