@@ -12,7 +12,6 @@ file_path = Path(os.path.abspath(__file__))
 parent_path = file_path.parent
 data_path = os.path.join(parent_path, "data")
 
-
 def jsc_files(
     filename: Union[List[str], str],
     wvl_units: str = "nm",
@@ -69,3 +68,46 @@ def jsc_files(
             np.c_[wvl, abs, cumsum], columns=["WVL", "ABS", "Cumsum"]
         )
     return pd.Series(results), jsc_sum
+
+
+# Functions to calculate the Lambertian absorption and current
+def lambertian_bulk_absorption(wav, n_data, k_data, thickness: float):
+    """
+    Bulk absorption of a Lambertian Scatterer
+    Args:
+        wavelength (in nm)/n/k: Refractive index information for the material
+        thickness (float): thickness of the material
+    """
+    tptm = np.exp(-4 * thickness * 4 * np.pi * k_data / wav)
+    rf = 1 - 1 / n_data**2
+    return (1 - tptm) / (1 - rf * tptm)
+
+
+def lambertian_thickness(thicknesses, wavelength, n, k):
+    """
+    Calculate the Lambertian limit for a range of thicknesses
+    Args:
+        thicknesses: Array with the values of thicknesses to calculate
+        wavelength (in nm): Array with the range of wavelengths
+        n/k: refractive index values (should match the wavelengths)
+    Returns:
+        Array with the Lambertian Jsc
+    """
+    solar_spectrum = pd.read_csv(
+        os.path.join(data_path, "solar_data.csv"), sep=" ", names=["WVL", "IRR"]
+    )
+    astm_interp = interp1d(solar_spectrum["WVL"], solar_spectrum["IRR"])
+    # The factor includes the conversion from nm to m
+    # It also includes the final conversion from A/m2 to mA/cm2
+    factor = scc.h * scc.c / (scc.e * wavelength * 1e-10)
+    return np.array(
+        [
+            trapz(
+                lambertian_bulk_absorption(wavelength, n, k, t_i)
+                * astm_interp(wavelength)
+                / factor,
+                wavelength,
+            )
+            for t_i in thicknesses
+        ]
+    )
