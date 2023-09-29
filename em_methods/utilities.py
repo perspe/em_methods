@@ -106,7 +106,7 @@ def lambertian_thickness(thicknesses, wavelength, n, k):
                 lambertian_bulk_absorption(wavelength, n, k, t_i)
                 * astm_interp(wavelength)
                 * wavelength/wvl_units,
-                wavelength*1e-9,
+                wavelength,
             )
             for t_i in thicknesses
         ]
