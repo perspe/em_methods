@@ -123,6 +123,7 @@ def particle_swarm(
     tolerance: Tuple[float, int] = (0.05, 10),
     progress: bool = True,
     export: bool = False,
+    export_summary: bool = True,
     basepath: str = "PSO_Results",
     **func_kwargs,
 ) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
@@ -139,6 +140,7 @@ def particle_swarm(
         - max_iterations: Max number of iterations (default = 100)
         - tolerance_percent
         - export: Export files with PSO data
+        - export_summary: export a file with the final results of the pso
         - basepath: Base path to save export and progress information
         - func_kwargs: Extra arguments to pass to the optimization function
     Return:
@@ -303,6 +305,18 @@ def particle_swarm(
     logger.debug(
         f"Results:\ngfitness:{gfitness}\ngbest:\n{gbest}\npbest:\n{pbest}\ngbest_array:\n{gbest_array}"
     )
+    # Save the iteration results
+    if export_summary:
+        logger.debug("Saving results to summary file")
+        with open(os.path.join(basepath, "PSO_Summary.txt"), "w") as file:
+            file.write(f"Best FoM: {gfitness}\n\n")
+            file.write("Best Parameters:\n")
+            for param, best_param in zip(param_dict, gbest):
+                file.write(f"{param}: {best_param}\n")
+            file.write("\nBest Particles:\n")
+            np.savetxt(file, pbest.T)
+            file.write("\nFoM Iterations:\n")
+            np.savetxt(file, gbest_array)
     return gfitness, gbest, pbest, gbest_array
 
 

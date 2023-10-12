@@ -11,6 +11,7 @@ dist
 Profile
 PWEM
 Slab\ Waveguide
+PSO_Results
 
 # General Files
 *.log
