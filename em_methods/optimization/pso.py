@@ -306,6 +306,62 @@ def particle_swarm(
     return gfitness, gbest, pbest, gbest_array
 
 
+def pso_iter_plt(
+    param: str = "FoM",
+    cmap: str = "PuOr",
+    scalar: float = 1,
+    export: bool = False,
+    iter_num: float = 11,
+    particle_num: float = 30,
+    vmin: float = 70,
+    vmax: float = 490,
+    basepath: str = "D:\\Ivan S\\ATF_TSC\\structures\\voids\\PSO\\results\\PSO2",
+    alpha: float = 1,
+    colorbar: bool = True,
+):
+    g_matrix = []
+    for j in range(particle_num):
+        g_val = []
+        fom = []
+        for i in range(iter_num):
+            iter = "{0:03}".format(i + 1)
+            data = pd.read_csv(
+                os.path.join(basepath, f"pso_it{str(iter)}.csv"), sep="\s+"
+            )
+            if param == "a_i":
+                g_val.append(data[str(param)][j] * data[str("xy_radius")][j])
+            else:
+                g_val.append(data[str(param)][j])
+            fom.append(data.FoM[j])
+        g_matrix.append(np.array(g_val))
+        upd_g_val = [x * scalar for x in g_val]
+        h_scatt = plt.scatter(
+            np.arange(1, iter_num + 1),
+            upd_g_val,
+            c=fom,
+            s=30,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            alpha=alpha,
+        )
+        plt.xlabel("Iteration")
+    if scalar == 1e6:
+        plt.ylabel(f"{param} (µm)")
+    if scalar == 1e9:
+        plt.ylabel(f"{param} (nm)")
+    if scalar == 1:
+        plt.ylabel(f"{param}")
+    if colorbar:
+        plt.colorbar(h_scatt).set_label("Jsc (A.m-2)")
+    if export:
+        if param == "a_i":
+            plt.ylabel(f"pitch (µm)")
+            plt.savefig(f"pitch.png", dpi=300)
+        else:
+            plt.savefig(f"{param}.png", dpi=300)
+
+
 if __name__ == "__main__":
 
     def test_func(x, y):
