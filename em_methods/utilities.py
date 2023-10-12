@@ -75,8 +75,8 @@ def bulk_absorption(
     k_data,
     thickness: float,
     *,
-    wav_units=Units.NM,
-    thickness_units=Units.NM,
+    wav_units: Units = Units.NM,
+    thickness_units: Units = Units.NM,
     pass_type: str = "lambert"
 ):
     """
@@ -117,8 +117,8 @@ def lambertian_thickness(
     n,
     k,
     *,
-    thickness_units: Units.NM,
-    wav_units: Units.NM,
+    thickness_units: Units = Units.NM,
+    wav_units: Units = Units.NM,
     pass_type: str = "lambert"
 ):
     """
@@ -127,7 +127,7 @@ def lambertian_thickness(
         thicknesses (default in nm): Array with the values of thicknesses to calculate
         wavelength (default in nm): Array with the range of wavelengths
         n/k: refractive index values (should match the wavelengths)
-        thickness_units (Units): define units for the thicknes
+        thickness_units (Units): define units for the thickness
         wav_units (Units): define the units for the wavelength
         pass_type (str): Type of path enhancement (single/double pass or lambertian)
     Returns:
@@ -146,7 +146,7 @@ def lambertian_thickness(
     return np.array(
         [
             trapz(
-                bulk_absorption(wavelength, n, k, t_i, pass_type)
+                bulk_absorption(wavelength, n, k, t_i, pass_type=pass_type)
                 * astm_interp(wavelength)
                 * wavelength
                 / wvl_units,
