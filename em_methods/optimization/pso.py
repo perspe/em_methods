@@ -6,8 +6,9 @@ Functions:
 import logging
 import os
 from random import random
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union, Callable
 import matplotlib.pyplot as plt
+import glob
 
 import numpy as np
 import numpy.typing as npt
@@ -323,59 +324,98 @@ def particle_swarm(
 
 
 def pso_iter_plt(
-    param: str = "FoM",
-    cmap: str = "PuOr",
-    scalar: float = 1,
-    export: bool = False,
-    iter_num: float = 11,
-    particle_num: float = 30,
-    vmin: float = 70,
-    vmax: float = 490,
-    basepath: str = "D:\\Ivan S\\ATF_TSC\\structures\\voids\\PSO\\results\\PSO2",
-    alpha: float = 1,
+    param: str,
+    *,
+    basepath: str = ".",
+    cmap: str = "Blues",
+    alpha: float = 0.5,
+    group_func: Union[None, Callable] = None,
+    savefig_name: Union[None, str] = None,
     colorbar: bool = True,
+    ax: Union[plt.Axes, None] =  None,
+    scatter_kwargs={},
+    savefig_kwargs = {}
 ):
-    g_matrix = []
-    for j in range(particle_num):
-        g_val = []
-        fom = []
-        for i in range(iter_num):
-            iter = "{0:03}".format(i + 1)
-            data = pd.read_csv(
-                os.path.join(basepath, f"pso_it{str(iter)}.csv"), sep="\s+"
-            )
-            if param == "a_i":
-                g_val.append(data[str(param)][j] * data[str("xy_radius")][j])
-            else:
-                g_val.append(data[str(param)][j])
-            fom.append(data.FoM[j])
-        g_matrix.append(np.array(g_val))
-        upd_g_val = [x * scalar for x in g_val]
-        h_scatt = plt.scatter(
-            np.arange(1, iter_num + 1),
-            upd_g_val,
-            c=fom,
-            s=30,
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
-            alpha=alpha,
-        )
-        plt.xlabel("Iteration")
-    if scalar == 1e6:
-        plt.ylabel(f"{param} (µm)")
-    if scalar == 1e9:
-        plt.ylabel(f"{param} (nm)")
-    if scalar == 1:
-        plt.ylabel(f"{param}")
-    if colorbar:
-        plt.colorbar(h_scatt).set_label("Jsc (A.m-2)")
-    if export:
-        if param == "a_i":
-            plt.ylabel(f"pitch (µm)")
-            plt.savefig(f"pitch.png", dpi=300)
+    """
+    Make a summary profile of the iterations for an Optimization
+    Args:
+        param (str): parameter of the optimization to plot
+        basepath (str): path with the optimization data
+        cmap (str): color map to use for the points
+        alpha (float): transparency for each point
+        group_func (function): function to apply to each iteration
+                            (can be used to transform the values of a variable)
+        savefig_name (None|str): name of the file to export
+        colorbar (bool): wether to add or not the colorbar
+        ax (none|plt.axes): set of axes to plot the data (disables savefig_name and colorbar)
+        scatter_kwargs (dict): extra arguments to pass to scatter
+        savefig_kwargs (dict): extra argument to pass to savefig
+    Returns:
+        scatter_handler: handler for the scatter profile to make the colormap
+            (useful when external axes are)
+    """
+    if not os.path.isdir(basepath):
+        raise Exception("Unknown basepath, or basepath is not a directory")
+    if ax is not None and savefig_name is not None:
+        raise Exception("Incompatible options... ax and export are mutually exclusive options")
+    # Extract all the pso files from the folder
+    opt_files = glob.glob("pso_it[0-9][0-9][0-9].csv", root_dir=basepath)
+    opt_files.sort()
+    logger.debug(f"Detected files: {opt_files}")
+    # Create DF with all the information
+    for index, file in enumerate(opt_files):
+        file_data = pd.read_csv(os.path.join(basepath, file), sep=" ")
+        file_data["index"] = index
+        file_data["particle_num"] = file_data.index
+        if index == 0:
+            pso_data = file_data
         else:
-            plt.savefig(f"{param}.png", dpi=300)
+            pso_data = pso_data.merge(file_data, how="outer")
+    logger.debug(f"PSO data:\n{pso_data}")
+    # Plot the data for all the iterations
+    # The group function acts before the plot/labels
+    # so that the changes can be used in the scatter/labels
+    if ax is None:
+        fig, ax = plt.subplots(1, 1)
+        # This guarantees that colorbar is only true
+        # when ax is also None. This avoids conflicts
+        # whit provided ax (where it is not possible to
+        # create a colorbar)
+    else:
+        colorbar = False
+    if group_func is not None:
+        pso_data = pso_data.groupby("index", group_keys=False).apply(group_func)
+    # Set default values for scatter kwargs
+    # vmin and vmax are helpful to avoid problem in the FoM limits
+    scatter_kwargs_final = {
+        "vmin": pso_data["FoM"].min(),
+        "vmax": pso_data["FoM"].max()
+    }
+    scatter_kwargs_final.update(scatter_kwargs)
+    # Make the scatter plot for each iteration
+    # The handle is used for the colorbar (or to export for outside plots)
+    for index, iteration_data in pso_data.groupby("index"):
+        scatter_handler = ax.scatter(
+            [index] * len(iteration_data),
+            iteration_data[param],
+            c=iteration_data["FoM"],
+            alpha=alpha,
+            cmap=cmap,
+            **scatter_kwargs_final,
+        )
+    ax.set_ylabel(param)
+    ax.set_xlabel("Iteration")
+    if colorbar:
+        fig.colorbar(scatter_handler, ax=ax).set_label("FoM")
+    # Export file with the plot
+    if savefig_name is not None:
+        if os.path.isabs(savefig_name):
+            export_path = savefig_name
+        else:
+            export_path = os.path.join(basepath, savefig_name)
+        logger.debug(export_path)
+        plt.savefig(export_path, **savefig_kwargs)
+    return scatter_handler
 
 
 if __name__ == "__main__":
