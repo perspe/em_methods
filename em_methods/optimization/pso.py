@@ -158,6 +158,8 @@ def particle_swarm(
         raise Exception("max_iteration must be bigger than min_iteration")
     if not iteration_check:
         max_iteration = min_iteration
+    if min_iteration < 10 or max_iteration > 999:
+        raise Exception("Iterations should be between 10 and 999")
     # Create an array for the inertial factor variation (its max_iteration size)
     inert_factor_low, inert_factor_up, inert_sweep = inert_prop
     if inert_sweep:
