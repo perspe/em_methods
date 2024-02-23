@@ -62,8 +62,16 @@ def jsc_files(
             wvl * wvl_factor,
             initial=0,
         )
+        int_Abs = (
+            int_spectrum(wvl)
+            * abs
+            * wvl
+            * wvl_units.convertTo(Units.M)
+            / (scc.h * scc.c)
+        )  # units: m-2.nm-1.s-1
         jsc_sum[os.path.basename(file)] = pd.DataFrame(
-            np.c_[wvl, abs, cumsum], columns=["WVL", "ABS", "Cumsum"]
+            np.c_[wvl, abs, int_spectrum(wvl), int_Abs, cumsum],
+            columns=["WVL", "ABS", "Int_WVL", "Int_Absorption", "Cumsum"],
         )
     return pd.Series(results), jsc_sum
 

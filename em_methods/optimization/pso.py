@@ -9,6 +9,8 @@ from random import random
 from typing import Dict, List, Tuple, Union, Callable
 import matplotlib.pyplot as plt
 import glob
+import re
+from io import StringIO
 
 import numpy as np
 import numpy.typing as npt
@@ -417,6 +419,22 @@ def pso_iter_plt(
         plt.savefig(export_path, **savefig_kwargs)
     return scatter_handler
 
+def read_pso_summary(filename: str):
+	"""
+	Extract pso information from the summary file
+	(as exported from the pso algorithm)
+	Returns: FoM, Best Parameters, Best Particles, FoM Iterations
+	"""
+	with open(filename, "r") as file:
+		full_info = file.read()
+	split_info = re.split("(Best FoM: |FoM Iterations:|Best Parameters:|Best Particles:)", full_info)
+	fom = float(split_info[2])
+	best_parameters = pd.read_csv(StringIO(split_info[4]), sep=": ", index_col=0, names=["Values"])
+    # Convert DF to Series (easier access)
+	best_parameters = best_parameters["Values"]
+	best_particles = pd.read_csv(StringIO(split_info[6]), sep=" ", names=best_parameters.index)
+	fom_iterations = pd.read_csv(StringIO(split_info[8]), names=["FoM"])
+	return fom, best_parameters, best_particles, fom_iterations
 
 if __name__ == "__main__":
 

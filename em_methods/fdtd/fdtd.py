@@ -104,6 +104,14 @@ def fdtd_run(basefile: str,
                 logger.debug(
                     f"Updating: {parameter_key} to {parameter_value}")
                 fdtd.set(parameter_key, parameter_value)
+        # Note: The double fdtd.runsetup() is important for when the setup scripts
+        #       (such as the model script) depend on variables from other
+        #       scripts. For example the model scripts needs the internal property
+        #       of a layer generated from a structure group.
+        #       The first run updates internally all the values
+        #       The second run then updates all the structures with the updated values
+        fdtd.runsetup()
+        fdtd.runsetup()
         logger.debug(f"Running...")
         start_time = time.time()
         fdtd.run()
