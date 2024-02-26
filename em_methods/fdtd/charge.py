@@ -264,7 +264,39 @@ def iv_curve(basefile: str,
     # plt.savefig(os.path.split(basefile)[1][:-3]+"_IV_"+ str(datetime.now())+".png")
     plt.show()
 
-    
+def get_gen(fdtd_file, properties):
+    """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
+    Args:
+        properties: Dictionary with the property object and property names and values
+        fdtd_file: String of path to the FDTD file
+    """
+    with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
+        for structure_key, structure_value in properties.items():
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                fdtd.set(parameter_key, parameter_value)
+        fdtd.run()
+        fdtd.runanalysis()
+        fdtd.switchtolayout()
+        fdtd.save()
+        fdtd.close()
+
+def updt_gen(charge_file, properties): #TO BE CONCLUDED!!!!
+    """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
+    Args:
+        properties: Dictionary with the property object and property names and values
+        charge_file: String of path to the DEVICE file
+    """
+    with lumapi.DEVICE(filename = charge_file, hide = True) as charge:
+        for structure_key, structure_value in properties.items():
+                charge.select(structure_key)
+                for parameter_key, parameter_value in structure_value.items():
+                        charge.set(parameter_key, parameter_value)
+        charge.save()
+        charge.run("CHARGE")
+        charge.switchtolayout()
+        charge.save()
+        charge.close()
     
 
     
