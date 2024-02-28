@@ -175,7 +175,6 @@ def find_index(wv_list, n):
     return index[0]
 
 def iv_curve(basefile: str,
-             properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
              device_kw={"hide": True}):
@@ -281,18 +280,47 @@ def get_gen(fdtd_file, properties):
         fdtd.save()
         fdtd.close()
 
-def updt_gen(charge_file, properties): #TO BE CONCLUDED!!!!
-    """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
+def updt_gen(path, charge_file, properties, gen_mat): 
+    """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) and simulates the CHARGE file
     Args:
-        properties: Dictionary with the property object and property names and values
-        charge_file: String of path to the DEVICE file
+        properties: Dictionary with the property object and property names and values;
+        path: String of folder path of FDTD and CHARGE files (must be in same folder);
+        charge_file: String DEVICE file name;
+        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["1.mat", "geometry_name_1"], material_2: ["2.mat", "geometry_name_2"]}
     """
-    with lumapi.DEVICE(filename = charge_file, hide = True) as charge:
+    # TODO(TO BE TESTED)
+    charge_path =  str(path)+"\\"+str(charge_file)
+
+    basepath, basename = os.path.split(charge_path)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(
+        savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(path, new_filepath)
+
+    with lumapi.DEVICE(filename = charge_path, hide = True) as charge:
+
+        # CHANGE CELL GEOMETRY
         for structure_key, structure_value in properties.items():
-                charge.select(structure_key)
-                for parameter_key, parameter_value in structure_value.items():
-                        charge.set(parameter_key, parameter_value)
+            charge.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                charge.set(parameter_key, parameter_value)
         charge.save()
+
+        # CHANGE GENERATION PROFILE                
+        for mat, names in gen_mat.items():
+            file = names[0]
+            obj = names[1]
+            # Create "Import generation rate" objects
+            g_name = file.replace('.mat', '')
+            charge.addimportgen()
+            charge.set("name", g_name)
+            # Import generation file path
+            charge.set('import file path', str(path)+'\\'+str(file))
+            charge.set("volume type", "solid")
+            charge.set("volume solid",str(obj))
+            charge.save()
         charge.run("CHARGE")
         charge.switchtolayout()
         charge.save()
