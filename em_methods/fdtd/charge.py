@@ -321,9 +321,9 @@ def updt_gen(path, charge_file, properties, gen_mat):
             charge.set("volume type", "solid")
             charge.set("volume solid",str(obj))
             charge.save()
-        charge.run("CHARGE")
-        charge.switchtolayout()
-        charge.save()
+        # charge.run("CHARGE")
+        # charge.switchtolayout()
+        # charge.save()
         charge.close()
     
 
