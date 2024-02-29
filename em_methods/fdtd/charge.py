@@ -292,14 +292,12 @@ def updt_gen(path, charge_file, properties, gen_mat):
     charge_path =  str(path)+"\\"+str(charge_file)
 
     basepath, basename = os.path.split(charge_path)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    override_prefix: str = str(uuid4())[0:5]
     new_filepath: str = os.path.join(
-        savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(path, new_filepath)
+        basepath, override_prefix + "_" + basename)
+    new_path = shutil.copyfile(charge_path, new_filepath)
 
-    with lumapi.DEVICE(filename = charge_path, hide = True) as charge:
+    with lumapi.DEVICE(filename = new_path, hide = True) as charge:
 
         # CHANGE CELL GEOMETRY
         for structure_key, structure_value in properties.items():
@@ -320,6 +318,7 @@ def updt_gen(path, charge_file, properties, gen_mat):
             charge.set('import file path', str(path)+'\\'+str(file))
             charge.set("volume type", "solid")
             charge.set("volume solid",str(obj))
+            charge.set("import automatic reload", True)
             charge.save()
         # charge.run("CHARGE")
         # charge.switchtolayout()
