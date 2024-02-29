@@ -179,6 +179,13 @@ def iv_curve(basefile: str,
              *,
              device_kw={"hide": True}):
     
+    """ Plots the iv curve of the cell in CHARGE. 
+    Args:
+        basefile: Path of the CHARGE file (e.g. C:\Users\MonicaDyreby\Documents\Planar silicon solar cell\solar_cell.ldev")
+        get retults: Dictionary with the cathode (e.g. "base") results path inside CHARGE (e.g. {"results":{"CHARGE":"base"}})
+        
+        full example: iv_curve(r"C:\Users\MonicaDyreby\Documents\Planar silicon solar cell\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
+    """
     #obtains IV curve from already run simulation
     results = charge_run_analysis(basefile, get_results, device_kw)
     cathode_name = get_results['results']['CHARGE']
@@ -324,6 +331,41 @@ def updt_gen(path, charge_file, properties, gen_mat):
         # charge.switchtolayout()
         # charge.save()
         charge.close()
+    
+def set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str):
+    """ Sets the iv curve parameters (e.g. start range, stop range...)
+    Args:
+        basefile: directory of file
+        cathode_name: name of the cathode associated with the subcell in question
+        subcell_name: name of the subcell (i.e Si or Perovskite)
+    """
+    
+    
+    with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
+
+        #charge.select("CHARGE:Advanced:")
+
+        charge.select("CHARGE:boundary conditions:"+cathode_name)
+        charge.set("sweep type","range")
+        charge.save()
+
+        charge.set("range start (V)","0") #string or int?
+        charge.set("range stop (V)","2") #string or int?
+        charge.set("range num points","21") #string or int?
+        charge.set("range backtracking","enabled") #string or int?
+        charge.save()
+
+
+
+
+        #if "Si" in subcell_name: 
+        #    charge.set("1") #string or int?
+        #else:
+        #    charge.set("2")
+
+
+
+    
     
 
     
