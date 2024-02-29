@@ -349,9 +349,9 @@ def set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str):
         charge.set("sweep type","range")
         charge.save()
 
-        charge.set("range start (V)","0") #string or int?
-        charge.set("range stop (V)","2") #string or int?
-        charge.set("range num points","21") #string or int?
+        charge.set("range start",0) #string or int?
+        charge.set("range stop",2) #string or int?
+        charge.set("range num points",21) #string or int?
         charge.set("range backtracking","enabled") #string or int?
         charge.save()
 
