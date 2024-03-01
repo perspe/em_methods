@@ -181,11 +181,12 @@ def iv_curve(basefile: str,
     
     """ Plots the iv curve of the cell in CHARGE. 
     Args:
-        basefile: Path of the CHARGE file (e.g. C:\Users\MonicaDyreby\Documents\Planar silicon solar cell\solar_cell.ldev")
+        basefile: Path of the CHARGE file (e.g. C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev")
         get retults: Dictionary with the cathode (e.g. "base") results path inside CHARGE (e.g. {"results":{"CHARGE":"base"}})
         
-        full example: iv_curve(r"C:\Users\MonicaDyreby\Documents\Planar silicon solar cell\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
+        full example: iv_curve(r"C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
     """
+    
     #obtains IV curve from already run simulation
     results = charge_run_analysis(basefile, get_results, device_kw)
     cathode_name = get_results['results']['CHARGE']
