@@ -66,6 +66,7 @@ def _get_charge_results(fdtd_handler: lumapi.DEVICE, get_results: Dict[str, Dict
 """ Main functions """
 
 def charge_run(basefile: str,
+             bias_regime:str,  
              properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
@@ -98,6 +99,9 @@ def charge_run(basefile: str,
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
 
+    
+    cathode_name = get_results['results']['CHARGE']
+    __set_iv_parameters(basefile, cathode_name, bias_regime)
     # Update simulation properties, run and get results
     with lumapi.DEVICE(filename=new_filepath, **device_kw) as charge:
         
@@ -143,15 +147,28 @@ def charge_run(basefile: str,
         os.remove(new_filepath)
         os.remove(log_file)
 
-    #Getting IV curve"
-    #cathode_name = input("Input the cathode name:\n")
-    #get_results_charge = {"results":{"CHARGE":str(cathode_name)}}   
     
-    iv_curve(new_filepath, 
-             properties, 
+    current_forward, voltage_forward = iv_curve(new_filepath, 
              get_results,
              device_kw={"hide": True})
     
+    # voltage_reverse, current_reverse = iv_curve(new_filepath, 
+    #          properties,
+    #          get_results,
+    #          device_kw={"hide": True})
+    
+    #voltage = voltage_reverse[::-1]+voltage_forward
+    #current = current_reverse[::-1]+current_forward
+
+    voltage = voltage_forward
+    current = current_forward
+
+    print(voltage)
+    print(current)
+
+    __plot_iv_curve(basefile, current, voltage)
+    
+
     return results, charge_runtime, analysis_runtime, autoshut_off_list
 
 def __charge_run_analysis(basefile: str,
@@ -175,6 +192,7 @@ def find_index(wv_list, n):
     return index[0]
 
 def iv_curve(basefile: str,
+             bias_regime,
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
              device_kw={"hide": True}):
@@ -182,14 +200,15 @@ def iv_curve(basefile: str,
     """ Plots the iv curve of the cell in CHARGE. 
     Args:
         basefile: Path of the CHARGE file (e.g. C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev")
+        bias_regime: defines the regime (i.e. forward or reverse) in lower case
         get retults: Dictionary with the cathode (e.g. "base") results path inside CHARGE (e.g. {"results":{"CHARGE":"base"}})
         
         full example: iv_curve(r"C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
     """
-    
+
     #obtains IV curve from already run simulation
-    results = __charge_run_analysis(basefile, get_results, device_kw)
     cathode_name = get_results['results']['CHARGE']
+    results = __charge_run_analysis(basefile, bias_regime, get_results, device_kw)
     current = list(results['results.CHARGE.'+cathode_name]['I'])
     voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
 
@@ -197,11 +216,17 @@ def iv_curve(basefile: str,
         current = current[0]
         voltage = [float(arr[0]) for arr in voltage] 
     
+    return np.array(current), np.array(voltage)
+    
+    
+
+def __plot_iv_curve(basefile:str, current, voltage):
+    
     logger.warning("Attention the Voc results are determined through finding the abs min fo the current density. That is, they are not the result of an interpolation and depend on the \n data aquisition process -> make sure to collect a lot of points around Voc to get a more accurate value")
     logger.warning("Make sure the name of the simulation region is correct in the script")
     
-    with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
-        charge.select("simulation region_1")
+    with lumapi.DEVICE(filename=basefile, hide = True) as charge:
+        charge.select("simulation region")
         Lx = charge.get("x span")
         if "3D" not in charge.get("dimension"):
             print("This is a 2D simulation")
@@ -214,38 +239,36 @@ def iv_curve(basefile: str,
     Lx = Lx * 100 #from m to cm
     Ly = Ly * 100 #from m to cm
     area = Ly*Lx #area in cm^2 
-    current_density = list((np.array(current)*1000)/area)
+    current_density = (np.array(current)*1000)/area
     fig, ax = plt.subplots()
     Ir = 1000 #W/m²
-
-
 
     #DETERMINE JSC (ROUGH)
     abs_voltage_min = min(np.absolute(voltage)) #volatage value closest to zero
     if abs_voltage_min in voltage:
-        #Jsc = current_density[np.where(voltage == abs_voltage_min)[0]]
-        #Isc = current[np.where(voltage == abs_voltage_min)[0]]
-        Jsc = current_density[voltage.index(abs_voltage_min)]
-        Isc = current[voltage.index(abs_voltage_min)]   
+        Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
+        Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
+        #Jsc = current_density[voltage.index(abs_voltage_min)]
+        #Isc = current[voltage.index(abs_voltage_min)]   
     elif -abs_voltage_min in voltage: 
         #the position in the array of Jsc and Isc should be the same
-        #Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]]
-        #Isc = current[np.where(voltage == -abs_voltage_min)[0]]
-        Jsc = current_density[voltage.index(-abs_voltage_min)]
-        Isc = current[voltage.index(-abs_voltage_min)]   
+        Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
+        Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
+        #Jsc = current_density[voltage.index(-abs_voltage_min)]
+        #Isc = current[voltage.index(-abs_voltage_min)]   
  
 
     #DETERMINE VOC (ROUGH) through J   
     abs_current_min = min(np.absolute(current_density)) #voltage value closest to zero
     if abs_current_min in current_density:
-        #Voc = voltage[np.where(current_density == abs_current_min)[0]]
-        Voc = voltage[current_density.index(abs_current_min)]
+        Voc = voltage[np.where(current_density == abs_current_min)[0]][0]
+        #Voc = voltage[current_density.index(abs_current_min)]
     elif -abs_current_min in current_density: 
-        #Voc = voltage[np.where(current_density == -abs_current_min)[0]]
-        Voc = voltage[current_density.index(-abs_current_min)]
+        Voc = voltage[np.where(current_density == -abs_current_min)[0]][0]
+        #Voc = voltage[current_density.index(-abs_current_min)]
     print(Voc) #V
 
-    Voc_index = voltage.index(Voc)
+    #Voc_index = voltage.index(Voc)
 
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)              
     plt.plot(voltage, current_density, 'o-')     
@@ -270,6 +293,8 @@ def iv_curve(basefile: str,
     plt.grid()
     # plt.savefig(os.path.split(basefile)[1][:-3]+"_IV_"+ str(datetime.now())+".png")
     plt.show()
+
+
 
 def get_gen(fdtd_file, properties):
     """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
@@ -334,7 +359,7 @@ def updt_gen(path, charge_file, properties, gen_mat):
         charge.close()
     
 
-def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_regime:str):
+def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
     """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
         basefile: directory of file
@@ -342,6 +367,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_r
         subcell_name: name of the subcell (i.e Si or Perovskite)
     """
     with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
+        charge.switchtolayout()
         #setting sweep parameters
         if (bias_regime == "forward"):
             charge.select("CHARGE")
@@ -349,8 +375,9 @@ def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_r
             charge.set("enable initialization", True)
             charge.set("init step size",-5) #rather small init step. If sims take too long to start look into changing it to a larger value
             charge.save()
-
-            charge.select("CHARGE:boundary conditions:"+cathode_name)
+            
+            
+            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
             charge.set("sweep type","range")
             charge.save()
             charge.set("range start",0) 
@@ -366,7 +393,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_r
             charge.set("enable initialization", False)
             charge.save()
 
-            charge.select("CHARGE:boundary conditions:"+cathode_name)
+            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
             charge.set("sweep type","range")
             charge.save()
             charge.set("range start",0) 
@@ -376,7 +403,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_r
             charge.save()
 
 
-            
+
 
 
 
