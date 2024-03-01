@@ -154,7 +154,7 @@ def charge_run(basefile: str,
     
     return results, charge_runtime, analysis_runtime, autoshut_off_list
 
-def charge_run_analysis(basefile: str,
+def __charge_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
                       device_kw={"hide": True}):
     """
@@ -187,7 +187,7 @@ def iv_curve(basefile: str,
         full example: iv_curve(r"C:\Users\MonicaDyreby\Documents\Planar silicon solar cell\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
     """
     #obtains IV curve from already run simulation
-    results = charge_run_analysis(basefile, get_results, device_kw)
+    results = __charge_run_analysis(basefile, get_results, device_kw)
     cathode_name = get_results['results']['CHARGE']
     current = list(results['results.CHARGE.'+cathode_name]['I'])
     voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
@@ -196,8 +196,8 @@ def iv_curve(basefile: str,
         current = current[0]
         voltage = [float(arr[0]) for arr in voltage] 
     
-    print("Attention the Voc results are determined through finding the abs min fo the current density. \n That is, they are not the result of an interpolation and depend on the \n data aquisition process -> make sure to collect a lot of points around Voc to get a more accurate value ")
-    print("\n Make sure the name of the simulation region is correct in the script")
+    logger.warning("Attention the Voc results are determined through finding the abs min fo the current density. That is, they are not the result of an interpolation and depend on the \n data aquisition process -> make sure to collect a lot of points around Voc to get a more accurate value")
+    logger.warning("Make sure the name of the simulation region is correct in the script")
     
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
         charge.select("simulation region_1")
@@ -332,36 +332,56 @@ def updt_gen(path, charge_file, properties, gen_mat):
         # charge.save()
         charge.close()
     
-def set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str):
-    """ Sets the iv curve parameters (e.g. start range, stop range...)
+
+def __set_iv_parameters(basefile:str, cathode_name:str, subcell_name:str, bias_regime:str):
+    """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
         basefile: directory of file
         cathode_name: name of the cathode associated with the subcell in question
         subcell_name: name of the subcell (i.e Si or Perovskite)
     """
-    
-    
     with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
+        #setting sweep parameters
+        if (bias_regime == "forward"):
+            charge.select("CHARGE")
+            charge.set("solver type","NEWTON")
+            charge.set("enable initialization", True)
+            charge.set("init step size",-5) #rather small init step. If sims take too long to start look into changing it to a larger value
+            charge.save()
 
-        #charge.select("CHARGE:Advanced:")
+            charge.select("CHARGE:boundary conditions:"+cathode_name)
+            charge.set("sweep type","range")
+            charge.save()
+            charge.set("range start",0) 
+            charge.set("range stop",2) 
+            charge.set("range num points",21) 
+            charge.set("range backtracking","enabled")
+            charge.save()
 
-        charge.select("CHARGE:boundary conditions:"+cathode_name)
-        charge.set("sweep type","range")
-        charge.save()
+        #reverse bias
+        if(bias_regime == "reverse"):
+            charge.select("CHARGE")
+            charge.set("solver type","GUMMEL")
+            charge.set("enable initialization", False)
+            charge.save()
 
-        charge.set("range start",0) #string or int?
-        charge.set("range stop",2) #string or int?
-        charge.set("range num points",21) #string or int?
-        charge.set("range backtracking","enabled") #string or int?
-        charge.save()
+            charge.select("CHARGE:boundary conditions:"+cathode_name)
+            charge.set("sweep type","range")
+            charge.save()
+            charge.set("range start",0) 
+            charge.set("range stop",-1) 
+            charge.set("range num points",21)
+            charge.set("range backtracking","enabled")
+            charge.save()
+
+
+            
 
 
 
 
-        #if "Si" in subcell_name: 
-        #    charge.set("1") #string or int?
-        #else:
-        #    charge.set("2")
+
+
 
 
 
