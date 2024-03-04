@@ -416,7 +416,7 @@ def updt_gen(path, charge_file, gen_mat):
 
 
 
-def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime, get_results) #TODO get more results (FF, Voc, Isc, ...)
+def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime, get_results) #TODO get more results (FF, Voc, Isc)
     get_gen(path, fdtd_file, properties, gen_mat)
     updt_gen(path, charge_file, gen_mat)
     basefile = str(path)+"\\"+str(charge_file)
