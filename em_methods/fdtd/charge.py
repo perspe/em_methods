@@ -295,17 +295,19 @@ def __plot_iv_curve(basefile:str, current, voltage):
 
 
 
-def get_gen(fdtd_file, properties):
+def get_gen(fdtd_file, properties, gen_mat): 
     """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
     Args:
         properties: Dictionary with the property object and property names and values
         fdtd_file: String of path to the FDTD file
+        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
     with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
-        for structure_key, structure_value in properties.items():
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                fdtd.set(parameter_key, parameter_value)
+        for mat, names in gen_mat.items():
+            gen_obj = names[0] # Solar Generation analysis object name
+            file = names[1] # generation file name
+            fdtd.select(str(gen_obj))
+            fdtd.set("export name", str(file))
         fdtd.run()
         fdtd.runanalysis()
         fdtd.switchtolayout()
@@ -318,7 +320,7 @@ def updt_gen(path, charge_file, properties, gen_mat):
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
         charge_file: String DEVICE file name;
         properties: Dictionary with the property object and property names and values;
-        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["1.mat", "geometry_name_1"], material_2: ["2.mat", "geometry_name_2"]}
+        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
     charge_path =  str(path)+"\\"+str(charge_file)
 
@@ -339,8 +341,8 @@ def updt_gen(path, charge_file, properties, gen_mat):
 
         # CHANGE GENERATION PROFILE                
         for mat, names in gen_mat.items():
-            file = names[0]
-            obj = names[1]
+            file = names[1] #Generation file name
+            obj = names[2] # Generation CHARGE object name
             
             # Create "Import generation rate" objects
             g_name = file.replace('.mat', '')
