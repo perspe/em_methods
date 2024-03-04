@@ -192,7 +192,6 @@ def find_index(wv_list, n):
     return index[0]
 
 def iv_curve(basefile: str,
-             bias_regime,
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
              device_kw={"hide": True}):
@@ -208,7 +207,7 @@ def iv_curve(basefile: str,
 
     #obtains IV curve from already run simulation
     cathode_name = get_results['results']['CHARGE']
-    results = __charge_run_analysis(basefile, bias_regime, get_results, device_kw)
+    results = __charge_run_analysis(basefile, get_results, device_kw)
     current = list(results['results.CHARGE.'+cathode_name]['I'])
     voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
 
@@ -234,7 +233,7 @@ def __plot_iv_curve(basefile:str, current, voltage):
             Ly = charge.get("norm length")
         else:
             print("This is a 3D simulation")
-            charge.select("simulation region_1")
+            charge.select("simulation region")
             Ly = charge.get("y span")
     Lx = Lx * 100 #from m to cm
     Ly = Ly * 100 #from m to cm
@@ -271,7 +270,7 @@ def __plot_iv_curve(basefile:str, current, voltage):
     #Voc_index = voltage.index(Voc)
 
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)              
-    plt.plot(voltage, current_density, 'o-')     
+    plt.plot(voltage[:-6], current_density[:-6], 'o-')     
     # plt.plot(voltage[:Voc_index+2], current_density[:Voc_index+2], 'o-')
 
     P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
