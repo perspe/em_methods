@@ -12,6 +12,7 @@ import numpy.typing as npt
 import pandas as pd
 from matplotlib.patches import Rectangle
 from datetime import datetime
+from PyAstronomy import pyaC
 
 import scipy.constants as scc
 
@@ -257,20 +258,24 @@ def __plot_iv_curve(basefile:str, current, voltage):
         #Isc = current[voltage.index(-abs_voltage_min)]   
  
 
-    #DETERMINE VOC (ROUGH) through J   
-    abs_current_min = min(np.absolute(current_density)) #voltage value closest to zero
-    if abs_current_min in current_density:
-        Voc = voltage[np.where(current_density == abs_current_min)[0]][0]
-        #Voc = voltage[current_density.index(abs_current_min)]
-    elif -abs_current_min in current_density: 
-        Voc = voltage[np.where(current_density == -abs_current_min)[0]][0]
-        #Voc = voltage[current_density.index(-abs_current_min)]
-    print(Voc) #V
+    #DETERMINE VOC THROUGH INTERPOLATION
+    Voc = pyaC.zerocross1d(voltage, current_density, getIndices=False)[0]       
+    
+    #DETERMINE VOC (ROUGH) through J    
+    # abs_current_min = min(np.absolute(current_density)) #voltage value closest to zero
+    # if abs_current_min in current_density:
+    #     Voc = voltage[np.where(current_density == abs_current_min)[0]][0]
+    #     #Voc = voltage[current_density.index(abs_current_min)]
+    # elif -abs_current_min in current_density: 
+    #     Voc = voltage[np.where(current_density == -abs_current_min)[0]][0]
+    #     #Voc = voltage[current_density.index(-abs_current_min)]
+    # print(Voc) #V
 
     #Voc_index = voltage.index(Voc)
 
-    props = dict(boxstyle='round', facecolor='white', alpha=0.5)              
-    plt.plot(voltage[:-6], current_density[:-6], 'o-')     
+    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+    plt.plot(voltage[:-6], current_density[:-6], 'o-') 
+    plt.plot(Voc, 0, 'o', color = "red")       
     # plt.plot(voltage[:Voc_index+2], current_density[:Voc_index+2], 'o-')
 
     P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
