@@ -167,10 +167,10 @@ def charge_run(basefile: str,
     print(voltage)
     print(current)
 
-    __plot_iv_curve(basefile, current, voltage)
+    PCE = __plot_iv_curve(basefile, current, voltage)
     
 
-    return results, charge_runtime, analysis_runtime, autoshut_off_list
+    return results, charge_runtime, analysis_runtime, autoshut_off_list, PCE
 
 def __charge_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
@@ -274,7 +274,7 @@ def __plot_iv_curve(basefile:str, current, voltage):
     #Voc_index = voltage.index(Voc)
 
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-    plt.plot(voltage[:-6], current_density[:-6], 'o-') 
+    plt.plot(voltage[:-12], current_density[:-12], 'o-') 
     plt.plot(Voc, 0, 'o', color = "red")       
     # plt.plot(voltage[:Voc_index+2], current_density[:Voc_index+2], 'o-')
 
@@ -297,7 +297,51 @@ def __plot_iv_curve(basefile:str, current, voltage):
     plt.grid()
     # plt.savefig(os.path.split(basefile)[1][:-3]+"_IV_"+ str(datetime.now())+".png")
     plt.show()
+    return PCE
 
+
+def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
+    """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
+    Args:
+        basefile: directory of file
+        cathode_name: name of the cathode associated with the subcell in question
+        subcell_name: name of the subcell (i.e Si or Perovskite)
+    """
+    with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
+        charge.switchtolayout()
+        #setting sweep parameters
+        if (bias_regime == "forward"):
+            charge.select("CHARGE")
+            charge.set("solver type","NEWTON")
+            charge.set("enable initialization", True)
+            charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
+            charge.save()
+            
+            
+            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
+            charge.set("sweep type","range")
+            charge.save()
+            charge.set("range start",0) 
+            charge.set("range stop",2) 
+            charge.set("range num points",21) 
+            charge.set("range backtracking","enabled")
+            charge.save()
+
+        #reverse bias
+        if(bias_regime == "reverse"):
+            charge.select("CHARGE")
+            charge.set("solver type","GUMMEL")
+            charge.set("enable initialization", False)
+            charge.save()
+
+            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
+            charge.set("sweep type","range")
+            charge.save()
+            charge.set("range start",0) 
+            charge.set("range stop",-1) 
+            charge.set("range num points",21)
+            charge.set("range backtracking","enabled")
+            charge.save()
 
 
 def get_gen(path, fdtd_file, properties, gen_mat): 
@@ -336,12 +380,11 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         fdtd.save()
         fdtd.close()
 
-def updt_gen(path, charge_file, properties, gen_mat): 
+def updt_gen(path, charge_file, gen_mat): 
     """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) and simulates the CHARGE file
     Args:
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
         charge_file: String DEVICE file name;
-        properties: Dictionary with the property object and property names and values;
         gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
     charge_path =  str(path)+"\\"+str(charge_file)
@@ -353,13 +396,6 @@ def updt_gen(path, charge_file, properties, gen_mat):
     new_path = shutil.copyfile(charge_path, new_filepath)
 
     with lumapi.DEVICE(filename = new_path, hide = True) as charge:
-
-        # CHANGE CELL GEOMETRY
-        for structure_key, structure_value in properties.items():
-            charge.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                charge.set(parameter_key, parameter_value)
-        charge.save()
 
         # CHANGE GENERATION PROFILE                
         for mat, names in gen_mat.items():
@@ -377,87 +413,12 @@ def updt_gen(path, charge_file, properties, gen_mat):
             charge.importdataset(str(path)+'\\'+str(file))
             charge.save()
         charge.close()
-        
-
-def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
-    """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
-    Args:
-        basefile: directory of file
-        cathode_name: name of the cathode associated with the subcell in question
-        subcell_name: name of the subcell (i.e Si or Perovskite)
-    """
-    with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
-        charge.switchtolayout()
-        #setting sweep parameters
-        if (bias_regime == "forward"):
-            charge.select("CHARGE")
-            charge.set("solver type","NEWTON")
-            charge.set("enable initialization", True)
-            charge.set("init step size",-5) #rather small init step. If sims take too long to start look into changing it to a larger value
-            charge.save()
-            
-            
-            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
-            charge.set("sweep type","range")
-            charge.save()
-            charge.set("range start",0) 
-            charge.set("range stop",2) 
-            charge.set("range num points",21) 
-            charge.set("range backtracking","enabled")
-            charge.save()
-
-        #reverse bias
-        if(bias_regime == "reverse"):
-            charge.select("CHARGE")
-            charge.set("solver type","GUMMEL")
-            charge.set("enable initialization", False)
-            charge.save()
-
-            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
-            charge.set("sweep type","range")
-            charge.save()
-            charge.set("range start",0) 
-            charge.set("range stop",-1) 
-            charge.set("range num points",21)
-            charge.set("range backtracking","enabled")
-            charge.save()
 
 
 
-
-
-
-
-
-
-
-
-
-    
-    
-
-    
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime, get_results) #TODO get more results (FF, Voc, Isc, ...)
+    get_gen(path, fdtd_file, properties, gen_mat)
+    updt_gen(path, charge_file, gen_mat)
+    basefile = str(path)+"\\"+str(charge_file)
+    results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, properties, get_results)
+    return pce
