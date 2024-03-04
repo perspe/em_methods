@@ -315,12 +315,11 @@ def get_gen(fdtd_file, properties):
 def updt_gen(path, charge_file, properties, gen_mat): 
     """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) and simulates the CHARGE file
     Args:
-        properties: Dictionary with the property object and property names and values;
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
         charge_file: String DEVICE file name;
+        properties: Dictionary with the property object and property names and values;
         gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["1.mat", "geometry_name_1"], material_2: ["2.mat", "geometry_name_2"]}
     """
-    # TODO(TO BE TESTED)
     charge_path =  str(path)+"\\"+str(charge_file)
 
     basepath, basename = os.path.split(charge_path)
@@ -342,21 +341,19 @@ def updt_gen(path, charge_file, properties, gen_mat):
         for mat, names in gen_mat.items():
             file = names[0]
             obj = names[1]
+            
             # Create "Import generation rate" objects
             g_name = file.replace('.mat', '')
             charge.addimportgen()
             charge.set("name", g_name)
+            
             # Import generation file path
-            charge.set('import file path', str(path)+'\\'+str(file))
             charge.set("volume type", "solid")
             charge.set("volume solid",str(obj))
-            charge.set("import automatic reload", True)
+            charge.importdataset(str(path)+'\\'+str(file))
             charge.save()
-        # charge.run("CHARGE")
-        # charge.switchtolayout()
-        # charge.save()
         charge.close()
-    
+        
 
 def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
     """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
