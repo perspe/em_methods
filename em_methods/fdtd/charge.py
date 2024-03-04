@@ -295,22 +295,39 @@ def __plot_iv_curve(basefile:str, current, voltage):
 
 
 
-def get_gen(fdtd_file, properties, gen_mat): 
+def get_gen(path, fdtd_file, properties, gen_mat): 
     """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
     Args:
+        path: String of folder path of FDTD and CHARGE files (must be in same folder);
+        fdtd_file: String FDTD file name;
         properties: Dictionary with the property object and property names and values
-        fdtd_file: String of path to the FDTD file
         gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
-    with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
+    fdtd_path =  str(path)+"\\"+str(fdtd_file)
+
+    basepath, basename = os.path.split(fdtd_path)
+    override_prefix: str = str(uuid4())[0:5]
+    new_filepath: str = os.path.join(
+        basepath, override_prefix + "_" + basename)
+    new_path = shutil.copyfile(fdtd_path, new_filepath)
+    
+    with lumapi.FDTD(filename = new_path, hide = True) as fdtd:
+        # CHANGE CELL GEOMETRY
+        for structure_key, structure_value in properties.items():
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                fdtd.set(parameter_key, parameter_value)
+        fdtd.save()
+
+        # EXPORT GENERATION FILES
         for mat, names in gen_mat.items():
             gen_obj = names[0] # Solar Generation analysis object name
             file = names[1] # generation file name
+            g_name = file.replace('.mat', '')
             fdtd.select(str(gen_obj))
-            fdtd.set("export name", str(file))
+            fdtd.set("export filename", str(g_name))
         fdtd.run()
         fdtd.runanalysis()
-        fdtd.switchtolayout()
         fdtd.save()
         fdtd.close()
 
