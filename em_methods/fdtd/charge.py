@@ -67,8 +67,7 @@ def _get_charge_results(fdtd_handler: lumapi.DEVICE, get_results: Dict[str, Dict
 """ Main functions """
 
 def charge_run(basefile: str,
-             bias_regime:str,
-             material:str,  
+             bias_regime:str,  
              properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
@@ -101,21 +100,14 @@ def charge_run(basefile: str,
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
 
-    
+    print("we are in: ", new_filepath)
     cathode_name = get_results['results']['CHARGE']
-    __set_iv_parameters(basefile, cathode_name, bias_regime)
-
-
-
+    __set_iv_parameters(new_filepath, cathode_name, bias_regime)
 
     # Update simulation properties, run and get results
     with lumapi.DEVICE(filename=new_filepath, **device_kw) as charge:
-        #Define the simulation region (Psk or Si)
-        if "Si" in material or "si" in material:
-            charge.set("simulation region", "simulation region si")
-        elif "Pero" in material or "PSK" in material or "PVK" in material: 
-            charge.set("simulation region", "simulation region psk")
         # Update structures
+        print(charge.get("simulation region"))
         for structure_key, structure_value in properties.items():
             logger.debug(f"Editing: {structure_key}")
             charge.select(structure_key)
@@ -176,7 +168,7 @@ def charge_run(basefile: str,
     print(voltage)
     print(current)
 
-    PCE = __plot_iv_curve(basefile, current, voltage)
+    PCE = __plot_iv_curve(new_filepath, current, voltage)
     
 
     return results, charge_runtime, analysis_runtime, autoshut_off_list, PCE
@@ -229,13 +221,14 @@ def iv_curve(basefile: str,
     
     
 
-def __plot_iv_curve(basefile:str, current, voltage):
+def __plot_iv_curve(basefile, current, voltage):
     
-    logger.warning("Attention the Voc results are determined through finding the abs min fo the current density. That is, they are not the result of an interpolation and depend on the \n data aquisition process -> make sure to collect a lot of points around Voc to get a more accurate value")
     logger.warning("Make sure the name of the simulation region is correct in the script")
     
     with lumapi.DEVICE(filename=basefile, hide = True) as charge:
-        charge.select("simulation region")
+        sim_region = charge.get("simulation region")
+        print(sim_region)
+        charge.select(str(sim_region))
         Lx = charge.get("x span")
         if "3D" not in charge.get("dimension"):
             print("This is a 2D simulation")
@@ -243,7 +236,7 @@ def __plot_iv_curve(basefile:str, current, voltage):
             Ly = charge.get("norm length")
         else:
             print("This is a 3D simulation")
-            charge.select("simulation region")
+            charge.select(str(sim_region))
             Ly = charge.get("y span")
     Lx = Lx * 100 #from m to cm
     Ly = Ly * 100 #from m to cm
@@ -268,8 +261,9 @@ def __plot_iv_curve(basefile:str, current, voltage):
  
 
     #DETERMINE VOC THROUGH INTERPOLATION
-    Voc = pyaC.zerocross1d(voltage, current_density, getIndices=False)[0]       
-    
+    Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
+    stop = stop[0]
+    Voc = Voc[0]
     #DETERMINE VOC (ROUGH) through J    
     # abs_current_min = min(np.absolute(current_density)) #voltage value closest to zero
     # if abs_current_min in current_density:
@@ -283,7 +277,9 @@ def __plot_iv_curve(basefile:str, current, voltage):
     #Voc_index = voltage.index(Voc)
 
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-    plt.plot(voltage[:-12], current_density[:-12], 'o-') 
+    
+    
+    plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
     plt.plot(Voc, 0, 'o', color = "red")       
     # plt.plot(voltage[:Voc_index+2], current_density[:Voc_index+2], 'o-')
 
@@ -316,6 +312,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
         cathode_name: name of the cathode associated with the subcell in question
         subcell_name: name of the subcell (i.e Si or Perovskite)
     """
+    
     with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
         charge.switchtolayout()
         #setting sweep parameters
@@ -326,18 +323,18 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
             charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
             charge.save()
             
-            
+            print("we are in the forward section")
             charge.select("CHARGE::boundary conditions::"+str(cathode_name))
             charge.set("sweep type","range")
             charge.save()
-            charge.set("range start",0) 
+            charge.set("range start",0)
             charge.set("range stop",2) 
-            charge.set("range num points",21) 
+            charge.set("range num points",21)
             charge.set("range backtracking","enabled")
             charge.save()
 
         #reverse bias
-        if(bias_regime == "reverse"):
+        elif(bias_regime == "reverse"):
             charge.select("CHARGE")
             charge.set("solver type","GUMMEL")
             charge.set("enable initialization", False)
@@ -425,10 +422,39 @@ def updt_gen(path, charge_file, gen_mat):
 
 
 
-def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime, get_results): #TODO get more results (FF, Voc, Isc)
+def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime): #TODO get more results (FF, Voc, Isc)
     get_gen(path, fdtd_file, properties, gen_mat)
     updt_gen(path, charge_file, gen_mat)
     basefile = str(path)+"\\"+str(charge_file)
-    results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, material, properties, get_results)
-    #Psk e si
-    return pce
+    #results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, properties, get_results)
+
+
+    
+    with lumapi.DEVICE(filename=basefile, hide = True) as charge:
+        charge.set("simulation region", "simulation region psk")
+        get_results = {"results":{"CHARGE":"ITO_top"}}
+        PCE_psk = charge_run(basefile, bias_regime, properties, get_results)[4]
+        charge.set("simulation region", "simulation region si")
+        get_results = {"results":{"CHARGE":"AZO"}}
+        PCE_si = charge_run(basefile, bias_regime, properties, get_results)[4]
+    return PCE_psk, PCE_sis
+
+def double_run(basefile: str,
+             bias_regime:str,  
+             properties: Dict[str, Dict[str, float]]):
+    
+    with lumapi.DEVICE(filename=basefile, hide = True) as charge:
+        print("Si")
+        charge.set("simulation region", "simulation region si")
+        charge.save()
+        get_results = {"results":{"CHARGE":"AZO"}}
+        PCE_si = charge_run(basefile, bias_regime, properties, get_results)[4]
+        
+        print("Psk")
+        charge.set("simulation region", "simulation region psk")
+        charge.save()
+        print("we are in: ", basefile)
+        get_results = {"results":{"CHARGE":"ITO_top"}}
+        PCE_psk = charge_run(basefile, bias_regime, properties, get_results)[4]
+        
+    return PCE_psk, PCE_si
