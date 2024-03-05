@@ -296,8 +296,8 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
             charge.set("sweep type","range")
             charge.save()
             charge.set("range start",0)
-            charge.set("range stop",2) 
-            charge.set("range num points",21)
+            charge.set("range stop",1.5) 
+            charge.set("range num points",11)
             charge.set("range backtracking","enabled")
             charge.save()
 
@@ -354,7 +354,7 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         fdtd.save()
         fdtd.close()
 
-def updt_gen(path, charge_file, gen_mat): 
+def updt_gen(path, charge_file, gen_mat, bias_regime, properties): 
     """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) and simulates the CHARGE file
     Args:
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
@@ -368,7 +368,7 @@ def updt_gen(path, charge_file, gen_mat):
     new_filepath: str = os.path.join(
         basepath, override_prefix + "_" + basename)
     new_path = shutil.copyfile(charge_path, new_filepath)
-
+    PCE = []
     with lumapi.DEVICE(filename = new_path, hide = True) as charge:
 
         # CHANGE GENERATION PROFILE                
@@ -386,7 +386,17 @@ def updt_gen(path, charge_file, gen_mat):
             charge.set("volume solid",str(obj))
             charge.importdataset(str(path)+'\\'+str(file))
             charge.save()
+
+            # Create simulation regions
+            charge.select("CHARGE")
+            charge.set("simulation region", names[2])
+            charge.save()
+            get_results = {"results":{"CHARGE":names[3]}}
+            PCE.append(charge_run(new_path, bias_regime, properties, get_results)[4])
+            print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
         charge.close()
+
+    return PCE
 
 
 def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime): #TODO get more results (FF, Voc, Isc)
@@ -396,6 +406,7 @@ def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_r
     PCE = []
     for mat, names in gen_mat.items():
         with lumapi.DEVICE(filename=basefile, hide = True) as charge:
+            charge.select("CHARGE")
             charge.set("simulation region", names[2])
             charge.save()
             get_results = {"results":{"CHARGE":names[3]}}
