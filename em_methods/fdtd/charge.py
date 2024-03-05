@@ -439,6 +439,8 @@ def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_r
         PCE_si = charge_run(basefile, bias_regime, properties, get_results)[4]
     return PCE_psk, PCE_sis
 
+
+#use this templaite in get_tandem_results
 def double_run(basefile: str,
              bias_regime:str,  
              properties: Dict[str, Dict[str, float]]):
