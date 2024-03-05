@@ -67,7 +67,8 @@ def _get_charge_results(fdtd_handler: lumapi.DEVICE, get_results: Dict[str, Dict
 """ Main functions """
 
 def charge_run(basefile: str,
-             bias_regime:str,  
+             bias_regime:str,
+             material:str,  
              properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
@@ -103,9 +104,17 @@ def charge_run(basefile: str,
     
     cathode_name = get_results['results']['CHARGE']
     __set_iv_parameters(basefile, cathode_name, bias_regime)
+
+
+
+
     # Update simulation properties, run and get results
     with lumapi.DEVICE(filename=new_filepath, **device_kw) as charge:
-        
+        #Define the simulation region (Psk or Si)
+        if "Si" in material or "si" in material:
+            charge.set("simulation region", "simulation region si")
+        elif "Pero" in material or "PSK" in material or "PVK" in material: 
+            charge.set("simulation region", "simulation region psk")
         # Update structures
         for structure_key, structure_value in properties.items():
             logger.debug(f"Editing: {structure_key}")
@@ -420,5 +429,6 @@ def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_r
     get_gen(path, fdtd_file, properties, gen_mat)
     updt_gen(path, charge_file, gen_mat)
     basefile = str(path)+"\\"+str(charge_file)
-    results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, properties, get_results)
+    results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, material, properties, get_results)
+    #Psk e si
     return pce
