@@ -99,15 +99,12 @@ def charge_run(basefile: str,
         savepath, override_prefix + "_" + basename)
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
-
-    print("we are in: ", new_filepath)
     cathode_name = get_results['results']['CHARGE']
     __set_iv_parameters(new_filepath, cathode_name, bias_regime)
 
     # Update simulation properties, run and get results
     with lumapi.DEVICE(filename=new_filepath, **device_kw) as charge:
         # Update structures
-        print(charge.get("simulation region"))
         for structure_key, structure_value in properties.items():
             logger.debug(f"Editing: {structure_key}")
             charge.select(structure_key)
@@ -153,23 +150,10 @@ def charge_run(basefile: str,
     current_forward, voltage_forward = iv_curve(new_filepath, 
              get_results,
              device_kw={"hide": True})
-    
-    # voltage_reverse, current_reverse = iv_curve(new_filepath, 
-    #          properties,
-    #          get_results,
-    #          device_kw={"hide": True})
-    
-    #voltage = voltage_reverse[::-1]+voltage_forward
-    #current = current_reverse[::-1]+current_forward
 
     voltage = voltage_forward
     current = current_forward
-
-    print(voltage)
-    print(current)
-
     PCE = __plot_iv_curve(new_filepath, current, voltage)
-    
 
     return results, charge_runtime, analysis_runtime, autoshut_off_list, PCE
 
@@ -264,27 +248,12 @@ def __plot_iv_curve(basefile, current, voltage):
     Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
     stop = stop[0]
     Voc = Voc[0]
-    #DETERMINE VOC (ROUGH) through J    
-    # abs_current_min = min(np.absolute(current_density)) #voltage value closest to zero
-    # if abs_current_min in current_density:
-    #     Voc = voltage[np.where(current_density == abs_current_min)[0]][0]
-    #     #Voc = voltage[current_density.index(abs_current_min)]
-    # elif -abs_current_min in current_density: 
-    #     Voc = voltage[np.where(current_density == -abs_current_min)[0]][0]
-    #     #Voc = voltage[current_density.index(-abs_current_min)]
-    # print(Voc) #V
-
-    #Voc_index = voltage.index(Voc)
-
     props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-    
-    
+
     plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
     plt.plot(Voc, 0, 'o', color = "red")       
-    # plt.plot(voltage[:Voc_index+2], current_density[:Voc_index+2], 'o-')
 
     P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
-
 
     ax.add_patch(Rectangle((voltage[find_index(P, max(P))],current_density[find_index(P, max(P))]),
                                                     -voltage[find_index(P, max(P))], -current_density[find_index(P, max(P))],
@@ -292,7 +261,7 @@ def __plot_iv_curve(basefile, current, voltage):
     FF = abs(max(P)/(Voc*Isc))
     PCE = ((FF*Voc*abs(Isc))/(Ir*(area*10**-4)))*100
     
-    textstr = 'Voc = ' + str(np.round(Voc, 3)) + ' V' + '\n' 'Jsc = '+ str(np.round(Jsc,6)) + ' mA/cm²' + "\n" "FF = " + str(np.round(FF,3)) + "\n" "PCE = " + str(np.round(PCE, 3)) + " %"
+    textstr = f'Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%'
     print(textstr)
     plt.text(0.05, 0.80, textstr, transform=ax.transAxes, fontsize=17, verticalalignment='top', bbox=props)
     plt.ylabel('Current density [mA/cm²] ')
@@ -300,7 +269,6 @@ def __plot_iv_curve(basefile, current, voltage):
     plt.axhline(0, color='gray',alpha = 0.3)
     plt.axvline(0, color='gray',alpha = 0.3)        
     plt.grid()
-    # plt.savefig(os.path.split(basefile)[1][:-3]+"_IV_"+ str(datetime.now())+".png")
     plt.show()
     return PCE
 
@@ -358,7 +326,7 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         properties: Dictionary with the property object and property names and values
         gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
-    fdtd_path =  str(path)+"\\"+str(fdtd_file)
+    fdtd_path = os.path.join(path, fdtd_file)
 
     basepath, basename = os.path.split(fdtd_path)
     override_prefix: str = str(uuid4())[0:5]
@@ -393,7 +361,7 @@ def updt_gen(path, charge_file, gen_mat):
         charge_file: String DEVICE file name;
         gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
     """
-    charge_path =  str(path)+"\\"+str(charge_file)
+    charge_path = os.path.join(path, charge_file)
 
     basepath, basename = os.path.split(charge_path)
     override_prefix: str = str(uuid4())[0:5]
@@ -421,42 +389,16 @@ def updt_gen(path, charge_file, gen_mat):
         charge.close()
 
 
-
 def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime): #TODO get more results (FF, Voc, Isc)
     get_gen(path, fdtd_file, properties, gen_mat)
     updt_gen(path, charge_file, gen_mat)
     basefile = str(path)+"\\"+str(charge_file)
-    #results, charge_runtime, analysis_runtime, autoshut_off_list, pce = charge_run(basefile, bias_regime, properties, get_results)
-
-
-    
-    with lumapi.DEVICE(filename=basefile, hide = True) as charge:
-        charge.set("simulation region", "simulation region psk")
-        get_results = {"results":{"CHARGE":"ITO_top"}}
-        PCE_psk = charge_run(basefile, bias_regime, properties, get_results)[4]
-        charge.set("simulation region", "simulation region si")
-        get_results = {"results":{"CHARGE":"AZO"}}
-        PCE_si = charge_run(basefile, bias_regime, properties, get_results)[4]
-    return PCE_psk, PCE_sis
-
-
-#use this templaite in get_tandem_results
-def double_run(basefile: str,
-             bias_regime:str,  
-             properties: Dict[str, Dict[str, float]]):
-    
-    with lumapi.DEVICE(filename=basefile, hide = True) as charge:
-        print("Si")
-        charge.set("simulation region", "simulation region si")
-        charge.save()
-        get_results = {"results":{"CHARGE":"AZO"}}
-        PCE_si = charge_run(basefile, bias_regime, properties, get_results)[4]
-        
-        print("Psk")
-        charge.set("simulation region", "simulation region psk")
-        charge.save()
-        print("we are in: ", basefile)
-        get_results = {"results":{"CHARGE":"ITO_top"}}
-        PCE_psk = charge_run(basefile, bias_regime, properties, get_results)[4]
-        
-    return PCE_psk, PCE_si
+    PCE = []
+    for mat, names in gen_mat.items():
+        with lumapi.DEVICE(filename=basefile, hide = True) as charge:
+            charge.set("simulation region", names[2])
+            charge.save()
+            get_results = {"results":{"CHARGE":names[3]}}
+            PCE.append(charge_run(basefile, bias_regime, properties, get_results)[4])
+            print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
+    return PCE
