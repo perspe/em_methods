@@ -330,14 +330,12 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
         """
     fdtd_path = os.path.join(path, fdtd_file)
-
-    basepath, basename = os.path.split(fdtd_path)
     override_prefix: str = str(uuid4())[0:5]
     new_filepath: str = os.path.join(
-        basepath, override_prefix + "_" + basename)
-    new_path = shutil.copyfile(fdtd_path, new_filepath)
+        path, override_prefix + "_" + fdtd_file)
+    shutil.copyfile(fdtd_path, new_filepath)
     
-    with lumapi.FDTD(filename = new_path, hide = True) as fdtd:
+    with lumapi.FDTD(filename = new_filepath, hide = True) as fdtd:
         # CHANGE CELL GEOMETRY
         for structure_key, structure_value in properties.items():
             fdtd.select(structure_key)
@@ -372,9 +370,10 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
     override_prefix: str = str(uuid4())[0:5]
     new_filepath: str = os.path.join(
         path, override_prefix + "_" + charge_file)
-    new_path = shutil.copyfile(charge_path, new_filepath)
+    shutil.copyfile(charge_path, new_filepath)
+
     PCE = []
-    with lumapi.DEVICE(filename = new_path, hide = True) as charge:
+    with lumapi.DEVICE(filename = new_filepath, hide = True) as charge:
 
         # CHANGE GENERATION PROFILE                
         for mat, names in gen_mat.items():
