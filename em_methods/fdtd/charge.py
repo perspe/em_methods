@@ -392,17 +392,32 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             charge.importdataset(os.path.join(path, file))
             charge.save()
 
-            # Create simulation regions
+            # Defines boundaries for simulation region
             charge.select("geometry::"+names[4]) #anode 
             z_max= charge.get("z max")
             charge.select("geometry::"+names[3]) #cathode
             z_min= charge.get("z min")
+            charge.select("CHARGE::"+names[0])
+            x_span = charge.get("x span")
+            x = charge.get("x")
+            y_span = charge.get("y span")
+            y = charge.get("y")      
+
+            #Creates the simulation region (2D or 3D)
             charge.addsimulationregion()
             charge.set("name", names[2]) #defines the name of the simulation region as the name of the semiconductor in question
-            charge.set("dimension",2)
-            charge.set("x",0)
-            charge.set("x span", 0.3e-6)
-            charge.set("y",0)
+            if True:
+                charge.set("dimension",2)
+                charge.set("x",x)
+                charge.set("x span", x_span)
+                charge.set("y",y)
+            if False:
+                charge.set("dimension",3)
+                charge.set("x",x)
+                charge.set("x span", x_span)
+                charge.set("y",y)
+                charge.set("x span", y_span) 
+
             charge.set("z max", z_max )
             charge.set("z min", z_min)
             charge.select("CHARGE")
