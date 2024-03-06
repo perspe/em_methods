@@ -319,13 +319,16 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
 
 
 def get_gen(path, fdtd_file, properties, gen_mat): 
-    """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) (in same directory as FDTD file)
+    """ Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s) 
+    (in same directory as FDTD file)
     Args:
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
         fdtd_file: String FDTD file name;
         properties: Dictionary with the property object and property names and values
-        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
-    """
+        gen_mat: Dictionary with the absorbers and corresponding strings 
+        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"], 
+        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
+        """
     fdtd_path = os.path.join(path, fdtd_file)
 
     basepath, basename = os.path.split(fdtd_path)
@@ -355,18 +358,20 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         fdtd.close()
 
 def updt_gen(path, charge_file, gen_mat, bias_regime, properties): 
-    """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) and simulates the CHARGE file
+    """ Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file) 
+    and creates the simulation regions
     Args:
         path: String of folder path of FDTD and CHARGE files (must be in same folder);
         charge_file: String DEVICE file name;
-        gen_mat: Dictionary with the absorbers and corresponding strings {material_1: ["solar_gen_1", "1.mat", "geometry_name_1"], material_2: ["solar_gen_2", "2.mat", "geometry_name_2"]}
+        gen_mat: Dictionary with the absorbers and corresponding strings 
+        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"], 
+        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
     """
-    charge_path = os.path.join(path, charge_file)
 
-    basepath, basename = os.path.split(charge_path)
+    charge_path = os.path.join(path, charge_file)
     override_prefix: str = str(uuid4())[0:5]
     new_filepath: str = os.path.join(
-        basepath, override_prefix + "_" + basename)
+        path, override_prefix + "_" + charge_file)
     new_path = shutil.copyfile(charge_path, new_filepath)
     PCE = []
     with lumapi.DEVICE(filename = new_path, hide = True) as charge:
@@ -384,7 +389,7 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             # Import generation file path
             charge.set("volume type", "solid")
             charge.set("volume solid",str(obj))
-            charge.importdataset(str(path)+'\\'+str(file))
+            charge.importdataset(os.path.join(path, file))
             charge.save()
 
             # Create simulation regions
@@ -408,20 +413,4 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
         charge.close()
 
-    return PCE
-
-
-def get_tandem_results(path, fdtd_file, charge_file, properties, gen_mat, bias_regime): #TODO get more results (FF, Voc, Isc)
-    get_gen(path, fdtd_file, properties, gen_mat)
-    updt_gen(path, charge_file, gen_mat)
-    basefile = str(path)+"\\"+str(charge_file)
-    PCE = []
-    for mat, names in gen_mat.items():
-        with lumapi.DEVICE(filename=basefile, hide = True) as charge:
-            charge.select("CHARGE")
-            charge.set("simulation region", names[2])
-            charge.save()
-            get_results = {"results":{"CHARGE":names[3]}}
-            PCE.append(charge_run(basefile, bias_regime, properties, get_results)[4])
-            print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
     return PCE
