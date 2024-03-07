@@ -107,9 +107,12 @@ def charge_run(basefile: str,
         os.remove(new_filepath)
         os.remove(log_file)
 
-    current = np.array(list(results['results.CHARGE.'+cathode_name]['I']))
-    voltage = np.array(list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name]))
-    PCE, FF = __plot_iv_curve(basefile, current, voltage, "am")
+    current = list(results['results.CHARGE.'+cathode_name]['I'])    
+    voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
+    if len(current) == 1 and len(current[0]) != 1: #charge I output is not always concistent
+        current = current[0]
+        voltage = [float(arr[0]) for arr in voltage]
+    PCE, FF = __plot_iv_curve(basefile, np.array(current), np.array(voltage), "am")
 
     return results, charge_runtime, analysis_runtime, PCE, FF
 
@@ -200,6 +203,8 @@ def __plot_iv_curve(basefile, current, voltage, regime):
     
 
         #DETERMINE VOC THROUGH INTERPOLATION
+        print(voltage)
+        print(current_density)
         Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
         stop = stop[0]
         Voc = Voc[0]
