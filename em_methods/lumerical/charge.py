@@ -72,7 +72,8 @@ def charge_run(basefile: str,
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
     cathode_name = get_results['results']['CHARGE']
-    __set_iv_parameters(new_filepath, cathode_name, bias_regime)
+    #__set_iv_parameters(new_filepath, cathode_name, bias_regime)
+
     # Get logfile name
     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
     # Run simulation - the process is as follows
@@ -106,11 +107,11 @@ def charge_run(basefile: str,
         os.remove(new_filepath)
         os.remove(log_file)
 
-    current = list(results['results.CHARGE.'+cathode_name]['I'])
-    voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
-    PCE = __plot_iv_curve(basefile, current, voltage, "am")
+    current = np.array(list(results['results.CHARGE.'+cathode_name]['I']))
+    voltage = np.array(list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name]))
+    PCE, FF = __plot_iv_curve(basefile, current, voltage, "am")
 
-    return results, charge_runtime, analysis_runtime, PCE
+    return results, charge_runtime, analysis_runtime, PCE, FF
 
 def charge_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
@@ -224,7 +225,7 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         plt.axvline(0, color='gray',alpha = 0.3)        
         plt.grid()
         plt.show()
-        return PCE
+        return PCE, FF
     
     elif regime == "dark":
         plt.plot(voltage, current_density, 'o-') 
@@ -252,7 +253,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
             charge.select("CHARGE")
             charge.set("solver type","NEWTON")
             charge.set("enable initialization", True)
-            charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
+            #charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
             charge.save()
             
             print("we are in the forward section")
@@ -261,7 +262,7 @@ def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
             charge.save()
             charge.set("range start",0)
             charge.set("range stop",1.5) 
-            charge.set("range num points",11)
+            charge.set("range num points",21)
             charge.set("range backtracking","enabled")
             charge.save()
 
@@ -355,18 +356,18 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             charge.importdataset(os.path.join(path, file))
             charge.save()
 
-            # Defines boundaries for simulation region
+            # Defines boundaries for simulation region -UNTESTED
             charge.select("geometry::"+names[4]) #anode 
             z_max= charge.get("z max")
             charge.select("geometry::"+names[3]) #cathode
             z_min= charge.get("z min")
-            charge.select("CHARGE::"+names[0])
+            charge.select("CHARGE::"+names[0]) #solar generation
             x_span = charge.get("x span")
             x = charge.get("x")
             y_span = charge.get("y span")
             y = charge.get("y")      
 
-            #Creates the simulation region (2D or 3D)
+            #Creates the simulation region (2D or 3D)-UNTESTED
             charge.addsimulationregion()
             charge.set("name", names[2]) #defines the name of the simulation region as the name of the semiconductor in question
             if True:
@@ -374,6 +375,7 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
                 charge.set("x",x)
                 charge.set("x span", x_span)
                 charge.set("y",y)
+
             if False:
                 charge.set("dimension",3)
                 charge.set("x",x)

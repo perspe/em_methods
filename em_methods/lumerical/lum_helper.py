@@ -105,6 +105,7 @@ class RunLumerical(Process):
             # charge.runsetup()
             logger.debug(f"Running...")
             start_time = time.time()
+            charge.switchtolayout()
             charge.run("CHARGE")
             charge_runtime = time.time() - start_time
             self.queue.put(charge_runtime)
