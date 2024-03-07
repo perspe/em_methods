@@ -122,7 +122,9 @@ def charge_run(basefile: str,
         # charge.runsetup()
         logger.debug(f"Running...")
         start_time = time.time()
+        print("Goint to run")
         charge.run("CHARGE")
+        print("WE DID IT IT RAN")
         charge_runtime = time.time() - start_time
         start_time = time.time()
         charge.runanalysis()
@@ -153,7 +155,7 @@ def charge_run(basefile: str,
 
     voltage = voltage_forward
     current = current_forward
-    PCE = __plot_iv_curve(new_filepath, current, voltage)
+    PCE = __plot_iv_curve(new_filepath, current, voltage, "am")
 
     return results, charge_runtime, analysis_runtime, autoshut_off_list, PCE
 
@@ -205,7 +207,7 @@ def iv_curve(basefile: str,
     
     
 
-def __plot_iv_curve(basefile, current, voltage):
+def __plot_iv_curve(basefile, current, voltage, regime):
     
     logger.warning("Make sure the name of the simulation region is correct in the script")
     
@@ -243,34 +245,47 @@ def __plot_iv_curve(basefile, current, voltage):
         #Jsc = current_density[voltage.index(-abs_voltage_min)]
         #Isc = current[voltage.index(-abs_voltage_min)]   
  
+    if regime == "am":
+        #DETERMINE VOC THROUGH INTERPOLATION
+        Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
+        stop = stop[0]
+        Voc = Voc[0]
+        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
 
-    #DETERMINE VOC THROUGH INTERPOLATION
-    Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
-    stop = stop[0]
-    Voc = Voc[0]
-    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+    
+        plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
+        plt.plot(Voc, 0, 'o', color = "red")       
 
-    plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
-    plt.plot(Voc, 0, 'o', color = "red")       
+        P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
 
-    P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
-
-    ax.add_patch(Rectangle((voltage[find_index(P, max(P))],current_density[find_index(P, max(P))]),
+        ax.add_patch(Rectangle((voltage[find_index(P, max(P))],current_density[find_index(P, max(P))]),
                                                     -voltage[find_index(P, max(P))], -current_density[find_index(P, max(P))],
                                                     facecolor='lightsteelblue'))
-    FF = abs(max(P)/(Voc*Isc))
-    PCE = ((FF*Voc*abs(Isc))/(Ir*(area*10**-4)))*100
+        FF = abs(max(P)/(Voc*Isc))
+        PCE = ((FF*Voc*abs(Isc))/(Ir*(area*10**-4)))*100
     
-    textstr = f'Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%'
-    print(textstr)
-    plt.text(0.05, 0.80, textstr, transform=ax.transAxes, fontsize=17, verticalalignment='top', bbox=props)
-    plt.ylabel('Current density [mA/cm²] ')
-    plt.xlabel('Voltage [V]')
-    plt.axhline(0, color='gray',alpha = 0.3)
-    plt.axvline(0, color='gray',alpha = 0.3)        
-    plt.grid()
-    plt.show()
-    return PCE
+        textstr = f'Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%'
+        print(textstr)
+        plt.text(0.05, 0.80, textstr, transform=ax.transAxes, fontsize=17, verticalalignment='top', bbox=props)
+        plt.ylabel('Current density [mA/cm²] ')
+        plt.xlabel('Voltage [V]')
+        plt.axhline(0, color='gray',alpha = 0.3)
+        plt.axvline(0, color='gray',alpha = 0.3)        
+        plt.grid()
+        plt.show()
+        return PCE
+    
+    elif regime == "dark":
+        plt.plot(voltage, current_density, 'o-')
+        plt.ylabel('Current density [mA/cm²] ')
+        plt.xlabel('Voltage [V]')
+        plt.axhline(0, color='gray',alpha = 0.3)
+        plt.axvline(0, color='gray',alpha = 0.3)        
+        plt.grid()
+        plt.show() 
+
+
+    
 
 
 def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
