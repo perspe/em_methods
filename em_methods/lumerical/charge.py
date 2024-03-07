@@ -105,7 +105,12 @@ def charge_run(basefile: str,
     if delete:
         os.remove(new_filepath)
         os.remove(log_file)
-    return results, charge_runtime, analysis_runtime
+
+    current = list(results['results.CHARGE.'+cathode_name]['I'])
+    voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
+    PCE = __plot_iv_curve(basefile, current, voltage, "am")
+
+    return results, charge_runtime, analysis_runtime, PCE
 
 def charge_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
@@ -132,7 +137,7 @@ def iv_curve(basefile: str,
              *,
              device_kw={"hide": True}):
     
-    """ Plots the iv curve of the cell in CHARGE. 
+    """ Obtains IV curve from already run simulation. 
     Args:
         basefile: Path of the CHARGE file (e.g. C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev")
         bias_regime: defines the regime (i.e. forward or reverse) in lower case
@@ -141,7 +146,6 @@ def iv_curve(basefile: str,
         full example: iv_curve(r"C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
     """
 
-    #obtains IV curve from already run simulation
     cathode_name = get_results['results']['CHARGE']
     results = charge_run_analysis(basefile, get_results, device_kw)
     current = list(results['results.CHARGE.'+cathode_name]['I'])
@@ -155,9 +159,7 @@ def iv_curve(basefile: str,
     
     
 
-def __plot_iv_curve(basefile, current, voltage):
-    
-    logger.warning("Make sure the name of the simulation region is correct in the script")
+def __plot_iv_curve(basefile, current, voltage, regime):
     
     with lumapi.DEVICE(filename=basefile, hide = True) as charge:
         sim_region = charge.get("simulation region")
@@ -172,55 +174,67 @@ def __plot_iv_curve(basefile, current, voltage):
             print("This is a 3D simulation")
             charge.select(str(sim_region))
             Ly = charge.get("y span")
+
     Lx = Lx * 100 #from m to cm
     Ly = Ly * 100 #from m to cm
     area = Ly*Lx #area in cm^2 
     current_density = (np.array(current)*1000)/area
     fig, ax = plt.subplots()
     Ir = 1000 #W/m²
-
-    #DETERMINE JSC (ROUGH)
-    abs_voltage_min = min(np.absolute(voltage)) #volatage value closest to zero
-    if abs_voltage_min in voltage:
-        Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
-        Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
-        #Jsc = current_density[voltage.index(abs_voltage_min)]
-        #Isc = current[voltage.index(abs_voltage_min)]   
-    elif -abs_voltage_min in voltage: 
-        #the position in the array of Jsc and Isc should be the same
-        Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
-        Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
-        #Jsc = current_density[voltage.index(-abs_voltage_min)]
-        #Isc = current[voltage.index(-abs_voltage_min)]   
- 
-
-    #DETERMINE VOC THROUGH INTERPOLATION
-    Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
-    stop = stop[0]
-    Voc = Voc[0]
-    props = dict(boxstyle='round', facecolor='white', alpha=0.5)
-
-    plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
-    plt.plot(Voc, 0, 'o', color = "red")       
-
-    P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
-
-    ax.add_patch(Rectangle((voltage[find_index(P, max(P))],current_density[find_index(P, max(P))]),
-                                                    -voltage[find_index(P, max(P))], -current_density[find_index(P, max(P))],
-                                                    facecolor='lightsteelblue'))
-    FF = abs(max(P)/(Voc*Isc))
-    PCE = ((FF*Voc*abs(Isc))/(Ir*(area*10**-4)))*100
     
-    textstr = f'Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%'
-    print(textstr)
-    plt.text(0.05, 0.80, textstr, transform=ax.transAxes, fontsize=17, verticalalignment='top', bbox=props)
-    plt.ylabel('Current density [mA/cm²] ')
-    plt.xlabel('Voltage [V]')
-    plt.axhline(0, color='gray',alpha = 0.3)
-    plt.axvline(0, color='gray',alpha = 0.3)        
-    plt.grid()
-    plt.show()
-    return PCE
+    if regime == "am": 
+        #DETERMINE JSC (ROUGH)
+        abs_voltage_min = min(np.absolute(voltage)) #volatage value closest to zero
+        if abs_voltage_min in voltage:
+            Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
+            Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
+            #Jsc = current_density[voltage.index(abs_voltage_min)]
+            #Isc = current[voltage.index(abs_voltage_min)]   
+        elif -abs_voltage_min in voltage: 
+            #the position in the array of Jsc and Isc should be the same
+            Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
+            Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
+            #Jsc = current_density[voltage.index(-abs_voltage_min)]
+            #Isc = current[voltage.index(-abs_voltage_min)]   
+    
+
+        #DETERMINE VOC THROUGH INTERPOLATION
+        Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)      
+        stop = stop[0]
+        Voc = Voc[0]
+        props = dict(boxstyle='round', facecolor='white', alpha=0.5)
+
+        plt.plot(voltage[:stop+2], current_density[:stop+2], 'o-') 
+        plt.plot(Voc, 0, 'o', color = "red")       
+
+        P = [voltage[x]*abs(current[x]) for x in range(len(voltage)) if current[x]<0] #calculate the power for all points [W]
+
+        ax.add_patch(Rectangle((voltage[find_index(P, max(P))],current_density[find_index(P, max(P))]),
+                                                        -voltage[find_index(P, max(P))], -current_density[find_index(P, max(P))],
+                                                        facecolor='lightsteelblue'))
+        FF = abs(max(P)/(Voc*Isc))
+        PCE = ((FF*Voc*abs(Isc))/(Ir*(area*10**-4)))*100
+        
+        textstr = f'Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%'
+        print(textstr)
+        plt.text(0.05, 0.80, textstr, transform=ax.transAxes, fontsize=17, verticalalignment='top', bbox=props)
+        plt.ylabel('Current density [mA/cm²] ')
+        plt.xlabel('Voltage [V]')
+        plt.axhline(0, color='gray',alpha = 0.3)
+        plt.axvline(0, color='gray',alpha = 0.3)        
+        plt.grid()
+        plt.show()
+        return PCE
+    
+    elif regime == "dark":
+        plt.plot(voltage, current_density, 'o-') 
+        plt.ylabel('Current density [mA/cm²] ')
+        plt.xlabel('Voltage [V]')
+        plt.axhline(0, color='gray',alpha = 0.3)
+        plt.axvline(0, color='gray',alpha = 0.3)        
+        plt.grid()
+        plt.show()
+
 
 
 def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
