@@ -1,23 +1,18 @@
 import numpy as np
 import os
-import sys
 import matplotlib.pyplot as plt
 from typing import Union, Dict, List, Tuple
 import logging
 from uuid import uuid4
 import shutil
-import time
-import re
-import numpy.typing as npt
-import pandas as pd
+import sys
 from matplotlib.patches import Rectangle
-from datetime import datetime
 from PyAstronomy import pyaC
-
-import scipy.constants as scc
+from multiprocessing import Queue
+from em_methods.lumerical.lum_helper import CheckRunState, RunLumerical, _get_lumerical_results, LumericalError
 
 # Get module logger
-logger = logging.getLogger("sim")
+logger = logging.getLogger("dev")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -37,32 +32,9 @@ else:
     LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
 logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
+os.add_dll_directory(LUMAPI_PATH)
 import lumapi
 
-
-
-def _get_charge_results(fdtd_handler: lumapi.DEVICE, get_results: Dict[str, Dict[str, float]]) -> Dict:
-    """
-    Alias function to extract results from FDTD file (to avoid code redundancy)
-    """
-    # Obtain results
-    results = {}
-    get_results_info = list(get_results.keys())
-    if "data" in get_results_info:
-        for key, value in get_results["data"].items():
-            if not isinstance(value, list):
-                value = [value]
-            for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["data."+key+"."+value_i] = fdtd_handler.getdata(key, value_i)
-    if "results" in get_results_info:
-        for key, value in get_results["results"].items():
-            if not isinstance(value, list):
-                value = [value]
-            for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["results."+key+"."+value_i] = fdtd_handler.getresult(key, value_i)
-    return results
 
 """ Main functions """
 
@@ -101,63 +73,41 @@ def charge_run(basefile: str,
     shutil.copyfile(basefile, new_filepath)
     cathode_name = get_results['results']['CHARGE']
     __set_iv_parameters(new_filepath, cathode_name, bias_regime)
-
-    # Update simulation properties, run and get results
-    with lumapi.DEVICE(filename=new_filepath, **device_kw) as charge:
-        # Update structures
-        for structure_key, structure_value in properties.items():
-            logger.debug(f"Editing: {structure_key}")
-            charge.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                logger.debug(
-                    f"Updating: {parameter_key} to {parameter_value}")
-                charge.set(parameter_key, parameter_value)
-        # Note: The double fdtd.runsetup() is important for when the setup scripts
-        #       (such as the model script) depend on variables from other
-        #       scripts. For example the model scripts needs the internal property
-        #       of a layer generated from a structure group.
-        #       The first run updates internally all the values
-        #       The second run then updates all the structures with the updated values
-        # charge.runsetup()
-        # charge.runsetup()
-        logger.debug(f"Running...")
-        start_time = time.time()
-        charge.run("CHARGE")
-        charge_runtime = time.time() - start_time
-        start_time = time.time()
-        charge.runanalysis()
-        analysis_runtime = time.time() - start_time
-        logger.info(
-            f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
-        results = _get_charge_results(charge, get_results)
-    # Gather info from log and the delete it
+    # Get logfile name
     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
-    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
-    autoshut_off_list: List[Tuple[float, float]] = []
-    with open(log_file, mode="r") as log:
-        for log_line in log.readlines():
-            match = re.search(autoshut_off_re, log_line)
-            if match:
-                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
-                autoshut_off_val = float(log_line.split(" ")[-1])
-                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
-    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
+    # Run simulation - the process is as follows
+    # 1. Create Queue to Store the data
+    # 2. Create a process (RunLumerical) to run the lumerical file
+    #       - This avoids problems when the simulation gives errors
+    # 3. Create a Thread to check run state
+    #       - If thread finds error then it kill the RunLumerical process
+    process_queue = Queue()
+    run_process = RunLumerical(process_queue, new_filepath, properties, get_results, **device_kw)
+    check_thread = CheckRunState(log_file, run_process)
+    run_process.start()
+    check_thread.start()
+    logger.debug("Run Process Started...")
+    run_process.join()
+    if process_queue.empty():
+        raise LumericalError("Simulation Finished Prematurely")
+    # Extract data from process
+    data = []
+    while not process_queue.empty():
+        data.append(process_queue.get())
+    # Check for other possible runtime problems
+    if len(data) < 2:
+        raise LumericalError("Error Running simulation")
+    if len(data) == 2:
+        raise LumericalError("Error acquiring data (problem with get_results)")
+    if len(data) > 3:
+        raise LumericalError("Unknown problem")
+    charge_runtime, analysis_runtime, results = tuple(data)
     if delete:
         os.remove(new_filepath)
         os.remove(log_file)
+    return results, charge_runtime, analysis_runtime
 
-    
-    current_forward, voltage_forward = iv_curve(new_filepath, 
-             get_results,
-             device_kw={"hide": True})
-
-    voltage = voltage_forward
-    current = current_forward
-    PCE = __plot_iv_curve(new_filepath, current, voltage)
-
-    return results, charge_runtime, analysis_runtime, autoshut_off_list, PCE
-
-def __charge_run_analysis(basefile: str,
+def charge_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
                       device_kw={"hide": True}):
     """
@@ -170,7 +120,7 @@ def __charge_run_analysis(basefile: str,
             time: Time to run the simulation
     """
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
-        results = _get_charge_results(charge, get_results)
+        results = _get_lumerical_results(charge, get_results)
     return results
 
 def find_index(wv_list, n):        
@@ -193,7 +143,7 @@ def iv_curve(basefile: str,
 
     #obtains IV curve from already run simulation
     cathode_name = get_results['results']['CHARGE']
-    results = __charge_run_analysis(basefile, get_results, device_kw)
+    results = charge_run_analysis(basefile, get_results, device_kw)
     current = list(results['results.CHARGE.'+cathode_name]['I'])
     voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
 
