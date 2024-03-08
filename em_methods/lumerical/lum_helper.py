@@ -28,8 +28,10 @@ else:
     LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
 logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
-os.add_dll_directory(LUMAPI_PATH)
+if os.name == "nt":
+    os.add_dll_directory(LUMAPI_PATH)
 import lumapi
+
 
 class CheckRunState(Thread):
     """
@@ -37,6 +39,7 @@ class CheckRunState(Thread):
     detect if error occured...
     If so kill running process
     """
+
     def __init__(self, logfile: str, lum_process: Process):
         super().__init__(daemon=True)
         self.logfile: str = logfile
