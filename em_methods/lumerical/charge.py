@@ -47,7 +47,7 @@ def charge_run(basefile: str,
              savepath: Union[None, str] = None,
              override_prefix: Union[None, str] = None,
              delete: bool = False,
-             device_kw: bool = {"hide": False}
+             device_kw = {"hide": False}
              ):
     """
     Generic function to run lumerical files from python
