@@ -1,4 +1,3 @@
-
 from threading import Thread
 from multiprocessing import Process, Queue
 import os
@@ -62,7 +61,7 @@ class CheckRunState(Thread):
             time.sleep(5)
 
     def _check_state(self):
-        """ Determine running state for file """
+        """Determine running state for file"""
         with open(self.logfile, "r") as logfile:
             log_data: str = logfile.read()
         if "Simulation completed successfully" in log_data:
@@ -72,6 +71,7 @@ class CheckRunState(Thread):
         else:
             return 0
 
+
 class RunLumerical(Process):
     """
     Main Process to run the lumerical file.
@@ -80,7 +80,15 @@ class RunLumerical(Process):
     By running in a different process it is possible to kill
         the process and still keep running any script
     """
-    def __init__(self, queue: Queue, filepath: str, properties: Dict[str, Dict[str, float]], get_results: Dict[str, Dict[str, Union[str, List]]], **lum_kw):
+
+    def __init__(
+        self,
+        queue: Queue,
+        filepath: str,
+        properties: Dict[str, Dict[str, float]],
+        get_results: Dict[str, Dict[str, Union[str, List]]],
+        **lum_kw,
+    ):
         super().__init__()
         self.queue = queue
         self.filepath = filepath
@@ -95,8 +103,7 @@ class RunLumerical(Process):
                 logger.debug(f"Editing: {structure_key}")
                 charge.select(structure_key)
                 for parameter_key, parameter_value in structure_value.items():
-                    logger.debug(
-                        f"Updating: {parameter_key} to {parameter_value}")
+                    logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     charge.set(parameter_key, parameter_value)
             # Note: The double fdtd.runsetup() is important for when the setup scripts
             #       (such as the model script) depend on variables from other
@@ -117,21 +124,25 @@ class RunLumerical(Process):
             analysis_runtime = time.time() - start_time
             self.queue.put(analysis_runtime)
             logger.info(
-                f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
+                f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
+            )
             results = _get_lumerical_results(charge, self.get_results)
             self.queue.put(results)
+
 
 class LumericalError(Exception):
     """
     Class to aggregate all lumerical exception errors
     """
+
     def __init__(self, message) -> None:
         self.message = message
         super().__init__(self.message)
 
 
-
-def _get_lumerical_results(lum_handler, get_results: Dict[str, Dict[str, float]]) -> Dict:
+def _get_lumerical_results(
+    lum_handler, get_results: Dict[str, Dict[str, Union[List, str]]]
+) -> Dict:
     """
     Alias function to extract results from Lumerical file (to avoid code redundancy)
     """
@@ -144,12 +155,16 @@ def _get_lumerical_results(lum_handler, get_results: Dict[str, Dict[str, float]]
                 value = [value]
             for value_i in value:
                 logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["data."+key+"."+value_i] = lum_handler.getdata(key, value_i)
+                results["data." + key + "." + value_i] = lum_handler.getdata(
+                    key, value_i
+                )
     if "results" in get_results_info:
         for key, value in get_results["results"].items():
             if not isinstance(value, list):
                 value = [value]
             for value_i in value:
                 logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["results."+key+"."+value_i] = lum_handler.getresult(key, value_i)
+                results["results." + key + "." + value_i] = lum_handler.getresult(
+                    key, value_i
+                )
     return results
