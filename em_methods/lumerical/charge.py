@@ -410,7 +410,7 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             charge.importdataset(os.path.join(path, file))
             charge.save()
             PCE.append(charge_run(new_filepath, properties, names,
-                                   func=__set_iv_parameters, **{"bias_regime":"forward","name": names})[3])
+                                   func=__set_iv_parameters, **{"bias_regime": bias_regime,"name": names})[3])
             print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
         charge.close()
 
