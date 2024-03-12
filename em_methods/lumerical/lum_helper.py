@@ -102,6 +102,7 @@ class RunLumerical(Process):
 
     def run(self):
         with lumapi.DEVICE(filename=self.filepath, **self.lum_kw) as charge:
+            charge.switchtolayout()
             # Update structures
             for structure_key, structure_value in self.properties.items():
                 logger.debug(f"Editing: {structure_key}")
@@ -109,17 +110,20 @@ class RunLumerical(Process):
                 for parameter_key, parameter_value in structure_value.items():
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     charge.set(parameter_key, parameter_value)
+            charge.runsetup()
+            charge.runsetup()
             if self.func is not None:
                 logger.debug(f"Running External function {self.func.__name__}\n{self.kwargs}...")
                 self.func(charge, **self.kwargs)
+            
             # Note: The double fdtd.runsetup() is important for when the setup scripts
             #       (such as the model script) depend on variables from other
             #       scripts. For example the model scripts needs the internal property
             #       of a layer generated from a structure group.
             #       The first run updates internally all the values
             #       The second run then updates all the structures with the updated values
-            #charge.runsetup()
-            #charge.runsetup()
+            charge.runsetup()
+            charge.runsetup()
             logger.debug(f"Running...")
             start_time = time.time()
             charge.switchtolayout()
