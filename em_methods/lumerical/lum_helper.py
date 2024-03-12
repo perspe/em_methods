@@ -4,6 +4,7 @@ import os
 import sys
 from typing import List, Dict, Union, Callable
 import logging
+import logging.handlers
 import time
 from enum import Enum
 import psutil
@@ -116,7 +117,10 @@ class RunLumerical(Process):
 
     def __init__(
         self,
-        queue: Queue,
+        method: LumMethod,
+        *,
+        proc_queue: Queue,
+        log_queue: Queue,
         filepath: str,
         properties: Dict[str, Dict[str, float]],
         get_results: Dict[str, Dict[str, Union[str, List]]],
@@ -125,7 +129,10 @@ class RunLumerical(Process):
         **kwargs,
     ):
         super().__init__()
-        self.queue = queue
+        log_handler = logging.handlers.QueueHandler(log_queue)
+        logger.addHandler(log_handler)
+        self.method = method
+        self.queue = proc_queue
         self.filepath = filepath
         self.properties = properties
         self.get_results = get_results
