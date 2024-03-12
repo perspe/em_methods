@@ -6,6 +6,7 @@ from typing import List, Dict, Union
 import logging
 import time
 from enum import Enum
+import psutil
 
 # Get module logger
 logger = logging.getLogger("dev")
@@ -52,22 +53,27 @@ def _run_method(method: LumMethod) -> Union[None,Callable]:
 
 class CheckRunState(Thread):
     """
-    Thread to read Lumerical Log file and
-    detect if error occured...
-    If so kill running process
+    Thread to check Lumerical Run State. Kill if error occurred
+    Args:
+        logfile
     """
 
     def __init__(self, logfile: str, lum_process: Process):
         super().__init__(daemon=True)
         self.logfile: str = logfile
         self.lum_process: Process = lum_process
+        if self.lum_process.pid is None:
+            raise Exception("RunLumerical process has not yet started...")
+        # Avoid problems when simulation deletes logfile
+        self._logfile_exists = False
 
     def run(self):
         while True:
-            if not os.path.isfile(self.logfile):
+            if not self._logfile_exists and not os.path.isfile(self.logfile):
                 logger.debug("Logfile not detected")
                 time.sleep(5)
                 continue
+            self._logfile_exists = True
             curr_state: int = self._check_state()
             if curr_state == -1:
                 logger.critical("Error detected in simulation")
@@ -78,13 +84,13 @@ class CheckRunState(Thread):
                 break
             time.sleep(5)
 
-    def _check_state(self):
+    def _check_state(self) -> int:
         """Determine running state for file"""
+        if not psutil.pid_exists(self.lum_process.pid):
+            return 1
         with open(self.logfile, "r") as logfile:
             log_data: str = logfile.read()
-        if "Simulation completed successfully" in log_data:
-            return 1
-        elif "Error" in log_data:
+        if "Error" in log_data:
             return -1
         else:
             return 0
