@@ -2,7 +2,7 @@ from threading import Thread
 from multiprocessing import Process, Queue
 import os
 import sys
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Callable
 import logging
 import time
 from enum import Enum
@@ -111,8 +111,8 @@ class RunLumerical(Process):
         filepath: str,
         properties: Dict[str, Dict[str, float]],
         get_results: Dict[str, Dict[str, Union[str, List]]],
-        lum_kw: Dict,
-        func=None,
+        func: Union[Callable, None]=None,
+        lumerical_kw: Dict,
         **kwargs,
     ):
         super().__init__()
@@ -121,7 +121,7 @@ class RunLumerical(Process):
         self.properties = properties
         self.get_results = get_results
         self.func = func
-        self.lum_kw = lum_kw
+        self.lum_kw = lumerical_kw
         self.kwargs = kwargs
 
     def run(self):
@@ -136,37 +136,40 @@ class RunLumerical(Process):
             # Update structures
             for structure_key, structure_value in self.properties.items():
                 logger.debug(f"Editing: {structure_key}")
-                charge.select(structure_key)
+                lumfile.select(structure_key)
                 for parameter_key, parameter_value in structure_value.items():
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
-                    charge.set(parameter_key, parameter_value)
-            charge.save()
+                    lumfile.set(parameter_key, parameter_value)
+            lumfile.runsetup()
             if self.func is not None:
-                logger.debug(f"Running External function {self.func.__name__}\n{self.kwargs}...")
-                self.func(charge, **self.kwargs)
-            
-            # Note: The double fdtd.runsetup() is important for when the setup scripts
+                logger.debug(f"""
+                             Running External function:
+                             Name:\"{self.func.__name__}\"
+                             Args:{self.kwargs}
+                             """)
+                self.func(lumfile, **self.kwargs)
+            # Note: The double lumfile.runsetup() is important for when the setup scripts
             #       (such as the model script) depend on variables from other
             #       scripts. For example the model scripts needs the internal property
             #       of a layer generated from a structure group.
             #       The first run updates internally all the values
             #       The second run then updates all the structures with the updated values
-            charge.runsetup()
-            charge.runsetup()
+            lumfile.runsetup()
+            lumfile.runsetup()
             logger.debug(f"Running...")
             start_time = time.time()
-            charge.switchtolayout()
-            charge.run("CHARGE")
+            lumfile.switchtolayout()
+            lumfile.run("CHARGE")
             charge_runtime = time.time() - start_time
             self.queue.put(charge_runtime)
             start_time = time.time()
-            charge.runanalysis()
+            lumfile.runanalysis()
             analysis_runtime = time.time() - start_time
             self.queue.put(analysis_runtime)
             logger.info(
                 f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
             )
-            results = _get_lumerical_results(charge, self.get_results)
+            results = _get_lumerical_results(lumfile, self.get_results)
             self.queue.put(results)
 
 
