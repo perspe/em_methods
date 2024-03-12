@@ -5,6 +5,7 @@ import sys
 from typing import List, Dict, Union
 import logging
 import time
+from enum import Enum
 
 # Get module logger
 logger = logging.getLogger("dev")
@@ -30,6 +31,23 @@ sys.path.append(LUMAPI_PATH)
 if os.name == "nt":
     os.add_dll_directory(LUMAPI_PATH)
 import lumapi
+
+class LumMethod(Enum):
+    """ Enum class with the different Lumerical Simulation methods """
+    CHARGE = 1
+    DEVICE = 1
+    FDTD = 2
+    HEAT = 3
+
+def _run_method(method: LumMethod) -> Union[None,Callable]:
+    """ Function that determines the Solver to be used for the simulation """
+    logger.debug(f"Method: {method}")
+    if method == LumMethod.CHARGE or method == LumMethod.DEVICE:
+        return lumapi.DEVICE
+    elif method == LumMethod.FDTD:
+        return lumapi.FDTD
+    else:
+        return None
 
 
 class CheckRunState(Thread):
@@ -101,8 +119,14 @@ class RunLumerical(Process):
         self.kwargs = kwargs
 
     def run(self):
-        with lumapi.DEVICE(filename=self.filepath, **self.lum_kw) as charge:
-            charge.switchtolayout()
+        lum_run_function = _run_method(self.method)
+        if lum_run_function is None:
+            raise LumericalError(
+                    f"Invalid Method {self.method}: {[method_i for method_i in LumMethod]}"
+                    )
+        with lum_run_function(filename=self.filepath, **self.lum_kw) as lumfile:
+            # Guarantee simulation file is not in simulation mode
+            lumfile.switchtolayout()
             # Update structures
             for structure_key, structure_value in self.properties.items():
                 logger.debug(f"Editing: {structure_key}")
