@@ -103,6 +103,15 @@ class RunLumerical(Process):
         any kind of error and just gets stuck.
     By running in a different process it is possible to kill
         the process and still keep running any script
+    Args:
+        proc_queue: Queue for the main process, to extract simulation results
+        log_queue: Queue to log information into logfile (often = Queue(-1))
+        filepath: Lumerical file path
+        properties: List of properties to change
+        get_results: List of results to extract from lumerical
+        func: Extra function to run inside lumerical
+        lumerical_kw: Extra arguments for the lumerical.PROGRAM()
+        kwargs: Extra arguments for func
     """
 
     def __init__(
