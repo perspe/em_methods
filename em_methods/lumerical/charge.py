@@ -39,15 +39,16 @@ import lumapi
 
 """ Main functions """
 
-def charge_run(basefile: str,
-             bias_regime:str,  
+def charge_run(basefile: str, 
              properties: Dict[str, Dict[str, float]],
-             get_results: Dict[str, Dict[str, Union[str, List]]],
+             names,
              *,
+             func = None,
              savepath: Union[None, str] = None,
              override_prefix: Union[None, str] = None,
              delete: bool = False,
-             device_kw = {"hide": False}
+             device_kw = {"hide": False},
+             **kwargs
              ):
     """
     Generic function to run lumerical files from python
@@ -55,10 +56,10 @@ def charge_run(basefile: str,
     Args:
             basefile: Path to the original file
             properties: Dictionary with the property object and property names and values
-            get_results: Dictionary with the properties to be calculated
             savepath (default=.): Override default savepath for the new file
             override_prefix (default=None): Override prefix for the new file
             delete (default=False): Delete newly generated file
+            names: one array element of the gen_mat dictionary
     Return:
             results: Dictionary with all the results
             time: Time to run the simulation
@@ -72,9 +73,6 @@ def charge_run(basefile: str,
         savepath, override_prefix + "_" + basename)
     logger.debug(f"new_filepath:{new_filepath}")
     shutil.copyfile(basefile, new_filepath)
-    cathode_name = get_results['results']['CHARGE']
-    #__set_iv_parameters(new_filepath, cathode_name, bias_regime)
-
     # Get logfile name
     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
     # Run simulation - the process is as follows
@@ -83,8 +81,10 @@ def charge_run(basefile: str,
     #       - This avoids problems when the simulation gives errors
     # 3. Create a Thread to check run state
     #       - If thread finds error then it kill the RunLumerical process
+    get_results = {"results":{"CHARGE":str(names[3])}}  #get_results: Dictionary with the properties to be calculated
     process_queue = Queue()
-    run_process = RunLumerical(process_queue, new_filepath, properties, get_results, **device_kw)
+    logger.debug(f"Running External function {func}\n{kwargs}...")
+    run_process = RunLumerical(process_queue, new_filepath, properties, get_results,  func=func, lum_kw=device_kw, **kwargs)
     check_thread = CheckRunState(log_file, run_process)
     run_process.start()
     check_thread.start()
@@ -108,8 +108,8 @@ def charge_run(basefile: str,
         os.remove(new_filepath)
         os.remove(log_file)
 
-    current = list(results['results.CHARGE.'+cathode_name]['I'])    
-    voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
+    current = list(results['results.CHARGE.'+str(names[3])]['I'])    
+    voltage = list(results['results.CHARGE.'+str(names[3])]['V_'+str(names[3])])
     if len(current) == 1 and len(current[0]) != 1: #charge I output is not always concistent
         current = current[0]
         voltage = [float(arr[0]) for arr in voltage]
@@ -118,17 +118,22 @@ def charge_run(basefile: str,
     return results, charge_runtime, analysis_runtime, PCE, FF
 
 def charge_run_analysis(basefile: str,
-                      get_results: Dict[str, Dict[str, Union[str, List]]],
+                      names,
                       device_kw={"hide": True}):
     """
     Generic function gather simulation data from already simulated files
     Args:
             basefile: Path to the original file
-            get_results: Dictionary with the properties to be calculated
+            names: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings 
+            {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"], 
+            material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
+            names would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
+            
     Return:
             results: Dictionary with all the results
             time: Time to run the simulation
     """
+    get_results = {"results":{"CHARGE":str(names[3])}}
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
         results = _get_lumerical_results(charge, get_results)
     return results
@@ -138,7 +143,7 @@ def find_index(wv_list, n):
     return index[0]
 
 def iv_curve(basefile: str,
-             get_results: Dict[str, Dict[str, Union[str, List]]],
+             names,
              *,
              device_kw={"hide": True}):
     
@@ -146,15 +151,17 @@ def iv_curve(basefile: str,
     Args:
         basefile: Path of the CHARGE file (e.g. C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev")
         bias_regime: defines the regime (i.e. forward or reverse) in lower case
-        get retults: Dictionary with the cathode (e.g. "base") results path inside CHARGE (e.g. {"results":{"CHARGE":"base"}})
+        names: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings 
+        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"], 
+        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
+        names would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
         
         full example: iv_curve(r"C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
     """
 
-    cathode_name = get_results['results']['CHARGE']
-    results = charge_run_analysis(basefile, get_results, device_kw)
-    current = list(results['results.CHARGE.'+cathode_name]['I'])
-    voltage = list(results['results.CHARGE.'+cathode_name]['V_'+cathode_name])
+    results = charge_run_analysis(basefile, names, device_kw)
+    current = list(results['results.CHARGE.'+names[3]]['I'])
+    voltage = list(results['results.CHARGE.'+names[3]]['V_'+names[3]])
 
     if len(current) == 1 and len(current[0]) != 1: #charge I output is not always concistent
         current = current[0]
@@ -244,49 +251,90 @@ def __plot_iv_curve(basefile, current, voltage, regime):
 
 
 
-def __set_iv_parameters(basefile:str, cathode_name:str, bias_regime:str):
+def __set_iv_parameters(charge, bias_regime:str, name):
     """ Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
         basefile: directory of file
-        cathode_name: name of the cathode associated with the subcell in question
         subcell_name: name of the subcell (i.e Si or Perovskite)
+        bias_regime: forward or reverse bias
+        name: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings 
+        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"], 
+        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
+        name would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
     """
+    def_sim_region = "yes"
+    charge.switchtolayout()
     
-    with lumapi.DEVICE(filename=basefile, hide = True) as charge: #set the electode sweep as range (forward bias)
-        charge.switchtolayout()
-        #setting sweep parameters
-        if (bias_regime == "forward"):
-            charge.select("CHARGE")
-            charge.set("solver type","NEWTON")
-            charge.set("enable initialization", True)
-            #charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
-            charge.save()
+    if def_sim_region == "yes": #Is it necessary to define a simulation region
+        # Defines boundaries for simulation region -UNTESTED
+        charge.select("geometry::"+name[4]) #anode 
+        z_max= charge.get("z max")
+        charge.select("geometry::"+name[3]) #cathode
+        z_min= charge.get("z min")
+        charge.select("CHARGE::"+ str(name[1][:-4])) #solar generation 
+        x_span = charge.get("x span")
+        x = charge.get("x")
+        y_span = charge.get("y span")
+        y = charge.get("y")      
+
+        #Creates the simulation region (2D or 3D)-UNTESTED
+        charge.addsimulationregion()
+        charge.set("name", name[2]) #defines the name of the simulation region as the name of the semiconductor in question
+        if True:
+            charge.set("dimension",2)
+            charge.set("x",x)
+            charge.set("x span", x_span)
+            charge.set("y",y)
+
+        if False:
+            charge.set("dimension",3)
+            charge.set("x",x)
+            charge.set("x span", x_span)
+            charge.set("y",y)
+            charge.set("x span", y_span) 
             
-            print("we are in the forward section")
-            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
-            charge.set("sweep type","range")
-            charge.save()
-            charge.set("range start",0)
-            charge.set("range stop",1.5) 
-            charge.set("range num points",21)
-            charge.set("range backtracking","enabled")
-            charge.save()
+        charge.select(str(name[2]))
+        charge.set("z max", z_max )
+        charge.set("z min", z_min)
+        charge.select("CHARGE")
+        charge.set("simulation region", name[2])
+        charge.save()
 
-        #reverse bias
-        elif(bias_regime == "reverse"):
-            charge.select("CHARGE")
-            charge.set("solver type","GUMMEL")
-            charge.set("enable initialization", False)
-            charge.save()
+    #Defining solver parameters
+    if (bias_regime == "forward"):
+        charge.select("CHARGE")
+        charge.set("solver type","NEWTON")
+        charge.set("enable initialization", True)
+        #charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
+        charge.save()
+        
+        #setting sweep parameters
+        print("we are in the forward section")
+        charge.select("CHARGE::boundary conditions::"+str(name[3]))
+        charge.set("sweep type","range")
+        charge.save()
+        charge.set("range start",0)
+        charge.set("range stop",1.5) 
+        charge.set("range num points",11)
+        charge.set("range backtracking","enabled")
+        charge.save()
 
-            charge.select("CHARGE::boundary conditions::"+str(cathode_name))
-            charge.set("sweep type","range")
-            charge.save()
-            charge.set("range start",0) 
-            charge.set("range stop",-1) 
-            charge.set("range num points",21)
-            charge.set("range backtracking","enabled")
-            charge.save()
+    #reverse bias
+    elif(bias_regime == "reverse"):
+        charge.select("CHARGE")
+        charge.set("solver type","GUMMEL")
+        charge.set("enable initialization", False)
+        charge.save()
+
+        #setting sweep parameters
+        charge.select("CHARGE::boundary conditions::"+str(name[3]))
+        charge.set("sweep type","range")
+        charge.save()
+        charge.set("range start",0) 
+        charge.set("range stop",-1) 
+        charge.set("range num points",21)
+        charge.set("range backtracking","enabled")
+        charge.save()
 
 
 def get_gen(path, fdtd_file, properties, gen_mat): 
@@ -362,41 +410,10 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
             charge.importdataset(os.path.join(path, file))
             charge.save()
 
-            # Defines boundaries for simulation region -UNTESTED
-            charge.select("geometry::"+names[4]) #anode 
-            z_max= charge.get("z max")
-            charge.select("geometry::"+names[3]) #cathode
-            z_min= charge.get("z min")
-            charge.select("CHARGE::"+names[0]) #solar generation
-            x_span = charge.get("x span")
-            x = charge.get("x")
-            y_span = charge.get("y span")
-            y = charge.get("y")      
-
-            #Creates the simulation region (2D or 3D)-UNTESTED
-            charge.addsimulationregion()
-            charge.set("name", names[2]) #defines the name of the simulation region as the name of the semiconductor in question
-            if True:
-                charge.set("dimension",2)
-                charge.set("x",x)
-                charge.set("x span", x_span)
-                charge.set("y",y)
-
-            if False:
-                charge.set("dimension",3)
-                charge.set("x",x)
-                charge.set("x span", x_span)
-                charge.set("y",y)
-                charge.set("x span", y_span) 
-
-            charge.set("z max", z_max )
-            charge.set("z min", z_min)
-            charge.select("CHARGE")
-            charge.set("simulation region", names[2])
-            charge.save()
-            get_results = {"results":{"CHARGE":names[3]}}
-            PCE.append(charge_run(new_path, bias_regime, properties, get_results)[4])
+            PCE.append(charge_run(new_filepath, bias_regime, properties, names)[3])
             print(f'Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}')
         charge.close()
 
     return PCE
+
+
