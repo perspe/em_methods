@@ -110,8 +110,7 @@ class RunLumerical(Process):
                 for parameter_key, parameter_value in structure_value.items():
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     charge.set(parameter_key, parameter_value)
-            charge.runsetup()
-            charge.runsetup()
+            charge.save()
             if self.func is not None:
                 logger.debug(f"Running External function {self.func.__name__}\n{self.kwargs}...")
                 self.func(charge, **self.kwargs)
