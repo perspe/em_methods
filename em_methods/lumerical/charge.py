@@ -9,7 +9,13 @@ import sys
 from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
 from multiprocessing import Queue
-from em_methods.lumerical.lum_helper import CheckRunState, RunLumerical, _get_lumerical_results, LumericalError
+from em_methods.lumerical.lum_helper import (
+    CheckRunState,
+    RunLumerical,
+    _get_lumerical_results,
+    LumericalError,
+    LumMethod,
+)
 
 # Get module logger
 logger = logging.getLogger("dev")
@@ -83,10 +89,19 @@ def charge_run(basefile: str,
     #       - If thread finds error then it kill the RunLumerical process
     get_results = {"results":{"CHARGE":str(names[3])}}  #get_results: Dictionary with the properties to be calculated
     process_queue = Queue()
-    logger.debug(f"Running External function {func}\n{kwargs}...")
-    run_process = RunLumerical(process_queue, new_filepath, properties, get_results,  func=func, lum_kw=device_kw, **kwargs)
-    check_thread = CheckRunState(log_file, run_process)
+    run_process = RunLumerical(
+        LumMethod.CHARGE,
+        proc_queue=process_queue,
+        log_queue=Queue(-1),
+        filepath=new_filepath,
+        properties=properties,
+        get_results=get_results,
+        func=func,
+        lumerical_kw=device_kw,
+        **kwargs,
+    )
     run_process.start()
+    check_thread = CheckRunState(log_file, run_process)
     check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
