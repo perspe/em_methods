@@ -171,7 +171,7 @@ def find_index(wv_list, n):
     return index[0]
 
 
-def plot_iv_curve(results, regime, names):
+def iv_curve(results, regime, names):
 
     current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
     voltage = np.array(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
@@ -186,7 +186,6 @@ def plot_iv_curve(results, regime, names):
     Ly = Ly * 100  # from m to cm
     area = Ly * Lx  # area in cm^2
     current_density = (np.array(current) * 1000) / area
-    fig, ax = plt.subplots()
     Ir = 1000  # W/m²
 
     if regime == "am":
@@ -205,35 +204,36 @@ def plot_iv_curve(results, regime, names):
             # Isc = current[voltage.index(-abs_voltage_min)]
 
         # DETERMINE VOC THROUGH INTERPOLATION
-        print(voltage)
-        print(current_density)
         Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
         stop = stop[0]
         Voc = Voc[0]
-        props = dict(boxstyle="round", facecolor="white", alpha=0.5)
-
-        plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
-        plt.plot(Voc, 0, "o", color="red")
-
-        P = [
-            voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0
-        ]  # calculate the power for all points [W]
-
-        ax.add_patch(
-            Rectangle(
-                (
-                    voltage[find_index(P, max(P))],
-                    current_density[find_index(P, max(P))],
-                ),
-                -voltage[find_index(P, max(P))],
-                -current_density[find_index(P, max(P))],
-                facecolor="lightsteelblue",
-            )
-        )
+        P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
         FF = abs(max(P) / (Voc * Isc))
         PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+        return PCE, FF, Voc, Jsc, current_density, voltage, stop, P
+
+    elif regime == "dark":
+        return current_density, voltage
+        
+
+def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime,P):
+    fig, ax = plt.subplots()
+    if regime == 'am':
+        plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
+        plt.plot(Voc, 0, "o", color="red")
+        props = dict(boxstyle="round", facecolor="white", alpha=0.5)
+        ax.add_patch(
+                Rectangle(
+                    (
+                        voltage[find_index(P, max(P))],
+                        current_density[find_index(P, max(P))],
+                    ),
+                    -voltage[find_index(P, max(P))],
+                    -current_density[find_index(P, max(P))],
+                    facecolor="lightsteelblue",
+                )
+            )
         textstr = f"Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%"
-        print(textstr)
         plt.text(
             0.05,
             0.80,
@@ -242,16 +242,15 @@ def plot_iv_curve(results, regime, names):
             fontsize=17,
             verticalalignment="top",
             bbox=props,
-        )
+            )
         plt.ylabel("Current density [mA/cm²] ")
         plt.xlabel("Voltage [V]")
         plt.axhline(0, color="gray", alpha=0.3)
         plt.axvline(0, color="gray", alpha=0.3)
         plt.grid()
         plt.show()
-        return PCE, FF, Voc, Jsc
 
-    elif regime == "dark":
+    if regime == 'dark':
         plt.plot(voltage, current_density, "o-")
         plt.ylabel("Current density [mA/cm²] ")
         plt.xlabel("Voltage [V]")
@@ -311,7 +310,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
     # Create "Import generation rate" objects
     charge.addimportgen()
     charge.set("name", str(name.GenName[:-4]))
-    print(name.GenName[:-4])
 
     # Import generation file path
     charge.set("volume type", "solid")
