@@ -132,14 +132,12 @@ def charge_run(
         os.remove(new_filepath)
         os.remove(log_file)
 
-    # current = list(results["results.CHARGE." + str(names[3])]["I"])
-    # voltage = list(results["results.CHARGE." + str(names[3])]["V_" + str(names[3])])
-    # if (
-    #     len(current) == 1 and len(current[0]) != 1
-    # ):  # charge I output is not always consistent
-    #     current = current[0]
-    #     voltage = [float(arr[0]) for arr in voltage]
-    # PCE, FF = __plot_iv_curve(basefile, np.array(current), np.array(voltage), "am")
+    current = list(results["results.CHARGE." + str(names[3])]["I"])
+    voltage = list(results["results.CHARGE." + str(names[3])]["V_" + str(names[3])])
+    if (len(current) == 1 and len(current[0]) != 1):  # charge I output is not always consistent
+         current = current[0]
+         voltage = [float(arr[0]) for arr in voltage]
+    __plot_iv_curve(basefile, np.array(current), np.array(voltage), "am")
 
     return results, charge_runtime, analysis_runtime, data_info
 
@@ -198,7 +196,6 @@ def iv_curve(basefile: str, names, *, device_kw={"hide": True}):
 def __plot_iv_curve(basefile, current, voltage, regime):
     with lumapi.DEVICE(filename=basefile, hide=True) as charge:
         sim_region = charge.get("simulation region")
-        print(sim_region)
         charge.select(str(sim_region))
         Lx = charge.get("x span")
         if "3D" not in charge.get("dimension"):
@@ -260,7 +257,6 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         )
         FF = abs(max(P) / (Voc * Isc))
         PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
-
         textstr = f"Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%"
         print(textstr)
         plt.text(
@@ -290,7 +286,7 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         plt.show()
 
 
-def __set_iv_parameters(charge, bias_regime: str, name):
+def __set_iv_parameters(charge, bias_regime: str, name, path:str):
     """Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
         basefile: directory of file
@@ -303,6 +299,16 @@ def __set_iv_parameters(charge, bias_regime: str, name):
     """
     def_sim_region = "yes"
     charge.switchtolayout()
+    
+    # Create "Import generation rate" objects
+    charge.addimportgen()
+    charge.set("name", str(name[1][:-4]))
+
+    # Import generation file path
+    charge.set("volume type", "solid")
+    charge.set("volume solid", str(name[2]))
+    charge.importdataset(os.path.join(path, name[1]))
+    charge.save()
 
     if def_sim_region == "yes":  # Is it necessary to define a simulation region
         # Defines boundaries for simulation region -UNTESTED
@@ -431,25 +437,8 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
     new_filepath: str = os.path.join(path, override_prefix + "_" + charge_file)
     shutil.copyfile(charge_path, new_filepath)
 
-    PCE = []
-    with lumapi.DEVICE(filename=new_filepath, hide=True) as charge:
-        # CHANGE GENERATION PROFILE
-        for mat, names in gen_mat.items():
-            file = names[1]  # Generation file name
-            obj = names[2]  # Generation CHARGE object name
-
-            # Create "Import generation rate" objects
-            g_name = file.replace(".mat", "")
-            charge.addimportgen()
-            charge.set("name", g_name)
-
-            # Import generation file path
-            charge.set("volume type", "solid")
-            charge.set("volume solid", str(obj))
-            charge.importdataset(os.path.join(path, file))
-            charge.save()
-            PCE.append(
-                charge_run(
+    PCE = [] 
+    PCE.append(        charge_run(
                     new_filepath,
                     properties,
                     names,
@@ -457,7 +446,6 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
                     **{"bias_regime": bias_regime, "name": names},
                 )[3]
             )
-            print(f"Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}")
-        charge.close()
+    print(f"Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}")
 
     return PCE
