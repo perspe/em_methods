@@ -60,7 +60,7 @@ class SimInfo:
 def charge_run(
     basefile: str,
     properties: Dict[str, Dict[str, float]],
-    names: List,
+    names: SimInfo,
     *,
     get_info: Dict[str, str] ={},
     func=None,
@@ -102,8 +102,7 @@ def charge_run(
     #       - This avoids problems when the simulation gives errors
     # 3. Create a Thread to check run state
     #       - If thread finds error then it kill the RunLumerical process
-    get_results = {
-        "results": {"CHARGE": str(names[3])}
+    get_results = {"results": {"CHARGE": str(names.Cathode)}
     }  # get_results: Dictionary with the properties to be calculated
     process_queue = Queue()
     run_process = RunLumerical(
@@ -143,8 +142,8 @@ def charge_run(
         os.remove(new_filepath)
         os.remove(log_file)
 
-    current = list(results["results.CHARGE." + str(names[3])]["I"])
-    voltage = list(results["results.CHARGE." + str(names[3])]["V_" + str(names[3])])
+    current = list(results["results.CHARGE." + str(names.Cathode)]["I"])
+    voltage = list(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
     if (len(current) == 1 and len(current[0]) != 1):  # charge I output is not always consistent
          current = current[0]
          voltage = [float(arr[0]) for arr in voltage]
@@ -167,7 +166,7 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
             results: Dictionary with all the results
             time: Time to run the simulation
     """
-    get_results = {"results": {"CHARGE": str(names[3])}}
+    get_results = {"results": {"CHARGE": str(names.Cathode)}}
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
         results = _get_lumerical_results(charge, get_results)
     return results
@@ -192,8 +191,8 @@ def iv_curve(basefile: str, names, *, device_kw={"hide": True}):
     """
 
     results = charge_run_analysis(basefile, names, device_kw)
-    current = list(results["results.CHARGE." + names[3]]["I"])
-    voltage = list(results["results.CHARGE." + names[3]]["V_" + names[3]])
+    current = list(results["results.CHARGE." + names.Cathode]["I"])
+    voltage = list(results["results.CHARGE." + names.Cathode]["V_" + names.Cathode])
 
     if (
         len(current) == 1 and len(current[0]) != 1
@@ -295,8 +294,6 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         plt.axvline(0, color="gray", alpha=0.3)
         plt.grid()
         plt.show()
-
-
 
 
 def get_gen(path, fdtd_file, properties, gen_mat):
