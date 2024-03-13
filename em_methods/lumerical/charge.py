@@ -142,13 +142,7 @@ def charge_run(
         os.remove(new_filepath)
         os.remove(log_file)
 
-    current = list(results["results.CHARGE." + str(names.Cathode)]["I"])
-    voltage = list(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
-    if (len(current) == 1 and len(current[0]) != 1):  # charge I output is not always consistent
-         current = current[0]
-         voltage = [float(arr[0]) for arr in voltage]
-    __plot_iv_curve(basefile, np.array(current), np.array(voltage), "am")
-
+    
     return results, charge_runtime, analysis_runtime, data_info
 
 
@@ -203,19 +197,16 @@ def iv_curve(basefile: str, names, *, device_kw={"hide": True}):
     return np.array(current), np.array(voltage)
 
 
-def __plot_iv_curve(basefile, current, voltage, regime):
-    with lumapi.DEVICE(filename=basefile, hide=True) as charge:
-        sim_region = charge.get("simulation region")
-        charge.select(str(sim_region))
-        Lx = charge.get("x span")
-        if "3D" not in charge.get("dimension"):
-            print("This is a 2D simulation")
-            charge.select("CHARGE")
-            Ly = charge.get("norm length")
-        else:
-            print("This is a 3D simulation")
-            charge.select(str(sim_region))
-            Ly = charge.get("y span")
+def plot_iv_curve(results, regime, names):
+
+    current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
+    voltage = np.array(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
+    Lx = results["func_output"][0]
+    Ly = results["func_output"][1]
+
+    if (len(current) == 1 and len(current[0]) != 1):  # charge I output is not always consistent
+         current = current[0]
+         voltage = [float(arr[0]) for arr in voltage]
 
     Lx = Lx * 100  # from m to cm
     Ly = Ly * 100  # from m to cm
@@ -242,7 +233,7 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         # DETERMINE VOC THROUGH INTERPOLATION
         print(voltage)
         print(current_density)
-        Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)
+        Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
         stop = stop[0]
         Voc = Voc[0]
         props = dict(boxstyle="round", facecolor="white", alpha=0.5)
@@ -424,6 +415,22 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
         charge.set("range num points", 21)
         charge.set("range backtracking", "enabled")
         charge.save()
+    
+    charge.select(name.SCName)
+    Lx = charge.get("x span")
+    if "3D" not in charge.get("dimension"):
+        print("This is a 2D simulation")
+        charge.select("CHARGE")
+        Ly = charge.get("norm length")
+    else:
+        print("This is a 3D simulation")
+        charge.select(str(sim_region))
+        Ly = charge.get("y span")
+
+    return Lx, Ly
+    
+
+    
 
 
 

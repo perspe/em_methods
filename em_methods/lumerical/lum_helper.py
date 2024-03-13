@@ -2,7 +2,7 @@ from threading import Thread
 from multiprocessing import Process, Queue
 import os
 import sys
-from typing import List, Dict, Union, Callable
+from typing import List, Dict, Union, Callable, Any
 import logging
 import logging.handlers
 import time
@@ -168,14 +168,19 @@ class RunLumerical(Process):
                 for parameter_key, parameter_value in structure_value.items():
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     lumfile.set(parameter_key, parameter_value)
-            lumfile.runsetup()
+            lumfile.save()
+
+            results = {}
             if self.func is not None:
                 logger.debug(f"""
                              Running External function:
                              Name:\"{self.func.__name__}\"
                              Args:{self.kwargs}
                              """)
-                self.func(lumfile, **self.kwargs)
+                func_output: Any = self.func(lumfile, **self.kwargs)
+                results["func_output"] = func_output
+            else:
+                results["func_output"] = None
             # Note: The double lumfile.runsetup() is important for when the setup scripts
             #       (such as the model script) depend on variables from other
             #       scripts. For example the model scripts needs the internal property
@@ -197,13 +202,16 @@ class RunLumerical(Process):
             logger.info(
                 f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
             )
-            results = _get_lumerical_results(lumfile, self.get_results)
+            lum_results = _get_lumerical_results(lumfile, self.get_results)
+            results.update(lum_results)
             self.queue.put(results)
             info_data = self.get_info.copy()
             for info_obj, info_property in self.get_info.items():
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
             self.queue.put(info_data)
+
+            
 
 
 class LumericalError(Exception):
