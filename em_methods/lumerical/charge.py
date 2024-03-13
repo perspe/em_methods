@@ -171,32 +171,6 @@ def find_index(wv_list, n):
     return index[0]
 
 
-def iv_curve(basefile: str, names, *, device_kw={"hide": True}):
-    """Obtains IV curve from already run simulation.
-    Args:
-        basefile: Path of the CHARGE file (e.g. C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev")
-        bias_regime: defines the regime (i.e. forward or reverse) in lower case
-        names: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings
-        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"],
-        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
-        names would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
-
-        full example: iv_curve(r"C:\\Users\\MonicaDyreby\\Documents\\Planar silicon solar cell\\solar_cell.ldev", {},{"results":{"CHARGE":"base"}})
-    """
-
-    results = charge_run_analysis(basefile, names, device_kw)
-    current = list(results["results.CHARGE." + names.Cathode]["I"])
-    voltage = list(results["results.CHARGE." + names.Cathode]["V_" + names.Cathode])
-
-    if (
-        len(current) == 1 and len(current[0]) != 1
-    ):  # charge I output is not always concistent
-        current = current[0]
-        voltage = [float(arr[0]) for arr in voltage]
-
-    return np.array(current), np.array(voltage)
-
-
 def plot_iv_curve(results, regime, names):
 
     current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
@@ -275,7 +249,7 @@ def plot_iv_curve(results, regime, names):
         plt.axvline(0, color="gray", alpha=0.3)
         plt.grid()
         plt.show()
-        return PCE, FF
+        return PCE, FF, Voc, Jsc
 
     elif regime == "dark":
         plt.plot(voltage, current_density, "o-")
@@ -287,7 +261,7 @@ def plot_iv_curve(results, regime, names):
         plt.show()
 
 
-def get_gen(path, fdtd_file, properties, gen_mat):
+def get_gen(path, fdtd_file, properties, active_region_list):
     """Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
     Args:
@@ -312,9 +286,9 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         fdtd.save()
 
         # EXPORT GENERATION FILES
-        for mat, names in gen_mat.items():
-            gen_obj = names[0]  # Solar Generation analysis object name
-            file = names[1]  # generation file name
+        for names in active_region_list:
+            gen_obj = names.SolarGenName  # Solar Generation analysis object name
+            file = names.GenName # generation file name
             g_name = file.replace(".mat", "")
             fdtd.select(str(gen_obj))
             fdtd.set("export filename", str(g_name))
