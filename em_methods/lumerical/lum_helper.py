@@ -118,6 +118,7 @@ class RunLumerical(Process):
         filepath: Lumerical file path
         properties: List of properties to change
         get_results: List of results to extract from lumerical
+        get_info: Extra properties in the simulation to extrac information
         func: Extra function to run inside lumerical
         lumerical_kw: Extra arguments for the lumerical.PROGRAM()
         kwargs: Extra arguments for func
@@ -132,6 +133,7 @@ class RunLumerical(Process):
         filepath: str,
         properties: Dict[str, Dict[str, float]],
         get_results: Dict[str, Dict[str, Union[str, List]]],
+        get_info: Dict[str, str],
         func: Union[Callable, None]=None,
         lumerical_kw: Dict,
         **kwargs,
@@ -144,6 +146,7 @@ class RunLumerical(Process):
         self.filepath = filepath
         self.properties = properties
         self.get_results = get_results
+        self.get_info = get_info
         self.func = func
         self.lum_kw = lumerical_kw
         self.kwargs = kwargs
@@ -195,6 +198,11 @@ class RunLumerical(Process):
             )
             results = _get_lumerical_results(lumfile, self.get_results)
             self.queue.put(results)
+            info_data = self.get_info.copy()
+            for info_obj, info_property in self.get_info.items():
+                lumfile.select(info_obj)
+                info_data[info_obj] = lumfile.get(info_property)
+            self.queue.put(info_data)
 
 
 class LumericalError(Exception):

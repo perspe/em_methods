@@ -51,6 +51,7 @@ def charge_run(
     properties: Dict[str, Dict[str, float]],
     names: List,
     *,
+    get_info: Dict[str, str] ={},
     func=None,
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
@@ -101,6 +102,7 @@ def charge_run(
         filepath=new_filepath,
         properties=properties,
         get_results=get_results,
+        get_info=get_info,
         func=func,
         lumerical_kw=device_kw,
         **kwargs,
@@ -119,11 +121,13 @@ def charge_run(
     # Check for other possible runtime problems
     if len(data) < 2:
         raise LumericalError("Error Running simulation")
-    if len(data) == 2:
-        raise LumericalError("Error acquiring data (problem with get_results)")
-    if len(data) > 3:
+    elif len(data) == 2:
+        raise LumericalError("Error acquiring data (problem in get_results)")
+    elif len(data) == 3:
+        raise LumericalError("Error acquiring results (problem in get_info)")
+    elif len(data) > 4:
         raise LumericalError("Unknown problem")
-    charge_runtime, analysis_runtime, results = tuple(data)
+    charge_runtime, analysis_runtime, results, data_info = tuple(data)
     if delete:
         os.remove(new_filepath)
         os.remove(log_file)
@@ -137,7 +141,7 @@ def charge_run(
     #     voltage = [float(arr[0]) for arr in voltage]
     # PCE, FF = __plot_iv_curve(basefile, np.array(current), np.array(voltage), "am")
 
-    return results, charge_runtime, analysis_runtime
+    return results, charge_runtime, analysis_runtime, data_info
 
 
 def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):

@@ -73,3 +73,18 @@ class TestCHARGE(unittest.TestCase):
             pass
         # Check if CheckRunState finishes properly
         time.sleep(10)
+
+    def test_get_info(self):
+        """Make a single run of a test file with everything default"""
+        charge_file: str = os.path.join(BASETESTPATH, "teste_planar_2d.ldev")
+        properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
+        info = {"simulation region si": "x span"}
+        _, _, _, info = charge_run(
+            charge_file,
+            properties,
+            [0, 1, 2, "AZO"],
+            get_info=info,
+            delete=True,
+            device_kw={"hide": True},
+        )
+        logger.info(info)
