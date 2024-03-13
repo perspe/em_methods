@@ -402,37 +402,23 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
     return Lx, Ly
     
 
-    
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file):
 
-
-
-
-
-def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
-    """Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file)
-    and creates the simulation regions
-    Args:
-        path: String of folder path of FDTD and CHARGE files (must be in same folder);
-        charge_file: String DEVICE file name;
-        gen_mat: Dictionary with the absorbers and corresponding strings
-        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"],
-        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
-    """
-
+    PCE = []
+    FF = []
+    Voc = []
+    Jsc = []
     charge_path = os.path.join(path, charge_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_filepath: str = os.path.join(path, override_prefix + "_" + charge_file)
-    shutil.copyfile(charge_path, new_filepath)
-
-    PCE = [] 
-    PCE.append( charge_run(
-                    new_filepath,
-                    properties,
-                    names,
-                    func=__set_iv_parameters,
-                    **{"bias_regime": bias_regime, "name": names},
-                )[3]
-            )
-    print(f"Semiconductor {names[2]}, cathode {names[3]}, PCE = {PCE[-1]}")
-
-    return PCE
+    get_gen(path, fdtd_file, properties, active_region_list)
+    for names in active_region_list:
+        results = charge_run(charge_path, properties, names,
+            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path})
+        pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
+        PCE.append(pce)
+        FF.append(ff)
+        Voc.append(voc)
+        Jsc.append(jsc)
+        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+        plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+    
+    return PCE, FF, Voc, Jsc
