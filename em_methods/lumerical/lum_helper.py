@@ -157,6 +157,7 @@ class RunLumerical(Process):
             raise LumericalError(
                     f"Invalid Method {self.method}: {[method_i for method_i in LumMethod]}"
                     )
+        logger.debug("Starting Lumerical")
         with lum_run_function(filename=self.filepath, **self.lum_kw) as lumfile:
             # Guarantee simulation file is not in simulation mode
             lumfile.switchtolayout()

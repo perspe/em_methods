@@ -6,6 +6,7 @@ import logging
 from uuid import uuid4
 import shutil
 import sys
+from dataclasses import dataclass 
 from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
 from multiprocessing import Queue
@@ -41,6 +42,16 @@ sys.path.append(LUMAPI_PATH)
 if os.name == "nt":
     os.add_dll_directory(LUMAPI_PATH)
 import lumapi
+
+
+
+@dataclass
+class SimInfo:
+    SolarGenName: str
+    GenName: str
+    SCName: str
+    Cathode: str
+    Anode: str
 
 
 """ Main functions """
@@ -286,102 +297,6 @@ def __plot_iv_curve(basefile, current, voltage, regime):
         plt.show()
 
 
-def __set_iv_parameters(charge, bias_regime: str, name, path:str):
-    """Sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
-    Args:
-        basefile: directory of file
-        subcell_name: name of the subcell (i.e Si or Perovskite)
-        bias_regime: forward or reverse bias
-        name: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings
-        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"],
-        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
-        name would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
-    """
-    def_sim_region = "yes"
-    charge.switchtolayout()
-    
-    # Create "Import generation rate" objects
-    charge.addimportgen()
-    charge.set("name", str(name[1][:-4]))
-
-    # Import generation file path
-    charge.set("volume type", "solid")
-    charge.set("volume solid", str(name[2]))
-    charge.importdataset(os.path.join(path, name[1]))
-    charge.save()
-
-    if def_sim_region == "yes":  # Is it necessary to define a simulation region
-        # Defines boundaries for simulation region -UNTESTED
-        charge.select("geometry::" + name[4])  # anode
-        z_max = charge.get("z max")
-        charge.select("geometry::" + name[3])  # cathode
-        z_min = charge.get("z min")
-        charge.select("CHARGE::" + str(name[1][:-4]))  # solar generation
-        x_span = charge.get("x span")
-        x = charge.get("x")
-        y_span = charge.get("y span")
-        y = charge.get("y")
-
-        # Creates the simulation region (2D or 3D)-UNTESTED
-        charge.addsimulationregion()
-        charge.set(
-            "name", name[2]
-        )  # defines the name of the simulation region as the name of the semiconductor in question
-        if True:
-            charge.set("dimension", 2)
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-
-        if False:
-            charge.set("dimension", 3)
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-            charge.set("x span", y_span)
-
-        charge.select(str(name[2]))
-        charge.set("z max", z_max)
-        charge.set("z min", z_min)
-        charge.select("CHARGE")
-        charge.set("simulation region", name[2])
-        charge.save()
-
-    # Defining solver parameters
-    if bias_regime == "forward":
-        charge.select("CHARGE")
-        charge.set("solver type", "NEWTON")
-        charge.set("enable initialization", True)
-        # charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
-        charge.save()
-
-        # setting sweep parameters
-        print("we are in the forward section")
-        charge.select("CHARGE::boundary conditions::" + str(name[3]))
-        charge.set("sweep type", "range")
-        charge.save()
-        charge.set("range start", 0)
-        charge.set("range stop", 1.5)
-        charge.set("range num points", 11)
-        charge.set("range backtracking", "enabled")
-        charge.save()
-
-    # reverse bias
-    elif bias_regime == "reverse":
-        charge.select("CHARGE")
-        charge.set("solver type", "GUMMEL")
-        charge.set("enable initialization", False)
-        charge.save()
-
-        # setting sweep parameters
-        charge.select("CHARGE::boundary conditions::" + str(name[3]))
-        charge.set("sweep type", "range")
-        charge.save()
-        charge.set("range start", 0)
-        charge.set("range stop", -1)
-        charge.set("range num points", 21)
-        charge.set("range backtracking", "enabled")
-        charge.save()
 
 
 def get_gen(path, fdtd_file, properties, gen_mat):
@@ -420,6 +335,102 @@ def get_gen(path, fdtd_file, properties, gen_mat):
         fdtd.save()
         fdtd.close()
 
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
+    """ Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
+        sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
+    Args:
+        basefile: directory of file
+        bias_regime: forward or reverse bias
+        name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+    """
+    def_sim_region = "yes"
+    charge.switchtolayout()
+    
+    # Create "Import generation rate" objects
+    charge.addimportgen()
+    charge.set("name", str(name.GenName[:-4]))
+    print(name.GenName[:-4])
+
+    # Import generation file path
+    charge.set("volume type", "solid")
+    charge.set("volume solid", str(name.SCName))
+    charge.importdataset(os.path.join(path, name.GenName))
+    charge.save()
+
+    if def_sim_region == "yes":  # Is it necessary to define a simulation region
+        # Defines boundaries for simulation region -UNTESTED
+        charge.select("geometry::" + name.Anode)  # anode
+        z_max = charge.get("z max")
+        charge.select("geometry::" + name.Cathode)  # cathode
+        z_min = charge.get("z min")
+        charge.select("CHARGE::" + str(name.GenName[:-4]))  # solar generation
+        x_span = charge.get("x span")
+        x = charge.get("x")
+        y_span = charge.get("y span")
+        y = charge.get("y")
+
+        # Creates the simulation region (2D or 3D)-UNTESTED
+        charge.addsimulationregion()
+        charge.set("name", name.SCName)  # defines the name of the simulation region as the name of the semiconductor in question
+        if True:
+            charge.set("dimension", 2)
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+
+        if False:
+            charge.set("dimension", 3)
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+            charge.set("x span", y_span)
+
+        charge.select(str(name.SCName))
+        charge.set("z max", z_max)
+        charge.set("z min", z_min)
+        charge.select("CHARGE")
+        charge.set("simulation region", name.SCName)
+        charge.save()
+
+    # Defining solver parameters
+    if bias_regime == "forward":
+        charge.select("CHARGE")
+        charge.set("solver type", "NEWTON")
+        charge.set("enable initialization", True)
+        # charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
+        charge.save()
+
+        # setting sweep parameters
+        print("we are in the forward section")
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        charge.set("sweep type", "range")
+        charge.save()
+        charge.set("range start", 0)
+        charge.set("range stop", 1.5)
+        charge.set("range num points", 11)
+        charge.set("range backtracking", "enabled")
+        charge.save()
+
+    # reverse bias
+    elif bias_regime == "reverse":
+        charge.select("CHARGE")
+        charge.set("solver type", "GUMMEL")
+        charge.set("enable initialization", False)
+        charge.save()
+
+        # setting sweep parameters
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        charge.set("sweep type", "range")
+        charge.save()
+        charge.set("range start", 0)
+        charge.set("range stop", -1)
+        charge.set("range num points", 21)
+        charge.set("range backtracking", "enabled")
+        charge.save()
+
+
+
+
 
 def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
     """Alters the cell DESIGN ("properties"), IMPORTS the generation rate .mat file(s) (in same directory as FDTD file)
@@ -438,7 +449,7 @@ def updt_gen(path, charge_file, gen_mat, bias_regime, properties):
     shutil.copyfile(charge_path, new_filepath)
 
     PCE = [] 
-    PCE.append(        charge_run(
+    PCE.append( charge_run(
                     new_filepath,
                     properties,
                     names,
