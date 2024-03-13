@@ -168,8 +168,7 @@ class RunLumerical(Process):
                 for parameter_key, parameter_value in structure_value.items():
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     lumfile.set(parameter_key, parameter_value)
-            lumfile.save()
-
+            lumfile.runsetup()
             results = {}
             if self.func is not None:
                 logger.debug(f"""
