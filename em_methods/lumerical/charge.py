@@ -79,7 +79,9 @@ def charge_run(
             savepath (default=.): Override default savepath for the new file
             override_prefix (default=None): Override prefix for the new file
             delete (default=False): Delete newly generated file
-            names: one array element of the gen_mat dictionary
+            names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+            func: optional funtion
+            get_info: Dictionary with additional data to extract from the CHARGE file 
     Return:
             results: Dictionary with all the results
             time: Time to run the simulation
@@ -151,10 +153,7 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
     Generic function gather simulation data from already simulated files
     Args:
             basefile: Path to the original file
-            names: one of the array elements in the gen_mat dictionary with the absorbers and corresponding strings
-            {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"],
-            material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
-            names would thus be (for instance): ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]
+            names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
 
     Return:
             results: Dictionary with all the results
@@ -175,10 +174,8 @@ def iv_curve(results, regime, names):
     """
     Obtains the performance metrics of a solar cell
     Args:
-            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
-            current_density, voltage: Arrays obtained from the iv_curve funtion
-            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
-            stop: Voc position in voltage array 
+            results: Dictionary with all the results from the charge_run function
+            names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
             regime: "am" or "dark" for illuminated IV or dark IV
     Returns: 
             PCE, FF, Voc, Jsc, current_density, voltage, stop, P 
