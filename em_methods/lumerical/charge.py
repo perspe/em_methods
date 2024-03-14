@@ -402,17 +402,17 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
 
     PCE = []
     FF = []
     Voc = []
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list)
+    #get_gen(path, fdtd_file, properties, active_region_list)
     for names in active_region_list:
         results = charge_run(charge_path, properties, names,
-            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path})
+            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
         pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
         PCE.append(pce)
         FF.append(ff)
