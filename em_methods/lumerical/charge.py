@@ -172,6 +172,19 @@ def find_index(wv_list, n):
 
 
 def iv_curve(results, regime, names):
+    """
+    Obtains the performance metrics of a solar cell
+    Args:
+            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
+            current_density, voltage: Arrays obtained from the iv_curve funtion
+            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
+            stop: Voc position in voltage array 
+            regime: "am" or "dark" for illuminated IV or dark IV
+    Returns: 
+            PCE, FF, Voc, Jsc, current_density, voltage, stop, P 
+            OR
+            current_density, voltage
+    """
 
     current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
     voltage = np.array(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
@@ -216,7 +229,16 @@ def iv_curve(results, regime, names):
         return current_density, voltage
         
 
-def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime,P):
+def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str,P): #NOT FINISHED -> regime should not be an input, the performance metrics should be enough
+    """
+    Plots the IV curve
+    Args:
+            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
+            current_density, voltage: Arrays obtained from the iv_curve funtion
+            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
+            stop: Voc position in voltage array 
+            regime: "am" or "dark" for illuminated IV or dark IV
+    """
     fig, ax = plt.subplots()
     if regime == 'am':
         plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
@@ -261,15 +283,16 @@ def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime,P):
 
 
 def get_gen(path, fdtd_file, properties, active_region_list):
-    """Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
+    """
+    Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
     Args:
-        path: String of folder path of FDTD and CHARGE files (must be in same folder);
-        fdtd_file: String FDTD file name;
-        properties: Dictionary with the property object and property names and values
-        gen_mat: Dictionary with the absorbers and corresponding strings
-        {material_1: ["solar_gen_1", "1.mat", "geometry_name_1", "cathode_1", "anode_1"],
-        material_2: ["solar_gen_2", "2.mat", "geometry_name_2", "cathode_2", "anode_2"]}
+            path: directory where the FDTD and CHARGE files exist
+            fdtd_file: String FDTD file name
+            properties: Dictionary with the property object and property names and values
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
     """
     fdtd_path = os.path.join(path, fdtd_file)
     override_prefix: str = str(uuid4())[0:5]
@@ -297,17 +320,20 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.close()
 
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_sim_region=None):
-
-    """ Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
-        sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
+    """ 
+    Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
+    sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
-        charge: as in "with lumapi.DEVICE(...) as charge
-        bias_regime: forward or reverse bias
-        name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
-        path: CHARGE file path
-        def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+            charge: as in "with lumapi.DEVICE(...) as charge
+            bias_regime: forward or reverse bias
+            name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+            path: CHARGE file directory
+            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
                         A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
                         will be created
+    Returns:
+            
+            Lx,Ly: dimentions of solar cell surface area normal to the incident light direction
     """
     valid_dimensions = {"2d", "3d"}
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
@@ -403,13 +429,26 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
     
 
 def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
-
+    """ 
+    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
+    It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
+    Args:
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+            properties: Dictionary with the property object and property names and values                    
+            charge_file: name of CHARGE file
+            path: directory where the FDTD and CHARGE files exist
+            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                            A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
+                            will be created
+    """ 
     PCE = []
     FF = []
     Voc = []
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    #get_gen(path, fdtd_file, properties, active_region_list)
+    get_gen(path, fdtd_file, properties, active_region_list)
     for names in active_region_list:
         results = charge_run(charge_path, properties, names,
             func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
