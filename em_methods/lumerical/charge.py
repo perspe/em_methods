@@ -296,28 +296,32 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.save()
         fdtd.close()
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_sim_region=None):
+
     """ Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
         sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
     Args:
-        basefile: directory of file
+        charge: as in "with lumapi.DEVICE(...) as charge
         bias_regime: forward or reverse bias
         name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+        path: CHARGE file path
+        def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
+                        will be created
     """
-    def_sim_region = "yes"
+    valid_dimensions = {"2d", "3d"}
+    if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
+        raise ValueError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
-    
     # Create "Import generation rate" objects
     charge.addimportgen()
     charge.set("name", str(name.GenName[:-4]))
-
     # Import generation file path
     charge.set("volume type", "solid")
     charge.set("volume solid", str(name.SCName))
     charge.importdataset(os.path.join(path, name.GenName))
     charge.save()
-
-    if def_sim_region == "yes":  # Is it necessary to define a simulation region
+    if def_sim_region is not None: 
         # Defines boundaries for simulation region -UNTESTED
         charge.select("geometry::" + name.Anode)  # anode
         z_max = charge.get("z max")
@@ -328,39 +332,34 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
         x = charge.get("x")
         y_span = charge.get("y span")
         y = charge.get("y")
-
-        # Creates the simulation region (2D or 3D)-UNTESTED
+        # Creates the simulation region (2D or 3D)
         charge.addsimulationregion()
-        charge.set("name", name.SCName)  # defines the name of the simulation region as the name of the semiconductor in question
-        if True:
+        charge.set("name", name.SCName) 
+        if "2" in def_sim_region: 
             charge.set("dimension", 2)
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
-
-        if False:
+        elif "3" in def_sim_region:
             charge.set("dimension", 3)
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
             charge.set("x span", y_span)
-
         charge.select(str(name.SCName))
         charge.set("z max", z_max)
         charge.set("z min", z_min)
         charge.select("CHARGE")
         charge.set("simulation region", name.SCName)
         charge.save()
-
     # Defining solver parameters
     if bias_regime == "forward":
         charge.select("CHARGE")
         charge.set("solver type", "NEWTON")
         charge.set("enable initialization", True)
-        # charge.set("init step size",5) #rather small init step. If sims take too long to start look into changing it to a larger value
+        charge.set("init step size",1) #unsure if it works properly
         charge.save()
-
-        # setting sweep parameters
+        # Setting sweep parameters
         print("we are in the forward section")
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         charge.set("sweep type", "range")
@@ -370,15 +369,13 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
         charge.set("range num points", 11)
         charge.set("range backtracking", "enabled")
         charge.save()
-
-    # reverse bias
+    #Reverse bias regime
     elif bias_regime == "reverse":
         charge.select("CHARGE")
         charge.set("solver type", "GUMMEL")
         charge.set("enable initialization", False)
         charge.save()
-
-        # setting sweep parameters
+        #Setting sweep parameters
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         charge.set("sweep type", "range")
         charge.save()
@@ -387,8 +384,12 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
         charge.set("range num points", 21)
         charge.set("range backtracking", "enabled")
         charge.save()
-    
-    charge.select(name.SCName)
+    #Determining simulation region dimentions
+    if def_sim_region is not None:
+        sim_region = name.SCName
+    else:
+        sim_region = charge.getnamed("CHARGE","simulation region")
+    charge.select(sim_region)
     Lx = charge.get("x span")
     if "3D" not in charge.get("dimension"):
         print("This is a 2D simulation")
@@ -398,7 +399,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str):
         print("This is a 3D simulation")
         charge.select(str(sim_region))
         Ly = charge.get("y span")
-
     return Lx, Ly
     
 
