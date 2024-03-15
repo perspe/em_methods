@@ -444,8 +444,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     FF = []
     Voc = []
     Jsc = []
+    Current_Density = []
+    Voltage = []
     charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list)
+    #get_gen(path, fdtd_file, properties, active_region_list)
     for names in active_region_list:
         results = charge_run(charge_path, properties, names,
             func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
@@ -454,7 +456,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         FF.append(ff)
         Voc.append(voc)
         Jsc.append(jsc)
+        Current_Density.append(current_density)
+        Voltage.append(voltage)
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
         plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+        print(Jsc)
     
-    return PCE, FF, Voc, Jsc
+    return PCE, FF, Voc, Jsc, Current_Density, Voltage
