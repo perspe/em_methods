@@ -210,14 +210,25 @@ class RunLumerical(Process):
             logger.info(
                 f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
             )
-            lum_results = _get_lumerical_results(lumfile, self.get_results)
-            results.update(lum_results)
+            # lumfile.save()
+            # # Necessary for device to give time to store data
+            # if self.method == LumMethod.DEVICE or self.method == LumMethod.CHARGE:
+            #     time.sleep(3)
+            # Try get results
+            # If data cannot be accessed pass the error to the user
+            try:
+                lum_results = _get_lumerical_results(lumfile, self.get_results)
+                results.update(lum_results)
+            except lumapi.LumApiError as lum_error:
+                results = lum_error
             self.queue.put(results)
             info_data = self.get_info.copy()
             for info_obj, info_property in self.get_info.items():
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
             self.queue.put(info_data)
+            # Guarantee the file is properly closed
+            lumfile.close()
 
             
 
@@ -250,6 +261,7 @@ def _get_lumerical_results(
                 results["data." + key + "." + value_i] = lum_handler.getdata(
                     key, value_i
                 )
+                logger.debug(results["data."+key+"."+value_i])
     if "results" in get_results_info:
         for key, value in get_results["results"].items():
             if not isinstance(value, list):
@@ -259,4 +271,5 @@ def _get_lumerical_results(
                 results["results." + key + "." + value_i] = lum_handler.getresult(
                     key, value_i
                 )
+                logger.debug(results["results."+key+"."+value_i])
     return results
