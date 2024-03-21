@@ -19,7 +19,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("sim")
+logger = logging.getLogger("dev")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -126,10 +126,14 @@ def charge_run(
     run_process.join()
     if process_queue.empty():
         raise LumericalError("Simulation Finished Prematurely")
+    if delete:
+        os.remove(new_filepath)
+        os.remove(log_file)
     # Extract data from process
     data = []
     while not process_queue.empty():
         data.append(process_queue.get())
+    logger.debug(f"Simulation data:\n{data}")
     # Check for other possible runtime problems
     if len(data) < 2:
         raise LumericalError("Error Running simulation")
@@ -140,11 +144,6 @@ def charge_run(
     elif len(data) > 4:
         raise LumericalError("Unknown problem")
     charge_runtime, analysis_runtime, results, data_info = tuple(data)
-    if delete:
-        os.remove(new_filepath)
-        os.remove(log_file)
-
-    
     return results, charge_runtime, analysis_runtime, data_info
 
 
@@ -342,7 +341,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
     # Import generation file path
     charge.set("volume type", "solid")
     charge.set("volume solid", str(name.SCName))
-    charge.importdataset(os.path.join(path, name.GenName))
+    charge.importdataset(name.GenName)
     charge.save()
     if def_sim_region is not None: 
         # Defines boundaries for simulation region -UNTESTED
