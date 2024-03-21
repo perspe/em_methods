@@ -120,7 +120,7 @@ def charge_run(
         **kwargs,
     )
     run_process.start()
-    check_thread = CheckRunState(log_file, run_process)
+    check_thread = CheckRunState(log_file, run_process, process_queue)
     check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
