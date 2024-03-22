@@ -59,10 +59,11 @@ class CheckRunState(Thread):
         logfile
     """
 
-    def __init__(self, logfile: str, lum_process: Process):
+    def __init__(self, logfile: str, lum_process: Process, process_queue: Queue):
         super().__init__(daemon=True)
         self.logfile: str = logfile
         self.lum_process: Process = lum_process
+        self.lum_queue: Queue = process_queue
         if self.lum_process.pid is None:
             raise Exception("RunLumerical process has not yet started...")
         # Avoid problems when simulation deletes logfile
@@ -70,28 +71,36 @@ class CheckRunState(Thread):
 
     def run(self):
         while True:
-            is_lum_running = psutil.pid_exists(self.lum_process.pid)
-            if not is_lum_running and not self._logfile_exists:
+            # is_lum_running = psutil.pid_exists(self.lum_process.pid)
+            if not self.lum_process.is_alive() and not self._logfile_exists:
                 # Process terminated before creating logfile
                 logger.debug("RunLumerical process terminated prematurely")
                 break
             if not self._logfile_exists and not os.path.isfile(self.logfile):
                 # Waiting for logfile
-                logger.debug("Logfile not detected")
-                time.sleep(5)
+                logger.debug("Waiting for logfile")
+                time.sleep(2)
                 continue
             # Cue to indicate that simulation has started
             self._logfile_exists = True
-            if not is_lum_running:
+            if not self.lum_process.is_alive():
                 logger.info("Simulation Finished Successfully")
+                if self.lum_process.is_alive():
+                    self.lum_process.terminate()
+                self.lum_queue.close()
                 break
             if self._check_state() == -1:
-                # Simulation terminated with error
-                logger.critical("Error detected in simulation")
-                self.lum_process.terminate()
+                # Wait for when the Solver terminated with error
+                # but is still waiting for extra data
+                time.sleep(5)
+                # Kill process if still alive
+                if self.lum_process.is_alive():
+                    self.lum_process.terminate()
+                self.lum_queue.close()
+                logger.critical("Error detected in simulation (Done Cleanup)")
                 break
             else:
-                # Simulation is running
+                # Simulation is running wait 5 seconds to recheck
                 time.sleep(5)
                 continue
 
@@ -202,14 +211,24 @@ class RunLumerical(Process):
             logger.info(
                 f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
             )
-            lum_results = _get_lumerical_results(lumfile, self.get_results)
-            results.update(lum_results)
+            # lumfile.save()
+            # # Necessary for device to give time to store data
+            # if self.method == LumMethod.DEVICE or self.method == LumMethod.CHARGE:
+            #     time.sleep(3)
+            # Try get results
+            # If data cannot be accessed pass the error to the user
+            try:
+                lum_results = _get_lumerical_results(lumfile, self.get_results)
+                results.update(lum_results)
+            except lumapi.LumApiError as lum_error:
+                results = lum_error
             self.queue.put(results)
             info_data = self.get_info.copy()
             for info_obj, info_property in self.get_info.items():
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
             self.queue.put(info_data)
+            # Guarantee the file is properly closed
             lumfile.close()
 
             
@@ -243,6 +262,7 @@ def _get_lumerical_results(
                 results["data." + key + "." + value_i] = lum_handler.getdata(
                     key, value_i
                 )
+                logger.debug(results["data."+key+"."+value_i])
     if "results" in get_results_info:
         for key, value in get_results["results"].items():
             if not isinstance(value, list):
@@ -252,4 +272,5 @@ def _get_lumerical_results(
                 results["results." + key + "." + value_i] = lum_handler.getresult(
                     key, value_i
                 )
+                logger.debug(results["results."+key+"."+value_i])
     return results

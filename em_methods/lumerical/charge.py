@@ -19,7 +19,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("sim")
+logger = logging.getLogger("dev")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -120,16 +120,20 @@ def charge_run(
         **kwargs,
     )
     run_process.start()
-    check_thread = CheckRunState(log_file, run_process)
+    check_thread = CheckRunState(log_file, run_process, process_queue)
     check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
     if process_queue.empty():
         raise LumericalError("Simulation Finished Prematurely")
+    if delete:
+        os.remove(new_filepath)
+        os.remove(log_file)
     # Extract data from process
     data = []
     while not process_queue.empty():
         data.append(process_queue.get())
+    logger.debug(f"Simulation data:\n{data}")
     # Check for other possible runtime problems
     if len(data) < 2:
         raise LumericalError("Error Running simulation")
@@ -140,11 +144,6 @@ def charge_run(
     elif len(data) > 4:
         raise LumericalError("Unknown problem")
     charge_runtime, analysis_runtime, results, data_info = tuple(data)
-    if delete:
-        os.remove(new_filepath)
-        os.remove(log_file)
-
-    
     return results, charge_runtime, analysis_runtime, data_info
 
 
@@ -345,7 +344,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
     # Import generation file path
     charge.set("volume type", "solid")
     charge.set("volume solid", str(name.SCName))
-    charge.importdataset(os.path.join(path, name.GenName))
+    charge.importdataset(name.GenName)
     charge.save()
     if def_sim_region is not None: 
         # Defines boundaries for simulation region -UNTESTED
@@ -451,24 +450,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     Current_Density = []
     Voltage = []
     charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list) #generates the G files
+    #get_gen(path, fdtd_file, properties, active_region_list)
     for names in active_region_list:
-        #try:
-            #results = charge_run(charge_path, properties, names, 
-                                #func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
-            #pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
-            #plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p)        
-        #except LumericalError:
-            #try:            
-                #print("trying again")
-                #results = charge_run(charge_path, properties, names, 
-                #                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
-                #pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
-            #except LumericalError:
-            #    pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
-        
-        results = charge_run(charge_path, properties, names, 
-                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+        results = charge_run(charge_path, properties, names,
+            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
         pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
         #plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p)     
             
@@ -479,5 +464,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         Current_Density.append(current_density)
         Voltage.append(voltage)
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+        # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+        print(Jsc)
     
     return pce, ff, voc, jsc, current_density, voltage
