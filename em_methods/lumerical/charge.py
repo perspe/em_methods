@@ -67,7 +67,7 @@ def charge_run(
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
     delete: bool = False,
-    device_kw={"hide": False},
+    device_kw={"hide": True},
     **kwargs,
 ):
     """
@@ -162,6 +162,7 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
     get_results = {"results": {"CHARGE": str(names.Cathode)}}
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
         results = _get_lumerical_results(charge, get_results)
+        charge.close()
     return results
 
 
@@ -304,6 +305,7 @@ def get_gen(path, fdtd_file, properties, active_region_list):
                 fdtd.set(parameter_key, parameter_value)
         fdtd.save()
 
+
         # EXPORT GENERATION FILES
         for names in active_region_list:
             gen_obj = names.SolarGenName  # Solar Generation analysis object name
@@ -334,11 +336,12 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
     """
     valid_dimensions = {"2d", "3d"}
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
-        raise ValueError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
+        raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
     # Create "Import generation rate" objects
     charge.addimportgen()
     charge.set("name", str(name.GenName[:-4]))
+    print(str(name.GenName[:-4]))
     # Import generation file path
     charge.set("volume type", "solid")
     charge.set("volume solid", str(name.SCName))
@@ -380,7 +383,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.select("CHARGE")
         charge.set("solver type", "NEWTON")
         charge.set("enable initialization", True)
-        charge.set("init step size",1) #unsure if it works properly
+        #charge.set("init step size",1) #unsure if it works properly
         charge.save()
         # Setting sweep parameters
         print("we are in the forward section")
@@ -423,6 +426,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.select(str(sim_region))
         Ly = charge.get("y span")
     return Lx, Ly
+
     
 
 def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
@@ -447,11 +451,27 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     Current_Density = []
     Voltage = []
     charge_path = os.path.join(path, charge_file)
-    #get_gen(path, fdtd_file, properties, active_region_list)
+    get_gen(path, fdtd_file, properties, active_region_list) #generates the G files
     for names in active_region_list:
-        results = charge_run(charge_path, properties, names,
-            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+        #try:
+            #results = charge_run(charge_path, properties, names, 
+                                #func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+            #pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
+            #plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p)        
+        #except LumericalError:
+            #try:            
+                #print("trying again")
+                #results = charge_run(charge_path, properties, names, 
+                #                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                #pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
+            #except LumericalError:
+            #    pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
+        
+        results = charge_run(charge_path, properties, names, 
+                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
         pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
+        #plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p)     
+            
         PCE.append(pce)
         FF.append(ff)
         Voc.append(voc)
@@ -459,7 +479,5 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         Current_Density.append(current_density)
         Voltage.append(voltage)
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
-        plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
-        print(Jsc)
     
-    return PCE, FF, Voc, Jsc, Current_Density, Voltage
+    return pce, ff, voc, jsc, current_density, voltage

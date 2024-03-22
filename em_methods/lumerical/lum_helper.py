@@ -169,6 +169,7 @@ class RunLumerical(Process):
                     logger.debug(f"Updating: {parameter_key} to {parameter_value}")
                     lumfile.set(parameter_key, parameter_value)
             lumfile.runsetup()
+            lumfile.save()
             results = {}
             if self.func is not None:
                 logger.debug(f"""
@@ -209,6 +210,7 @@ class RunLumerical(Process):
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
             self.queue.put(info_data)
+            lumfile.close()
 
             
 

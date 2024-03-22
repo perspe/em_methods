@@ -2,7 +2,7 @@ import time
 import unittest
 import os
 import logging
-from em_methods.lumerical import charge_run, LumericalError
+from em_methods.lumerical import charge_run, LumericalError, SimInfo
 import pandas as pd
 
 # Override logger to always use debug
@@ -19,10 +19,11 @@ class TestCHARGE(unittest.TestCase):
         """Make a single run of a test file with everything default"""
         charge_file: str = os.path.join(BASETESTPATH, "teste_planar_2d.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
+        Si = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
         charge_run(
             charge_file,
             properties,
-            [0, 1, 2, "AZO"],
+            Si,
             delete=True,
             device_kw={"hide": True},
         )
