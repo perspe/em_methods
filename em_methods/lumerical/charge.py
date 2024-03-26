@@ -134,10 +134,10 @@ def charge_run(
         data.append(process_queue.get())
     logger.debug(f"Simulation data:\n{data}")
     # Check for other possible runtime problems
+    if not len(data) == 4:
+        raise LumericalError(f"Too much data from simulation... {len(data)} != 3")
     if isinstance(data[2], lumapi.LumApiError):
        raise LumericalError(data[2]) 
-    elif len(data) > 4:
-        raise LumericalError("Unknown problem")
     charge_runtime, analysis_runtime, results, data_info = tuple(data)
     return results, charge_runtime, analysis_runtime, data_info
 
@@ -457,7 +457,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                                 func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
         except LumericalError:
             try:            
-                print("trying again")
+                logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, names, 
                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
             except LumericalError:
