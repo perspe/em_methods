@@ -122,11 +122,13 @@ class TestCHARGE(unittest.TestCase):
                 "::model": {
                     'tITO': 0.1e-6,
                     'tSnO2': 0.1e-6,
-                    'tSpiro': 0.1e-6
+                    'tSpiro': 0.4e-6
                 }
         }
-        error_list = []
+        PCE = []
         for n in x:
             properties["::model"]["tSnO2"] = n
             pce, *_ = run_fdtd_and_charge(
                 active_region_list, properties, charge_file, path, fdtd_file,"2d")
+            PCE.append(pce)
+        print(PCE)
