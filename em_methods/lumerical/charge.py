@@ -135,12 +135,8 @@ def charge_run(
         data.append(process_queue.get())
     logger.debug(f"Simulation data:\n{data}")
     # Check for other possible runtime problems
-    if len(data) < 2:
-        raise LumericalError("Error Running simulation")
-    elif len(data) == 2:
-        raise LumericalError("Error acquiring data (problem in get_results)")
-    elif len(data) == 3:
-        raise LumericalError("Error acquiring results (problem in get_info)")
+    if isinstance(data[2], lumapi.LumApiError):
+       raise LumericalError(data[2]) 
     elif len(data) > 4:
         raise LumericalError("Unknown problem")
     charge_runtime, analysis_runtime, results, data_info = tuple(data)
@@ -199,7 +195,7 @@ def iv_curve(results, regime, names):
     Ir = 1000  # W/m²
 
     if regime == "am":
-        # DETERMINE JSC (ROUGH)
+        # DETERMINE JSC
         abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
         if abs_voltage_min in voltage:
             Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
@@ -215,8 +211,12 @@ def iv_curve(results, regime, names):
 
         # DETERMINE VOC THROUGH INTERPOLATION
         Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
-        stop = stop[0]
-        Voc = Voc[0]
+        try:
+            stop = stop[0]
+            Voc = Voc[0]
+        except IndexError: 
+            stop = np.nan
+            Voc = np.nan
         P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
         FF = abs(max(P) / (Voc * Isc))
         PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
@@ -237,7 +237,7 @@ def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str,P): #NOT 
             regime: "am" or "dark" for illuminated IV or dark IV
     """
     fig, ax = plt.subplots()
-    if regime == 'am':
+    if regime == 'am' and stop is not np.nan and Voc is not np.nan:
         plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
         plt.plot(Voc, 0, "o", color="red")
         props = dict(boxstyle="round", facecolor="white", alpha=0.5)
@@ -390,8 +390,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.set("sweep type", "range")
         charge.save()
         charge.set("range start", 0)
-        charge.set("range stop", 1.5)
-        charge.set("range num points", 11)
+        charge.set("range stop", 1.3)
+        charge.set("range num points", 51)
         charge.set("range backtracking", "enabled")
         charge.save()
     #Reverse bias regime
@@ -450,13 +450,30 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     Current_Density = []
     Voltage = []
     charge_path = os.path.join(path, charge_file)
-    #get_gen(path, fdtd_file, properties, active_region_list)
+    get_gen(path, fdtd_file, properties, active_region_list)
+    results = None
     for names in active_region_list:
-        results = charge_run(charge_path, properties, names,
-            func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+        try:
+            results = charge_run(charge_path, properties, names, 
+                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+        except LumericalError:
+            try:            
+                print("trying again")
+                results = charge_run(charge_path, properties, names, 
+                               func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+            except LumericalError:
+                pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
+                PCE.append(pce)
+                FF.append(ff)
+                Voc.append(voc)
+                Jsc.append(jsc)
+                Current_Density.append(current_density)
+                Voltage.append(voltage)
+                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+                continue
+
+
         pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
-        #plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p)     
-            
         PCE.append(pce)
         FF.append(ff)
         Voc.append(voc)
@@ -465,6 +482,6 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         Voltage.append(voltage)
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
-        print(Jsc)
+    
     
     return pce, ff, voc, jsc, current_density, voltage
