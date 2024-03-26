@@ -7,7 +7,6 @@ import logging
 import logging.handlers
 import time
 from enum import Enum
-import psutil
 
 # Get module logger
 logger = logging.getLogger("dev")
@@ -52,67 +51,67 @@ def _run_method(method: LumMethod) -> Union[None,Callable]:
         return None
 
 
-class CheckRunState(Thread):
-    """
-    Thread to check Lumerical Run State. Kill if error occurred
-    Args:
-        logfile
-    """
+# class CheckRunState(Thread):
+#     """
+#     Thread to check Lumerical Run State. Kill if error occurred
+#     Args:
+#         logfile
+#     """
 
-    def __init__(self, logfile: str, lum_process: Process, process_queue: Queue):
-        super().__init__(daemon=True)
-        self.logfile: str = logfile
-        self.lum_process: Process = lum_process
-        self.lum_queue: Queue = process_queue
-        if self.lum_process.pid is None:
-            raise Exception("RunLumerical process has not yet started...")
-        # Avoid problems when simulation deletes logfile
-        self._logfile_exists = False
+#     def __init__(self, logfile: str, lum_process: Process, process_queue: Queue):
+#         super().__init__(daemon=True)
+#         self.logfile: str = logfile
+#         self.lum_process: Process = lum_process
+#         self.lum_queue: Queue = process_queue
+#         if self.lum_process.pid is None:
+#             raise Exception("RunLumerical process has not yet started...")
+#         # Avoid problems when simulation deletes logfile
+#         self._logfile_exists = False
 
-    def run(self):
-        while True:
-            # is_lum_running = psutil.pid_exists(self.lum_process.pid)
-            if not self.lum_process.is_alive() and not self._logfile_exists:
-                # Process terminated before creating logfile
-                logger.debug("RunLumerical process terminated prematurely")
-                break
-            if not self._logfile_exists and not os.path.isfile(self.logfile):
-                # Waiting for logfile
-                logger.debug("Waiting for logfile")
-                time.sleep(2)
-                continue
-            # Cue to indicate that simulation has started
-            self._logfile_exists = True
-            if not self.lum_process.is_alive():
-                logger.info("Simulation Finished Successfully")
-                #if self.lum_process.is_alive():
-                #    self.lum_process.terminate()
-                #    self.lum_queue.close()
-                break
-            if self._check_state() == -1:
-                # Wait for when the Solver terminated with error
-                # but is still waiting for extra data
-                time.sleep(10)
-                # Kill process if still alive
-                if self.lum_process.is_alive():
-                    self.lum_process.terminate()
-                    #self.lum_queue.close()
-                logger.critical("Error detected in simulation (Done Cleanup)")
+#     def run(self):
+#         while True:
+#             # is_lum_running = psutil.pid_exists(self.lum_process.pid)
+#             if not self.lum_process.is_alive() and not self._logfile_exists:
+#                 # Process terminated before creating logfile
+#                 logger.debug("RunLumerical process terminated prematurely")
+#                 break
+#             if not self._logfile_exists and not os.path.isfile(self.logfile):
+#                 # Waiting for logfile
+#                 logger.debug("Waiting for logfile")
+#                 time.sleep(2)
+#                 continue
+#             # Cue to indicate that simulation has started
+#             self._logfile_exists = True
+#             if not self.lum_process.is_alive():
+#                 logger.info("Simulation Finished Successfully")
+#                 #if self.lum_process.is_alive():
+#                 #    self.lum_process.terminate()
+#                 #    self.lum_queue.close()
+#                 break
+#             if self._check_state() == -1:
+#                 # Wait for when the Solver terminated with error
+#                 # but is still waiting for extra data
+#                 time.sleep(10)
+#                 # Kill process if still alive
+#                 if self.lum_process.is_alive():
+#                     self.lum_process.terminate()
+#                     #self.lum_queue.close()
+#                 logger.critical("Error detected in simulation (Done Cleanup)")
 
-                break
-            else:
-                # Simulation is running wait 5 seconds to recheck
-                time.sleep(5)
-                continue
+#                 break
+#             else:
+#                 # Simulation is running wait 5 seconds to recheck
+#                 time.sleep(5)
+#                 continue
 
-    def _check_state(self) -> int:
-        """Determine running state for file"""
-        with open(self.logfile, "r") as logfile:
-            log_data: str = logfile.read()
-        if "Error" in log_data:
-            return -1
-        else:
-            return 0
+#     def _check_state(self) -> int:
+#         """Determine running state for file"""
+#         with open(self.logfile, "r") as logfile:
+#             log_data: str = logfile.read()
+#         if "Error" in log_data:
+#             return -1
+#         else:
+#             return 0
 
 
 class RunLumerical(Process):

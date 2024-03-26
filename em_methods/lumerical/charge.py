@@ -11,7 +11,6 @@ from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
 from multiprocessing import Queue
 from em_methods.lumerical.lum_helper import (
-    CheckRunState,
     RunLumerical,
     _get_lumerical_results,
     LumericalError,
@@ -120,8 +119,8 @@ def charge_run(
         **kwargs,
     )
     run_process.start()
-    check_thread = CheckRunState(log_file, run_process, process_queue)
-    check_thread.start()
+    # check_thread = CheckRunState(log_file, run_process, process_queue)
+    # check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
     if process_queue.empty():
