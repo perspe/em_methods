@@ -85,19 +85,20 @@ class CheckRunState(Thread):
             self._logfile_exists = True
             if not self.lum_process.is_alive():
                 logger.info("Simulation Finished Successfully")
-                if self.lum_process.is_alive():
-                    self.lum_process.terminate()
-                self.lum_queue.close()
+                #if self.lum_process.is_alive():
+                #    self.lum_process.terminate()
+                #    self.lum_queue.close()
                 break
             if self._check_state() == -1:
                 # Wait for when the Solver terminated with error
                 # but is still waiting for extra data
-                time.sleep(5)
+                time.sleep(10)
                 # Kill process if still alive
                 if self.lum_process.is_alive():
                     self.lum_process.terminate()
-                self.lum_queue.close()
+                    #self.lum_queue.close()
                 logger.critical("Error detected in simulation (Done Cleanup)")
+
                 break
             else:
                 # Simulation is running wait 5 seconds to recheck
@@ -230,6 +231,7 @@ class RunLumerical(Process):
             self.queue.put(info_data)
             # Guarantee the file is properly closed
             lumfile.close()
+            
 
             
 
