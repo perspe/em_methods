@@ -316,6 +316,49 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.save()
         fdtd.close()
 
+def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq_i, freq_f):
+    """
+    Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
+    (in same directory as FDTD file)
+    Args:
+            path: directory where the FDTD and CHARGE files exist
+            fdtd_file: String FDTD file name
+            properties: Dictionary with the property object and property names and values
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+    """
+    fdtd_path = os.path.join(path, fdtd_file)
+    override_prefix: str = str(uuid4())[0:5]
+    new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
+    shutil.copyfile(fdtd_path, new_filepath)
+
+    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
+        # CHANGE CELL GEOMETRY
+        for structure_key, structure_value in properties.items():
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                fdtd.set(parameter_key, parameter_value)
+        for names in active_region_list:    
+            fdtd.setglobalmonitor('frequency points', 2)
+            fdtd.setglobalsource('wavelength start', freq_i)
+            fdtd.setglobalsource('wavelength stop', freq_f)
+            fdtd.run()
+            fdtd.runanalysis(names.SolarGenName)
+
+
+        # EXPORT GENERATION FILES
+        for names in active_region_list:
+            gen_obj = names.SolarGenName  # Solar Generation analysis object name
+            file = names.GenName # generation file name
+            g_name = file.replace(".mat", "")
+            fdtd.select(str(gen_obj))
+            fdtd.set("export filename", str(g_name))
+        fdtd.run()
+        fdtd.runanalysis()
+        fdtd.save()
+        fdtd.close()
+
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_sim_region=None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
@@ -576,7 +619,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
 
 
-def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq_i, freq_f, def_sim_region=None):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -593,27 +636,26 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
     """ 
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list)
+    get_gen_eqe(path, fdtd_file, properties, active_region_list, freq_i, freq_f)
     results = None
     for names in active_region_list:
         try:
             results = charge_run(charge_path, properties, names, 
-                                func= __set_EQE_parameters, **{"name": names, "def_sim_region":def_sim_region})
+                                func= __set_EQE_parameters, delete = True, **{"name": names, "def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, names, 
-                               func= __set_EQE_parameters, **{"name": names, "def_sim_region":def_sim_region})
+                               func= __set_EQE_parameters, delete = True,**{"name": names, "def_sim_region":def_sim_region})
             except LumericalError:
                 jsc = np.nan
                 Jsc.append(jsc)
-                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Jsc =  {Jsc[-1]:.4f} A/m²")
                 continue
 
-        jsc = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
+        jsc = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0]
+        print(jsc)
         jsc = jsc*10
         Jsc.append(jsc)
-        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Jsc =  {Jsc[-1]:.4f} A/m²")
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
 
     return Jsc
