@@ -425,6 +425,96 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         Ly = charge.get("y span")
     return Lx, Ly
 
+def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
+    """ 
+    Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
+    sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
+    Args:
+            charge: as in "with lumapi.DEVICE(...) as charge
+            bias_regime: forward or reverse bias
+            name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+            path: CHARGE file directory
+            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
+                        will be created
+    Returns:
+            
+            Lx,Ly: dimentions of solar cell surface area normal to the incident light direction
+    """
+    valid_dimensions = {"2d", "3d"}
+    if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
+        raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
+    charge.switchtolayout()
+    # Create "Import generation rate" objects
+    charge.addimportgen()
+    charge.set("name", str(name.GenName[:-4]))
+    print(str(name.GenName[:-4]))
+    # Import generation file path
+    charge.set("volume type", "solid")
+    charge.set("volume solid", str(name.SCName))
+    charge.importdataset(name.GenName)
+    charge.save()
+    if def_sim_region is not None: 
+        # Defines boundaries for simulation region -UNTESTED
+        charge.select("geometry::" + name.Anode)  # anode
+        z_max = charge.get("z max")
+        charge.select("geometry::" + name.Cathode)  # cathode
+        z_min = charge.get("z min")
+        charge.select("CHARGE::" + str(name.GenName[:-4]))  # solar generation
+        x_span = charge.get("x span")
+        x = charge.get("x")
+        y_span = charge.get("y span")
+        y = charge.get("y")
+        # Creates the simulation region (2D or 3D)
+        charge.addsimulationregion()
+        charge.set("name", name.SCName) 
+        if "2" in def_sim_region: 
+            charge.set("dimension", 2)
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+        elif "3" in def_sim_region:
+            charge.set("dimension", 3)
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+            charge.set("x span", y_span)
+        charge.select(str(name.SCName))
+        charge.set("z max", z_max)
+        charge.set("z min", z_min)
+        charge.select("CHARGE")
+        charge.set("simulation region", name.SCName)
+        charge.save()
+    # Defining solver parameters
+    charge.select("CHARGE")
+    charge.set("solver type", "NEWTON")
+    charge.set("enable initialization", True)
+    #charge.set("init step size",1) #unsure if it works properly
+    charge.save()
+    # Setting sweep parameters
+    print("we are in the forward section")
+    charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+    charge.set("sweep type", "single")
+    charge.save()
+    charge.set("voltage", 0)
+    charge.save()
+    #Determining simulation region dimentions
+    if def_sim_region is not None:
+        sim_region = name.SCName
+    else:
+        sim_region = charge.getnamed("CHARGE","simulation region")
+    charge.select(sim_region)
+    Lx = charge.get("x span")
+    if "3D" not in charge.get("dimension"):
+        print("This is a 2D simulation")
+        charge.select("CHARGE")
+        Ly = charge.get("norm length")
+    else:
+        print("This is a 3D simulation")
+        charge.select(str(sim_region))
+        Ly = charge.get("y span")
+    return Lx, Ly
+
     
 
 def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
@@ -483,4 +573,48 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
     
     
-    return pce, ff, voc, jsc, current_density, voltage
+    return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
+
+
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
+    """ 
+    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
+    It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
+    Args:
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+            properties: Dictionary with the property object and property names and values                    
+            charge_file: name of CHARGE file
+            path: directory where the FDTD and CHARGE files exist
+            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                            A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
+                            will be created
+    """ 
+    Jsc = []
+    charge_path = os.path.join(path, charge_file)
+    get_gen(path, fdtd_file, properties, active_region_list)
+    results = None
+    for names in active_region_list:
+        try:
+            results = charge_run(charge_path, properties, names, 
+                                func= __set_EQE_parameters, **{"name": names, "def_sim_region":def_sim_region})
+        except LumericalError:
+            try:            
+                logger.warning("Retrying simulation")
+                results = charge_run(charge_path, properties, names, 
+                               func= __set_EQE_parameters, **{"name": names, "def_sim_region":def_sim_region})
+            except LumericalError:
+                jsc = np.nan
+                Jsc.append(jsc)
+                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Jsc =  {Jsc[-1]:.4f} A/m²")
+                continue
+
+        jsc = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
+        jsc = jsc*10
+        Jsc.append(jsc)
+        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Jsc =  {Jsc[-1]:.4f} A/m²")
+        # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+
+    return Jsc
+
