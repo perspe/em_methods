@@ -316,7 +316,7 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.save()
         fdtd.close()
 
-def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq_i, freq_f):
+def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -340,9 +340,8 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq_i, freq_f)
             for parameter_key, parameter_value in structure_value.items():
                 fdtd.set(parameter_key, parameter_value)
         for names in active_region_list:    
-            fdtd.setglobalmonitor('frequency points', 2)
-            fdtd.setglobalsource('wavelength start', freq_i)
-            fdtd.setglobalsource('wavelength stop', freq_f)
+            fdtd.setglobalsource('wavelength start', freq)
+            fdtd.setglobalsource('wavelength stop', freq)
             fdtd.run()
             fdtd.runanalysis(names.SolarGenName)
 
@@ -517,11 +516,11 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
             charge.set("x span", x_span)
             charge.set("y", y)
         elif "3" in def_sim_region:
-            charge.set("dimension", 3)
+            charge.set("dimension", "3D")
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
-            charge.set("x span", y_span)
+            charge.set("y span", y_span)
         charge.select(str(name.SCName))
         charge.set("z max", z_max)
         charge.set("z min", z_min)
@@ -619,7 +618,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
 
 
-def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq_i, freq_f, def_sim_region=None):
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -636,7 +635,7 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
     """ 
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    get_gen_eqe(path, fdtd_file, properties, active_region_list, freq_i, freq_f)
+    get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
     results = None
     for names in active_region_list:
         try:
@@ -648,14 +647,20 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
                 results = charge_run(charge_path, properties, names, 
                                func= __set_EQE_parameters, delete = True,**{"name": names, "def_sim_region":def_sim_region})
             except LumericalError:
-                jsc = np.nan
-                Jsc.append(jsc)
+                current_density = np.nan
+                current_density.append(current_density)
                 continue
 
-        jsc = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0]
-        print(jsc)
-        jsc = jsc*10
-        Jsc.append(jsc)
+        current = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0]
+        Lx = results[0]["func_output"][0]
+        Ly = results[0]["func_output"][1]
+        Lx = Lx * 100  # from m to cm
+        Ly = Ly * 100  # from m to cm
+        area = Ly * Lx  # area in cm^2
+        current_density = (np.array(current) * 1000) / area #mA/cm2
+        print(current_density)
+        current_density = current_density*10 #A/m2
+        Jsc.append(current_density)
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
 
     return Jsc
