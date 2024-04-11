@@ -344,6 +344,9 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
             fdtd.setglobalsource('wavelength stop', freq)
             fdtd.run()
             fdtd.runanalysis(names.SolarGenName)
+            jph_pvk = fdtd.getdata(active_region_list[0].SolarGenName, "Jsc")
+        
+
 
 
         # EXPORT GENERATION FILES
@@ -357,6 +360,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         fdtd.runanalysis()
         fdtd.save()
         fdtd.close()
+        return jph_pvk
 
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_sim_region=None):
     """ 
@@ -402,12 +406,12 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.addsimulationregion()
         charge.set("name", name.SCName) 
         if "2" in def_sim_region: 
-            charge.set("dimension", 2)
+            charge.set("dimension", "2D Y-Normal")
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
         elif "3" in def_sim_region:
-            charge.set("dimension", 3)
+            charge.set("dimension", "3D")
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
@@ -431,8 +435,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.set("sweep type", "range")
         charge.save()
         charge.set("range start", 0)
-        charge.set("range stop", 1.3)
-        charge.set("range num points", 51)
+        charge.set("range stop", 1.5)
+        charge.set("range num points", 41)
         charge.set("range backtracking", "enabled")
         charge.save()
     #Reverse bias regime
@@ -511,7 +515,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
         charge.addsimulationregion()
         charge.set("name", name.SCName) 
         if "2" in def_sim_region: 
-            charge.set("dimension", 2)
+            charge.set("dimension", "2D Y-Normal")
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
@@ -559,7 +563,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
 
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, run_FDTD = True, def_sim_region=None ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -581,7 +585,8 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     Current_Density = []
     Voltage = []
     charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list)
+    if run_FDTD:
+        get_gen(path, fdtd_file, properties, active_region_list)
     results = None
     for names in active_region_list:
         try:
@@ -635,7 +640,7 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
     """ 
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
+    jph_pvk = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
     results = None
     for names in active_region_list:
         try:
@@ -660,8 +665,84 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         current_density = (np.array(current) * 1000) / area #mA/cm2
         print(current_density)
         current_density = current_density*10 #A/m2
-        Jsc.append(current_density)
+        jsc = current_density
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
 
-    return Jsc
+    return jsc, jph_pvk
 
+def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
+    """ 
+    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
+    It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
+    Args:
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+            properties: Dictionary with the property object and property names and values                    
+            charge_file: name of CHARGE file
+            path: directory where the FDTD and CHARGE files exist
+            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                            A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
+                            will be created
+    """ 
+    PCE = []
+    FF = []
+    Voc = []
+    Jsc = []
+
+    PCE_temp = []
+    FF_temp = []
+    Voc_temp = []
+    Jsc_temp = []
+
+    Current_Density = []
+    Voltage = []
+
+    charge_path = os.path.join(path, charge_file)
+    get_gen(path, fdtd_file, properties, active_region_list)
+    results = None
+    for names in active_region_list:
+        for i in range(3):
+            try:
+                results = charge_run(charge_path, properties, names, 
+                                    func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+            except LumericalError:
+                try:            
+                    logger.warning("Retrying simulation")
+                    results = charge_run(charge_path, properties, names, 
+                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                except LumericalError:
+                    pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
+                    PCE_temp.append(pce)
+                    FF_temp.append(ff)
+                    Voc_temp.append(voc)
+                    Jsc_temp.append(jsc)
+                    
+                    
+                    
+                    Current_Density.append(current_density)
+                    Voltage.append(voltage)
+                    print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+                    continue
+
+            pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
+            PCE_temp.append(pce)
+            FF_temp.append(ff)
+            Voc_temp.append(voc)
+            Jsc_temp.append(jsc)
+            
+            
+            
+            Current_Density.append(current_density)
+            Voltage.append(voltage)
+            print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+        PCE = np.average(PCE_temp)
+        FF = np.average(FF_temp)
+        Voc = np.average(Voc_temp)
+        Jsc
+        
+        
+        # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+    
+    
+    return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
