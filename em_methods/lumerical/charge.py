@@ -223,7 +223,7 @@ def iv_curve(results, regime, names):
 
     elif regime == "dark":
         return current_density, voltage
-        
+       
 
 def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str,P): #NOT FINISHED -> regime should not be an input, the performance metrics should be enough
     """
@@ -415,7 +415,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
             charge.set("x", x)
             charge.set("x span", x_span)
             charge.set("y", y)
-            charge.set("x span", y_span)
+            charge.set("y span", y_span)
         charge.select(str(name.SCName))
         charge.set("z max", z_max)
         charge.set("z min", z_min)
@@ -591,12 +591,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     for names in active_region_list:
         try:
             results = charge_run(charge_path, properties, names, 
-                                func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, names, 
-                               func= __set_iv_parameters, **{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
