@@ -746,3 +746,57 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
     
     
     return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
+
+
+
+
+
+
+
+
+
+
+
+
+def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
+    '''
+    Shifts the refractive index data in wavelength, between 'min_shift' and 'max_shift', for n steps.
+    Note: the same FDTD file is used throughout the sweep! No new files are created.
+    Arguments:
+            fdtd_file: path of FDTD file
+            mat_data: material refractive index data, with 3 columns headed as 'wvl'(wavelenth [nm]), 'n'(real part) and 'k'(extinction coefficient)
+            min_shift: minimum Eg shift to test, in wavelength [nm]
+            max_shift: maximum Eg shift to test, in wavelength [nm]
+            n: amount of sweep iterations (pref 20)
+            mat_Eg: unshifted material bandgap
+
+    '''
+    # Physical constants
+    q = 1.602e-19 # C
+    h = 6.626e-34 # J.s
+    c = 3e8 # m/s
+    # Transform refractive index in complex permitivitty values
+    n = mat_data['n']
+    k = mat_data['k']
+    wvl = mat_data['wvl']
+    index = n + k*1j
+    perm = index**2
+    # Wavelength shift
+    lim_lam = h*c/mat_Eg
+    wvl_lim = np.linspace(min_shift*1e-9, max_shift*1e-9, n)
+    for lam in wvl_lim:
+        new_lim = lim_lam + lam
+        new_wvl = wvl*1e-9 + lam
+        Eg = round(h*c/(new_lim*q), 3)
+        freq = c/new_wvl
+        with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
+            fdtd.setmaterial(fdtd.addmaterial("Sampled 3D data"), "name", "PVK_"+str(Eg)+"_Eg")
+            fdtd.setmaterial("PVK_"+str(Eg)+"_Eg",'sampled 3d data', np.c_[freq, perm])
+            fdtd.select('Perovskite')
+            fdtd.set('material', "PVK_"+str(Eg)+"_Eg")
+            fdtd.run()
+            fdtd.runanalysis()
+            fdtd.switchtolayout()
+            fdtd.save()
+        fdtd.close()
+
