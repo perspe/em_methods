@@ -183,32 +183,36 @@ def iv_curve(results, regime, names):
     Lx = results["func_output"][0]
     Ly = results["func_output"][1]
 
-    if (len(current) == 1 and len(current[0]) != 1):  # charge I output is not always consistent
+    if ((len(current) == 1 and len(current[0]) != 1) ):  # charge I output is not always consistent
          current = current[0]
          voltage = [float(arr[0]) for arr in voltage]
+    elif (voltage.ndim == 2):
+         voltage = [float(arr[0]) for arr in voltage]
+         current = [arr[0] for arr in current]
 
     Lx = Lx * 100  # from m to cm
     Ly = Ly * 100  # from m to cm
     area = Ly * Lx  # area in cm^2
     current_density = (np.array(current) * 1000) / area
     Ir = 1000  # W/m²
-
     if regime == "am":
         # DETERMINE JSC
         abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
         if abs_voltage_min in voltage:
-            Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
-            Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
+
+            Jsc = current_density[np.where(voltage == abs_voltage_min)[0][0]]
+            Isc = current[np.where(voltage == abs_voltage_min)[0][0]]
             # Jsc = current_density[voltage.index(abs_voltage_min)]
             # Isc = current[voltage.index(abs_voltage_min)]
         elif -abs_voltage_min in voltage:
             # the position in the array of Jsc and Isc should be the same
-            Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
-            Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
+            Jsc = current_density[np.where(voltage == -abs_voltage_min)[0][0]]
+            Isc = current[np.where(voltage == -abs_voltage_min)[0][0]]
             # Jsc = current_density[voltage.index(-abs_voltage_min)]
             # Isc = current[voltage.index(-abs_voltage_min)]
 
         # DETERMINE VOC THROUGH INTERPOLATION
+        
         Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
         try:
             stop = stop[0]
@@ -216,9 +220,15 @@ def iv_curve(results, regime, names):
         except IndexError: 
             stop = np.nan
             Voc = np.nan
-        P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
-        FF = abs(max(P) / (Voc * Isc))
-        PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+        try:
+            P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
+            FF = abs(max(P) / (Voc * Isc))
+            PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+        except ValueError:
+            P = np.nan
+            FF = np.nan
+            PCE = np.nan
+
         return PCE, FF, Voc, Jsc, current_density, voltage, stop, P
 
     elif regime == "dark":
@@ -362,7 +372,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         fdtd.close()
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_sim_region=None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max ,def_sim_region=None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -435,7 +445,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, def_s
         charge.set("sweep type", "range")
         charge.save()
         charge.set("range start", 0)
-        charge.set("range stop", 1.5)
+        charge.set("range stop", V_max)
         charge.set("range num points", 41)
         charge.set("range backtracking", "enabled")
         charge.save()
@@ -563,7 +573,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
 
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, run_FDTD = True, def_sim_region=None, plot=False ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, V_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -591,12 +601,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     for names in active_region_list:
         try:
             results = charge_run(charge_path, properties, names, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "V_max": V_max ,"def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, names, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "def_sim_region":def_sim_region})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "V_max": V_max ,"def_sim_region":def_sim_region})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
@@ -671,7 +681,7 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
 
     return jsc, jph_pvk
 
-def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None):
+def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region=None): #needs to be updated
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
