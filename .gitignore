@@ -22,6 +22,7 @@ PSO_Results
 *.pdf
 *.gp
 *.fsp
+*.ldev
 *.mat
 
 # Specific files
