@@ -34,6 +34,8 @@ else:
     LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
 logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
+if os.name == "nt":
+    os.add_dll_directory(LUMAPI_PATH)
 import lumapi
 
 """ Helper functions """
