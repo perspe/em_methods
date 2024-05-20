@@ -18,6 +18,7 @@ import pandas as pd
 
 logger = logging.getLogger()
 
+from em_methods.optimization.ui.pso_gui_main import init_gui
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
@@ -113,7 +114,7 @@ def _preview_results(
     logger.debug("Updated Summary Figure")
 
 
-def particle_swarm(
+def _particle_swarm(
     func,
     param_dict: Dict[str, List[float]],
     *,
@@ -325,6 +326,75 @@ def particle_swarm(
     return gfitness, gbest, pbest, gbest_array
 
 
+def particle_swarm(
+    func,
+    param_dict: Dict[str, List[float]],
+    *,
+    maximize: bool = True,
+    pso_gui: bool = True,
+    inert_prop: Tuple[float, float, bool] = (0.9, 0.4, True),
+    ind_cog: float = 1.45,
+    soc_learning: float = 1.45,
+    particles: int = 25,
+    iterations: Tuple[int, int, bool] = (50, 100, True),
+    tolerance: Tuple[float, int] = (0.05, 10),
+    progress: bool = True,
+    export: bool = False,
+    # export_summary: bool = True,
+    basepath: str = "PSO_Results",
+    **func_kwargs,
+) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
+    """Implementation of the particle swarm algorithm
+    Args:
+        - func: optimization function
+        - param_dict: dictionary with parameters and variation range
+        - maximize: maximize or minimize the problem (default: maximize)
+        - pso_gui: initializes graphical user interface of PSO
+        - inert_prop: Inertial weight factor (start value, finish value, static/dynamic)
+        - ind_cog: cognition index for particles (default = 1.45)
+        - soc_learning: social learning index (default = 1.45)
+        - particles: Number of particles (default: 25)
+        - iteration: Define number of iterations (min, max, static/dynamic)
+        - max_iterations: Max number of iterations (default = 100)
+        - tolerance_percent
+        - export: Export files with PSO data
+        - export_summary: export a file with the final results of the pso
+        - basepath: Base path to save export and progress information
+        - func_kwargs: Extra arguments to pass to the optimization function
+    Return:
+        - gfitness: Best value obtained
+        - gbest: Best parameters
+        - pbest: Best parameters for each particle
+        - gbest_array: Array with the gfitness value for each iteration
+    """
+    if export and not os.path.isdir(basepath):
+        logger.info(f"Creating {basepath=}...")
+        os.mkdir(basepath)
+    min_iteration, max_iteration, iteration_check = iterations
+    if max_iteration < min_iteration and iteration_check:
+        raise Exception("max_iteration must be bigger than min_iteration")
+    if not iteration_check:
+        max_iteration = min_iteration
+    if min_iteration < 10 or max_iteration > 999:
+        raise Exception("Iterations should be between 10 and 999")
+    if pso_gui:
+        init_gui()
+        # _particle_swarm(args)
+    else:
+        _particle_swarm(func=func,
+                        param_dict=param_dict,
+                        maximize=maximize,
+                        inert_prop=inert_prop,
+                        ind_cog=ind_cog,
+                        soc_learning=soc_learning,
+                        particles=particles,
+                        iterations=iterations,
+                        tolerance=tolerance,
+                        progress=progress,
+                        export=export,
+                        basepath=basepath)
+    
+
 def pso_iter_plt(
     param: str,
     *,
@@ -348,7 +418,7 @@ def pso_iter_plt(
         group_func (function): function to apply to each iteration
                             (can be used to transform the values of a variable)
         savefig_name (None|str): name of the file to export
-        colorbar (bool): wether to add or not the colorbar
+        colorbar (bool): wh0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ether to add or not the colorbar
         ax (none|plt.axes): set of axes to plot the data (disables savefig_name and colorbar)
         scatter_kwargs (dict): extra arguments to pass to scatter
         savefig_kwargs (dict): extra argument to pass to savefig
