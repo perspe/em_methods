@@ -1,6 +1,6 @@
 from logging.config import fileConfig
 import os
-from enum import StrEnum, auto
+from enum import Enum, auto
 
 # Get module logger
 base_path = os.path.dirname(os.path.abspath(__file__))
@@ -8,7 +8,7 @@ fileConfig(os.path.join(base_path, "logging.ini"),
            disable_existing_loggers=False)
 
 
-class Units(StrEnum):
+class Units(Enum):
     M = auto()
     DM = auto()
     CM = auto()

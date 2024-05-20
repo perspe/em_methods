@@ -1,7 +1,7 @@
 import unittest
 import os
 import logging
-from em_methods.fdtd.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material
+from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material
 
 # Override logger to always use debug
 logger = logging.getLogger('sim')
