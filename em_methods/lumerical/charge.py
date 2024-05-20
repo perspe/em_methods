@@ -325,6 +325,7 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.runanalysis()
         fdtd.save()
         fdtd.close()
+        os.remove(new_filepath)
 
 def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
     """
@@ -370,6 +371,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         fdtd.runanalysis()
         fdtd.save()
         fdtd.close()
+        os.remove(new_filepath)
         return jph_pvk
 
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max ,def_sim_region=None):
@@ -630,8 +632,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         if plot:
             plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
     
-    
-    return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
+    if len(active_region_list) > 1 :
+        return PCE, FF, Voc, Jsc, Current_Density, Voltage
+    else:
+        return pce, ff, voc, jsc, current_density, voltage
 
 
 def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None):
