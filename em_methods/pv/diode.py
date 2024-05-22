@@ -1,7 +1,11 @@
 import numpy as np
+from pandas.io.feather_format import pd
 from scipy.optimize import fsolve
 import scipy.constants as scc
 import logging
+
+from typing import Union, Any
+import numpy.typing as npt
 
 logger = logging.getLogger("sim")
 
@@ -75,14 +79,14 @@ def single_diode_rp(
 
 
 def luqing_liu_diode(
-    voltage: np.ndarray,
-    jsc: float,
-    jmpp: float,
-    voc: float,
-    rs: float,
-    rsh: float,
-    eta: float,
-    temp: float,
+    voltage: npt.ArrayLike,
+    jsc: Union[float, Any],
+    jmpp: Union[float, Any],
+    voc: Union[float, Any],
+    rs: Union[float, Any],
+    rsh: Union[float, Any],
+    eta: Union[float, Any],
+    temp: Union[float, Any],
     n_cells: int = 1,
 ) -> np.ndarray:
     """
@@ -113,9 +117,6 @@ def luqing_liu_diode(
         1
         - (1 / gamma)
         + (voc / ((n_cells * eta * vt) + (teta * gamma * jsc * rs / 1000)))
-    )
-    logger.debug(
-            f"teta = {teta:.3f}\ngama = {gamma:.3f}\nm = {m:.3f}"
     )
     for index, v_i in enumerate(voltage):
         v = v_i / voc
