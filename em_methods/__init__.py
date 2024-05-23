@@ -16,7 +16,7 @@ class Units(Enum):
     UM = auto()
     NM = auto()
 
-    def convertSI(unit: 'Units') -> int:
+    def convertSI(unit: 'Units') -> float:
         """
         Return convertion factor to SI (m) units
         m = 1, dm = 1e-1, cm = 1e-2, mm = 1e-3,
@@ -37,7 +37,7 @@ class Units(Enum):
                 factor = 1e-9
         return factor
 
-    def convertTo(self, unit2: 'Units') -> int:
+    def convertTo(self, unit2: 'Units') -> float:
         """ Convert unit to a different unit """
         return self.convertSI()/unit2.convertSI()
 
@@ -50,7 +50,7 @@ class Units(Enum):
     
     """ General function (Independent of enum definition) """
 
-    def convertUnits(unit1: 'Units', unit2: 'Units') -> int:
+    def convertUnits(unit1: 'Units', unit2: 'Units') -> float:
         """ Convert from one unit to another"""
         return unit1.convertSI()/unit2.convertSI()
 
