@@ -129,7 +129,7 @@ def particle_swarm(
     export_summary: bool = True,
     basepath: str = "PSO_Results",
     **func_kwargs,
-) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
+) -> Tuple[float, npt.NDArray[np.floating], npt.NDArray[np.floating], npt.NDArray[np.floating]]:
     """Implementation of the particle swarm algorithm
     Args:
         - func: optimization function
