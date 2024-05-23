@@ -1,6 +1,7 @@
 import numpy as np
 from pandas.io.feather_format import pd
 from scipy.optimize import fsolve
+from scipy.special import lambertw
 import scipy.constants as scc
 import logging
 
@@ -77,6 +78,40 @@ def single_diode_rp(
         logger.debug(zeros)
         current[index] = zeros[0]
     return current*1000
+
+def single_diode_rp_lambert(
+    v: npt.NDArray[np.floating],
+    jl: float,
+    j0: float,
+    rs: float,
+    rsh: float,
+    eta: float,
+    temp: float,
+) -> npt.NDArray[np.floating]:
+    """
+    Solution to the single diode Rp equation via the LambertW functions
+    Args:
+        v (V): voltage array
+        jl, j0 (mA/cm2): short-circuit and saturation currents
+        rs, rsh (Ohm.cm2): Series and shunt resistance for the cell
+        eta: cell ideality factor
+        temp (K): Cell temperature
+    return:
+        j (mA/cm2): current density
+    """
+    # Avoid overflow in the exponentials
+    jl /= 1000
+    j0 /= 1000
+    # Simplification terms
+    vt = scc.k * temp / scc.e
+    nvt = eta*vt
+    rs_rsh = rs+rsh
+    # Calculate terms in the equation
+    term_1 = v/rs_rsh
+    lambertw_e = rsh*(rs*jl+rs*j0+v)/(nvt*rs_rsh)
+    term_2 = lambertw(rs*j0*rsh*np.exp(lambertw_e)/(nvt*rs_rsh))*nvt/rs
+    term_3 = rsh*(j0+jl)/rs_rsh
+    return (-term_1-term_2+term_3)*1000
 
 
 def luqing_liu_diode(

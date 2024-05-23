@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from em_methods.pv import single_diode_rp, luqing_liu_diode
+from em_methods.pv import single_diode_rp, single_diode_rp_lambert, luqing_liu_diode
 from em_methods.optimization.pso import particle_swarm
 
 # Override logger to always use debug
@@ -24,6 +24,18 @@ class TestPV(unittest.TestCase):
         voltage = np.linspace(0, 1.2, 100)
         j = single_diode_rp(voltage, jl, j0, rs, rsh, eta, temp)
         self.assertEqual(round(j[0], 4), 21.6855)
+
+    def test_diode_lambert(self):
+        """
+        Compare the diode Lambert equation with the zeros method
+        """
+        eta, rs, rsh, j0, jl = 1.5, 2, 3000, 1.5e-11, 21.7
+        temp = 298
+        voltage = np.linspace(0, 1.2, 100)
+        j_diode = single_diode_rp(voltage, jl, j0, rs, rsh, eta, temp)
+        j_lambert = single_diode_rp_lambert(voltage, jl, j0, rs, rsh, eta, temp)
+        differences = np.sqrt(np.sum((j_diode-j_lambert)**2)/len(j_diode))
+        logger.info(f"Difference between j_diode and j_lambert: {differences}")
 
     def test_luqing_liu(self):
         """
