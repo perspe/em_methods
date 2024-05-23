@@ -39,7 +39,7 @@ def _single_diode_rp(
 
 
 def single_diode_rp(
-    v: np.ndarray,
+    v: npt.NDArray[np.floating],
     jl: float,
     j0: float,
     rs: float,
@@ -47,26 +47,27 @@ def single_diode_rp(
     eta: float,
     temp: float,
     n_cells: int = 1,
-) -> np.ndarray:
+    ) -> npt.NDArray[np.floating]:
     """
     Advanced configuration of the diode equation, that takes
     into account losses due to contact resistance and electron
     surfaces, the current flow resistance and the electrode
     resistance.
+    This method calculates the values via the 0s of the transcendental equation
     Args:
         jl (mA/cm2): short-circuit current for the cell
         j0 (mA/cm2): Saturation current density
         v (V): voltage
-        rs (Ohm): diode series resistance
-        rsh (Ohm): diode parallel resistance
+        rs (Ohm.cm2): diode series resistance
+        rsh (Ohm.cm2): diode parallel resistance
         eta: ideality factor
         temp (K): temperature
         n_cells: number of identical cell in the solar module
     Return:
-        current_density (mA/cm2)
+        current (A)
     """
     current = np.zeros_like(v)
-    # Convert to A/cm2 (avoid overflow in the calculation of the exponential term)
+    # Use j in A/cm2 to facilitate calculations
     jl /= 1000
     j0 /= 1000
     for index, voltage in enumerate(v):
@@ -79,16 +80,16 @@ def single_diode_rp(
 
 
 def luqing_liu_diode(
-    voltage: npt.ArrayLike,
-    jsc: Union[float, Any],
-    jmpp: Union[float, Any],
-    voc: Union[float, Any],
-    rs: Union[float, Any],
-    rsh: Union[float, Any],
-    eta: Union[float, Any],
-    temp: Union[float, Any],
+    voltage: npt.NDArray[np.floating],
+    jsc: float,
+    jmpp: float,
+    voc: float,
+    rs: float,
+    rsh: float,
+    eta: float,
+    temp: float,
     n_cells: int = 1,
-) -> np.ndarray:
+) -> npt.NDArray[np.floating]:
     """
     Luqing Liu version of the diode equation. This equation has 3 main
     assumptions
