@@ -10,7 +10,7 @@ from em_methods.optimization.pso import particle_swarm
 
 # Override logger to always use debug
 logger = logging.getLogger("sim")
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 BASETESTPATH: str = os.path.join("test", "pv")
 
 
@@ -18,6 +18,16 @@ class TestPV(unittest.TestCase):
     def test_single_diode_rp(self):
         """
         Test run the single diode equation
+        """
+        eta, rs, rsh, j0, jl = 1.5, 2, 3000, 1.5e-11, 21.7
+        temp = 298
+        voltage = np.linspace(0, 1.2, 100)
+        j = single_diode_rp(voltage, jl, j0, rs, rsh, eta, temp)
+        self.assertEqual(round(j[0], 4), 21.6855)
+
+    def test_profile_diode_rp(self):
+        """
+        Function to profile the single diode rp equation
         """
         eta, rs, rsh, j0, jl = 1.5, 2, 3000, 1.5e-11, 21.7
         temp = 298
@@ -52,7 +62,6 @@ class TestPV(unittest.TestCase):
         Use the particle swarm algorithm to determine the
         best parameters of the luqing liu equation that fit experimental data
         """
-
         def optimize_function(exp_data, jsc, jmpp, voc, rs, rsh, eta, temp, n_cells):
             differences = []
             for rs_i, rsh_i, eta_i in zip(rs, rsh, eta):
@@ -73,9 +82,9 @@ class TestPV(unittest.TestCase):
         data["jabs"] = data["j"].abs()
         logger.debug(f"Imported data:\n{data}")
         # Variables for Luqing Liu equation
-        jsc = data["j"].max()
-        jmpp = data[data["p"] == data["p"].max()]["j"].values
-        voc = data[data["jabs"] == data["jabs"].min()]["V"].values
+        jsc: float = data[data["V"]>0]["j"].max()
+        jmpp: float = data[data["p"] == data["p"].max()]["j"].iloc[0]
+        voc: float = data[data["jabs"] == data["jabs"].min()]["V"].iloc[0]
         pso_parameters = {"eta": [1, 2], "rs": [0, 50], "rsh": [0, 1e10]}
         const_parameters = {
             "exp_data": data,
@@ -90,13 +99,12 @@ class TestPV(unittest.TestCase):
             optimize_function,
             pso_parameters,
             particles=50,
-            iterations=(200, 200, False),
             maximize=False,
             progress=False,
             export_summary=False,
             **const_parameters,
         )
-        print(best_param)
+        logger.info(f"\nR2:{r2}\nBest parameters: {best_param}")
         best_current = luqing_liu_diode(
             data["V"], jsc, jmpp, voc, best_param[1], best_param[2], best_param[0], 298
         )
