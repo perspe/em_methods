@@ -75,7 +75,8 @@ def single_diode_rp(
         zeros = fsolve(
             _single_diode_rp, 0, args=(jl, j0, voltage, rs, rsh, eta, temp, n_cells)
         )
-        logger.debug(zeros)
+        if len(zeros) > 1:
+            logger.warning("More than 1 zero determined when solving diode rp equation")
         current[index] = zeros[0]
     return current*1000
 
@@ -145,15 +146,18 @@ def luqing_liu_diode(
         current_density (mA/cm2)
     """
     current = np.zeros_like(voltage)
+    if rsh == 0 or jsc == 0:
+        return current
     vt = scc.k * temp / scc.e
     impp = jmpp / jsc
     gamma = 1 - (voc / (jsc * rsh / 1000))
-    teta = 0.77 * impp * gamma
+    theta = 0.77 * impp * gamma
     m = (
         1
         - (1 / gamma)
-        + (voc / ((n_cells * eta * vt) + (teta * gamma * jsc * rs / 1000)))
+        + (voc / ((n_cells * eta * vt) + (theta * gamma * jsc * rs / 1000)))
     )
+    logger.debug(f"{gamma}\n{m}\n{theta}")
     for index, v_i in enumerate(voltage):
         v = v_i / voc
         i = 1 - (1 - gamma) * v - gamma * ((((v**2) + 1) / 2) ** m)
