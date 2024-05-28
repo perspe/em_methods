@@ -4,13 +4,14 @@ import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy.constants as scc
 
 from em_methods.pv import single_diode_rp, single_diode_rp_lambert, luqing_liu_diode
 from em_methods.optimization.pso import particle_swarm
 
 # Override logger to always use debug
 logger = logging.getLogger("sim")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 BASETESTPATH: str = os.path.join("test", "pv")
 
 
@@ -73,8 +74,8 @@ class TestPV(unittest.TestCase):
                 )
             return np.array(differences)
 
-        test_file = os.path.join(BASETESTPATH, "iv_perovskite.txt")
-        cell_area = 0.1963
+        test_file = os.path.join(BASETESTPATH, "iv_perovskite_bad.txt")
+        cell_area = 0.2
         # Data and useful variables
         data = pd.read_csv(test_file, sep="\t")
         data["j"] = data["I"] * 1000 / cell_area
@@ -114,6 +115,66 @@ class TestPV(unittest.TestCase):
         plt.scatter(data["V"], data["j"], 6, "r", label="Experimental")
         plt.plot(data["V"], best_current, label="Optimized")
         plt.plot(data["V"], best_current_cristina, label="Optimized Cristina")
+        plt.annotate(f"R2={r2:.6f}", (0, 10))
+        plt.legend()
+        plt.grid()
+        plt.show()
+
+    def test_optimize_diode(self):
+        """
+        Use the particle swarm algorithm to determine the
+        best parameters of the luqing liu equation that fit experimental data
+        """
+        def optimize_function(exp_data, jsc, voc, rs, rsh, eta, temp):
+            differences = []
+            vt = scc.k * temp / scc.e
+            for rs_i, rsh_i, eta_i in zip(rs, rsh, eta):
+                j0: float = jsc/(np.exp(voc/(eta_i*vt))-1)
+                diode_current = single_diode_rp_lambert(
+                    exp_data.V, jsc, j0, rs_i, rsh_i, eta_i, temp
+                )
+                differences.append(
+                    np.sqrt(np.mean((exp_data["j"] - diode_current) ** 2))
+                )
+            return np.array(differences)
+
+        test_file = os.path.join(BASETESTPATH, "iv_perovskite_bad.txt")
+        cell_area = 0.2
+        # Data and useful variables
+        data = pd.read_csv(test_file, sep="\t")
+        data["j"] = data["I"] * 1000 / cell_area
+        data["p"] = data["j"] * data["V"]
+        data["jabs"] = data["j"].abs()
+        logger.debug(f"Imported data:\n{data}")
+        # Variables for Luqing Liu equation
+        jsc: float = data[data["V"]>0]["j"].max()
+        voc: float = data[data["jabs"] == data["jabs"].min()]["V"].iloc[0]
+        pso_parameters = {"eta": [1, 2], "rs": [0, 50], "rsh": [0, 1e6]}
+        const_parameters = {
+            "exp_data": data,
+            "jsc": jsc,
+            "voc": voc,
+            "temp": 298,
+        }
+        logger.debug(const_parameters)
+        r2, best_param, *_ = particle_swarm(
+            optimize_function,
+            pso_parameters,
+            particles=25,
+            maximize=False,
+            progress=False,
+            export_summary=False,
+            **const_parameters,
+        )
+        logger.info(f"\nR2:{r2}\nBest parameters: {best_param}")
+        vt = scc.k * const_parameters["temp"] / scc.e
+        j0: float = jsc/(np.exp(voc/(best_param[0]*vt))-1)
+        best_current = single_diode_rp(
+            data["V"], jsc, j0, best_param[1], best_param[2], best_param[0], 298
+        )
+        print(best_current)
+        plt.scatter(data["V"], data["j"], 6, "r", label="Experimental")
+        plt.plot(data["V"], best_current, label="Optimized")
         plt.annotate(f"R2={r2:.6f}", (0, 10))
         plt.legend()
         plt.grid()

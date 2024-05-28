@@ -1,12 +1,10 @@
-import numpy as np
-from pandas.io.feather_format import pd
-from scipy.optimize import fsolve
-from scipy.special import lambertw
-import scipy.constants as scc
 import logging
 
-from typing import Union, Any
+import numpy as np
 import numpy.typing as npt
+import scipy.constants as scc
+from scipy.optimize import fsolve
+from scipy.special import lambertw
 
 logger = logging.getLogger("sim")
 
@@ -68,10 +66,14 @@ def single_diode_rp(
         current (A)
     """
     current = np.zeros_like(v)
+    if rsh == 0:
+        return current
     # Use j in A/cm2 to facilitate calculations
     jl /= 1000
     j0 /= 1000
+    vt = scc.k * temp/scc.e
     for index, voltage in enumerate(v):
+        sugg = jl*(np.exp(voltage/(eta*vt))-1)
         zeros = fsolve(
             _single_diode_rp, 0, args=(jl, j0, voltage, rs, rsh, eta, temp, n_cells)
         )
