@@ -27,8 +27,17 @@ class TestIrr(unittest.TestCase):
         """
         Determine the solar angles (based on Cristina results)
         """
-        test_dt4 = datetime(2024, 11, 8, 15, 0, 0)
-        zenith, azimuth, *_ = solar_angle(-9.142685, 38.736946, test_dt4)
+        date = datetime(2024, 11, 8, 15, 0, 0)
+        zenith, azimuth, *_ = solar_angle(-9.142685, 38.736946, date)
         self.assertAlmostEqual(zenith, 67.6, 1)
         self.assertAlmostEqual(azimuth, 221.2, 1)
+
+    def test_solar_power_angle(self):
+        """
+        Determine solar power irrandiance in location (based on Cristina results)
+        """
+        date = datetime(2024, 6, 21, 13, 0, 0)
+        pin, pdirect, pmodule = solar_power(-9.142685, 38.736946, 0.002, 35, date)
+        # self.assertAlmostEqual(zenith, 67.6, 1)
+        # self.assertAlmostEqual(azimuth, 221.2, 1)
 
