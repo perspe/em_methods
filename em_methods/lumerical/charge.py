@@ -633,9 +633,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
         if plot:
             plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
+
+        if len(active_region_list) > 1 :
+            return PCE, FF, Voc, Jsc, Current_Density, Voltage
+        else:
+            return pce, ff, voc, jsc, current_density, voltage
     
-    
-    return pce, ff, voc, jsc, current_density, voltage #change to upper case when running more than one material
 
 
 def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None):
