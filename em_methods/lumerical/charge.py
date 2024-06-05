@@ -221,7 +221,10 @@ def iv_curve(results, regime, names):
             stop = np.nan
             Voc = np.nan
         try:
-            P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
+            vals_v = np.linspace(min(voltage), max(voltage), 100)
+            new_j = np.interp(vals_v, voltage, current)
+            P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
+            #P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
             FF = abs(max(P) / (Voc * Isc))
             PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
         except ValueError:
