@@ -16,7 +16,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-logger = logging.getLogger()
+logger = logging.getLogger("sim")
 
 
 def _update_parameters(
