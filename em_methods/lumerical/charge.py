@@ -291,7 +291,7 @@ def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str, P): #NOT
         plt.show()
 
 
-def get_gen(path, fdtd_file, properties, active_region_list, terminal = 4):
+def get_gen(path, fdtd_file, properties, active_region_list):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -439,7 +439,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.select("geometry::" + name.Cathode)
         z_min = charge.get("z min")
         if terminal == 2:
-            charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANYOTHER
+            charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANY OTHER
         elif  terminal == 4:
             charge.select("CHARGE::" + str(name.GenName[:-4]))
         x_span = charge.get("x span")
