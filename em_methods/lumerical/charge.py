@@ -144,7 +144,7 @@ def charge_run(
 
 def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
     """
-    Generic function gather simulation data from already simulated files
+    Generic function to gather simulation data from already simulated files
     Args:
             basefile: Path to the original file
             names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
@@ -291,7 +291,7 @@ def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str, P): #NOT
         plt.show()
 
 
-def get_gen(path, fdtd_file, properties, active_region_list):
+def get_gen(path, fdtd_file, properties, active_region_list, terminal = 4):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -318,7 +318,15 @@ def get_gen(path, fdtd_file, properties, active_region_list):
 
 
         # EXPORT GENERATION FILES
+
         for names in active_region_list:
+            if isinstance(names.GenName, list): #if it is 2T:
+                for i in range(0, len(names.GenName)):
+                    gen_obj = names.SolarGenName[i] 
+                    file = names.GenName[i]
+                    g_name = file.replace(".mat", "")
+                    fdtd.select(str(gen_obj))
+                    fdtd.set("export filename", str(g_name))
             gen_obj = names.SolarGenName  # Solar Generation analysis object name
             file = names.GenName # generation file name
             g_name = file.replace(".mat", "")
@@ -377,7 +385,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max ,def_sim_region=None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max ,def_sim_region=None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -386,6 +394,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max
             bias_regime: forward or reverse bias
             name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
             path: CHARGE file directory
+            v_max: maximum voltage calculated in the IV curve
             def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
                         A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
                         will be created
@@ -397,29 +406,56 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
+    print(name.GenName)
+    print(isinstance(name.GenName, list))
+    if isinstance(name.GenName, list):
+        print("2T") 
+        terminal = 2
+        for i in range(0, len(name.GenName)): #ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
+            charge.addimportgen()
+            charge.set("name", str(name.GenName[i][:-4]))
+            print(str(name.GenName[i][:-4]))
+            # Import generation file path
+            charge.set("volume type", "solid")
+            charge.set("volume solid", str(name.SCName[i]))
+            charge.importdataset(name.GenName[i])
+            charge.save()
     # Create "Import generation rate" objects
-    charge.addimportgen()
-    charge.set("name", str(name.GenName[:-4]))
-    print(str(name.GenName[:-4]))
-    # Import generation file path
-    charge.set("volume type", "solid")
-    charge.set("volume solid", str(name.SCName))
-    charge.importdataset(name.GenName)
-    charge.save()
+    else:
+        print("4T")
+        terminal = 4
+        charge.addimportgen()
+        charge.set("name", str(name.GenName[:-4]))
+        print(str(name.GenName[:-4]))
+        # Import generation file path
+        charge.set("volume type", "solid")
+        charge.set("volume solid", str(name.SCName))
+        charge.importdataset(name.GenName)
+        charge.save()
     if def_sim_region is not None: 
-        # Defines boundaries for simulation region -UNTESTED
-        charge.select("geometry::" + name.Anode)  # anode
+        # Defines boundaries for simulation region
+        charge.select("geometry::" + name.Anode)
         z_max = charge.get("z max")
-        charge.select("geometry::" + name.Cathode)  # cathode
+        charge.select("geometry::" + name.Cathode)
         z_min = charge.get("z min")
-        charge.select("CHARGE::" + str(name.GenName[:-4]))  # solar generation
+        if terminal == 2:
+            charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANYOTHER
+        elif  terminal == 4:
+            charge.select("CHARGE::" + str(name.GenName[:-4]))
         x_span = charge.get("x span")
         x = charge.get("x")
         y_span = charge.get("y span")
         y = charge.get("y")
         # Creates the simulation region (2D or 3D)
+        #charge.addsimulationregion()
+
+        if terminal == 2: 
+            sim_name = "2Terminal"            
+        elif terminal == 4:
+            sim_name=name.SCName
         charge.addsimulationregion()
-        charge.set("name", name.SCName) 
+        charge.set("name", sim_name) 
+
         if "2" in def_sim_region: 
             charge.set("dimension", "2D Y-Normal")
             charge.set("x", x)
@@ -431,11 +467,11 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max
             charge.set("x span", x_span)
             charge.set("y", y)
             charge.set("y span", y_span)
-        charge.select(str(name.SCName))
+        charge.select(str(sim_name))
         charge.set("z max", z_max)
         charge.set("z min", z_min)
         charge.select("CHARGE")
-        charge.set("simulation region", name.SCName)
+        charge.set("simulation region", sim_name)
         charge.save()
     # Defining solver parameters
     if bias_regime == "forward":
@@ -445,12 +481,11 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max
         #charge.set("init step size",1) #unsure if it works properly
         charge.save()
         # Setting sweep parameters
-        print("we are in the forward section")
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         charge.set("sweep type", "range")
         charge.save()
         charge.set("range start", 0)
-        charge.set("range stop", V_max)
+        charge.set("range stop", v_max)
         charge.set("range num points", 41)
         charge.set("range backtracking", "enabled")
         charge.save()
@@ -471,17 +506,15 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, V_max
         charge.save()
     #Determining simulation region dimentions
     if def_sim_region is not None:
-        sim_region = name.SCName
+        sim_region = sim_name
     else:
         sim_region = charge.getnamed("CHARGE","simulation region")
     charge.select(sim_region)
     Lx = charge.get("x span")
     if "3D" not in charge.get("dimension"):
-        print("This is a 2D simulation")
         charge.select("CHARGE")
         Ly = charge.get("norm length")
     else:
-        print("This is a 3D simulation")
         charge.select(str(sim_region))
         Ly = charge.get("y span")
     return Lx, Ly
@@ -578,7 +611,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
 
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, V_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -606,12 +639,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     for names in active_region_list:
         try:
             results = charge_run(charge_path, properties, names, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "V_max": V_max ,"def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, names, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "V_max": V_max ,"def_sim_region":def_sim_region})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
