@@ -103,3 +103,17 @@ class TestFDTD(unittest.TestCase):
         }
         fdtd_kw = {"hide": False}
         fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw=fdtd_kw)
+
+    def test_structures(self):
+        """ Test for extracting higher amounts of data"""
+        fdtd_file: str = os.path.join(BASETESTPATH, "test_periodic.fsp")
+        properties = {
+        }
+        results = {
+            "data":
+                {"Ttot": "Ex"},
+            "results":
+                {"Ttot": "T"}
+        }
+        fdtd_kw = {"hide": True}
+        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw=fdtd_kw)
