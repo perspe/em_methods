@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List
 import logging
 from uuid import uuid4
 import shutil
@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass 
 from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
-from multiprocessing import Queue
+from multiprocessing import Queue, Manager
 from em_methods.lumerical.lum_helper import (
     RunLumerical,
     _get_lumerical_results,
@@ -18,7 +18,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -105,10 +105,10 @@ def charge_run(
     #       - If thread finds error then it kill the RunLumerical process
     get_results = {"results": {"CHARGE": str(names.Cathode)}
     }  # get_results: Dictionary with the properties to be calculated
-    process_queue = Queue()
+    results = Manager().dict()
     run_process = RunLumerical(
         LumMethod.CHARGE,
-        proc_queue=process_queue,
+        results=results,
         log_queue=Queue(-1),
         filepath=new_filepath,
         properties=properties,
@@ -123,23 +123,24 @@ def charge_run(
     # check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
-    if process_queue.empty():
+    logger.debug(f"Simulation finished")
+    results_keys = list(results.keys())
+    if "runtime" not in results_keys:
         raise LumericalError("Simulation Finished Prematurely")
     if delete:
+        logger.debug(f"Deleting unwanted files")
         os.remove(new_filepath)
         os.remove(log_file)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+       raise LumericalError(results["Error"]) 
     # Extract data from process
-    data = []
-    while not process_queue.empty():
-        data.append(process_queue.get())
-    logger.debug(f"Simulation data:\n{data}")
+    logger.debug(f"Simulation data:\n{results}")
     # Check for other possible runtime problems
-    if not len(data) == 4:
-        raise LumericalError(f"Too much data from simulation... {len(data)} != 3")
-    if isinstance(data[2], lumapi.LumApiError):
-       raise LumericalError(data[2]) 
-    charge_runtime, analysis_runtime, results, data_info = tuple(data)
-    return results, charge_runtime, analysis_runtime, data_info
+    if "data" not in results_keys:
+       raise LumericalError("No data available from simulation") 
+    return results["data"], results["runtime"], results["analysis runtime"], results["data_info"]
 
 
 def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):

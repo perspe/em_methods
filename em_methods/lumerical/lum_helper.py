@@ -1,7 +1,8 @@
 from threading import Thread
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Manager
 import os
 import sys
+import numpy as np
 from typing import List, Dict, Union, Callable, Any
 import logging
 import logging.handlers
@@ -9,7 +10,10 @@ import time
 from enum import Enum
 
 # Get module logger
-logger = logging.getLogger("dev")
+# Using any logger (such as dev) that log into
+# files may cause some problems in the end of the
+# program
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -137,7 +141,7 @@ class RunLumerical(Process):
         self,
         method: LumMethod,
         *,
-        proc_queue: Queue,
+        results: Manager,
         log_queue: Queue,
         filepath: str,
         properties: Dict[str, Dict[str, float]],
@@ -150,8 +154,9 @@ class RunLumerical(Process):
         super().__init__()
         log_handler = logging.handlers.QueueHandler(log_queue)
         logger.addHandler(log_handler)
+        self.log_queue = log_queue
+        self.results = results
         self.method = method
-        self.queue = proc_queue
         self.filepath = filepath
         self.properties = properties
         self.get_results = get_results
@@ -161,6 +166,7 @@ class RunLumerical(Process):
         self.kwargs = kwargs
 
     def run(self):
+        sim_data = {}
         lum_run_function = _run_method(self.method)
         if lum_run_function is None:
             raise LumericalError(
@@ -179,7 +185,6 @@ class RunLumerical(Process):
                     lumfile.set(parameter_key, parameter_value)
             lumfile.runsetup()
             lumfile.save()
-            results = {}
             if self.func is not None:
                 logger.debug(f"""
                              Running External function:
@@ -187,9 +192,9 @@ class RunLumerical(Process):
                              Args:{self.kwargs}
                              """)
                 func_output: Any = self.func(lumfile, **self.kwargs)
-                results["func_output"] = func_output
+                sim_data["func_output"] = func_output
             else:
-                results["func_output"] = None
+                sim_data["func_output"] = None
             # Note: The double lumfile.runsetup() is important for when the setup scripts
             #       (such as the model script) depend on variables from other
             #       scripts. For example the model scripts needs the internal property
@@ -201,17 +206,20 @@ class RunLumerical(Process):
             logger.debug(f"Running...")
             start_time = time.time()
             lumfile.switchtolayout()
-            lumfile.run("CHARGE")
-            charge_runtime = time.time() - start_time
-            self.queue.put(charge_runtime)
+            if self.method == LumMethod.CHARGE:
+                lumfile.run("CHARGE")
+            else:
+                lumfile.run()
+            runtime = time.time() - start_time
+            self.results["runtime"] = runtime
             start_time = time.time()
             lumfile.runanalysis()
             analysis_runtime = time.time() - start_time
-            self.queue.put(analysis_runtime)
+            self.results["analysis runtime"] = analysis_runtime
             logger.info(
-                f"Simulation took: CHARGE: {charge_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
+                f"Simulation took: {str(self.method)}: {runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
             )
-            # lumfile.save()
+            lumfile.save()
             # # Necessary for device to give time to store data
             # if self.method == LumMethod.DEVICE or self.method == LumMethod.CHARGE:
             #     time.sleep(3)
@@ -219,20 +227,16 @@ class RunLumerical(Process):
             # If data cannot be accessed pass the error to the user
             try:
                 lum_results = _get_lumerical_results(lumfile, self.get_results)
-                results.update(lum_results)
+                sim_data.update(lum_results)
+                self.results["data"] = sim_data
             except lumapi.LumApiError as lum_error:
-                results = lum_error
-            self.queue.put(results)
+                self.results["Error"] = lum_error
+                return
             info_data = self.get_info.copy()
             for info_obj, info_property in self.get_info.items():
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
-            self.queue.put(info_data)
-            # Guarantee the file is properly closed
-            lumfile.close()
-            
-
-            
+            self.results["data_info"] = info_data
 
 
 class LumericalError(Exception):
@@ -259,19 +263,23 @@ def _get_lumerical_results(
             if not isinstance(value, list):
                 value = [value]
             for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
                 results["data." + key + "." + value_i] = lum_handler.getdata(
                     key, value_i
                 )
-                logger.debug(results["data."+key+"."+value_i])
     if "results" in get_results_info:
         for key, value in get_results["results"].items():
             if not isinstance(value, list):
                 value = [value]
             for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
                 results["results." + key + "." + value_i] = lum_handler.getresult(
                     key, value_i
                 )
-                logger.debug(results["results."+key+"."+value_i])
+    if "source" in get_results_info:
+        f_min = lum_handler.getglobalsource("frequency start")
+        f_max = lum_handler.getglobalsource("frequency stop")
+        f_points = lum_handler.getglobalmonitor("frequency points")
+        logger.debug(f"fmin: {f_min} | fmax: {f_max} | fpoint: {f_points}")
+        freq = np.linspace(f_min, f_max, int(f_points))
+        sourcepower = lum_handler.sourcepower(freq)
+        results["source"] = {"freq": freq, "Psource": sourcepower}
     return results
