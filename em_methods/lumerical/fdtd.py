@@ -153,81 +153,81 @@ def fdtd_run(
        raise LumericalError("No data available from simulation") 
     return results["data"], results["runtime"], results["analysis runtime"], results["data_info"]
 
-# def fdtd_run(basefile: str,
-#              properties: Dict[str, Dict[str, float]],
-#              get_results: Dict[str, Dict[str, Union[str, List]]],
-#              *,
-#              savepath: Union[None, str] = None,
-#              override_prefix: Union[None, str] = None,
-#              delete: bool = False,
-#              fdtd_kw: bool = {"hide": True}
-#              ):
-#     """
-#     Generic function to run lumerical files from python
-#     Steps: (Copy file to new location/Update Properties/Run/Extract Results)
-#     Args:
-#             basefile: Path to the original file
-#             properties: Dictionary with the property object and property names and values
-#             get_results: Dictionary with the properties to be calculated
-#             savepath (default=.): Override default savepath for the new file
-#             override_prefix (default=None): Override prefix for the new file
-#             delete (default=False): Delete newly generated file
-#     Return:
-#             results: Dictionary with all the results
-#             time: Time to run the simulation
-#     """
-#     # Build the name of the new file and copy to a new location
-#     basepath, basename = os.path.split(basefile)
-#     savepath: str = savepath or basepath
-#     override_prefix: str = override_prefix or str(uuid4())[0:5]
-#     new_filepath: str = os.path.join(
-#         savepath, override_prefix + "_" + basename)
-#     logger.debug(f"new_filepath:{new_filepath}")
-#     shutil.copyfile(basefile, new_filepath)
-#     # Update simulation properties, run and get results
-#     with lumapi.FDTD(filename=new_filepath, **fdtd_kw) as fdtd:
-#         # Update structures
-#         for structure_key, structure_value in properties.items():
-#             logger.debug(f"Editing: {structure_key}")
-#             fdtd.select(structure_key)
-#             for parameter_key, parameter_value in structure_value.items():
-#                 logger.debug(
-#                     f"Updating: {parameter_key} to {parameter_value}")
-#                 fdtd.set(parameter_key, parameter_value)
-#         # Note: The double fdtd.runsetup() is important for when the setup scripts
-#         #       (such as the model script) depend on variables from other
-#         #       scripts. For example the model scripts needs the internal property
-#         #       of a layer generated from a structure group.
-#         #       The first run updates internally all the values
-#         #       The second run then updates all the structures with the updated values
-#         fdtd.runsetup()
-#         fdtd.runsetup()
-#         logger.debug(f"Running...")
-#         start_time = time.time()
-#         fdtd.run()
-#         fdtd_runtime = time.time() - start_time
-#         start_time = time.time()
-#         fdtd.runanalysis()
-#         analysis_runtime = time.time() - start_time
-#         logger.info(
-#             f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
-#         results = _get_fdtd_results(fdtd, get_results)
-#     # Gather info from log and the delete it
-#     log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
-#     autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
-#     autoshut_off_list: List[Tuple[float, float]] = []
-#     with open(log_file, mode="r") as log:
-#         for log_line in log.readlines():
-#             match = re.search(autoshut_off_re, log_line)
-#             if match:
-#                 autoshut_off_percent = float(log_line.split(" ")[0][:-1])
-#                 autoshut_off_val = float(log_line.split(" ")[-1])
-#                 autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
-#     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
-#     if delete:
-#         os.remove(new_filepath)
-#         os.remove(log_file)
-#     return results, fdtd_runtime, analysis_runtime, autoshut_off_list
+def fdtd_run_large_data(basefile: str,
+             properties: Dict[str, Dict[str, float]],
+             get_results: Dict[str, Dict[str, Union[str, List]]],
+             *,
+             savepath: Union[None, str] = None,
+             override_prefix: Union[None, str] = None,
+             delete: bool = False,
+             fdtd_kw: bool = {"hide": True}
+             ):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+            basefile: Path to the original file
+            properties: Dictionary with the property object and property names and values
+            get_results: Dictionary with the properties to be calculated
+            savepath (default=.): Override default savepath for the new file
+            override_prefix (default=None): Override prefix for the new file
+            delete (default=False): Delete newly generated file
+    Return:
+            results: Dictionary with all the results
+            time: Time to run the simulation
+    """
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(
+        savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Update simulation properties, run and get results
+    with lumapi.FDTD(filename=new_filepath, **fdtd_kw) as fdtd:
+        # Update structures
+        for structure_key, structure_value in properties.items():
+            logger.debug(f"Editing: {structure_key}")
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                logger.debug(
+                    f"Updating: {parameter_key} to {parameter_value}")
+                fdtd.set(parameter_key, parameter_value)
+        # Note: The double fdtd.runsetup() is important for when the setup scripts
+        #       (such as the model script) depend on variables from other
+        #       scripts. For example the model scripts needs the internal property
+        #       of a layer generated from a structure group.
+        #       The first run updates internally all the values
+        #       The second run then updates all the structures with the updated values
+        fdtd.runsetup()
+        fdtd.runsetup()
+        logger.debug(f"Running...")
+        start_time = time.time()
+        fdtd.run()
+        fdtd_runtime = time.time() - start_time
+        start_time = time.time()
+        fdtd.runanalysis()
+        analysis_runtime = time.time() - start_time
+        logger.info(
+            f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s")
+        results = _get_fdtd_results(fdtd, get_results)
+    # Gather info from log and the delete it
+    log_file: str = os.path.join(savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log")
+    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
+    autoshut_off_list: List[Tuple[float, float]] = []
+    with open(log_file, mode="r") as log:
+        for log_line in log.readlines():
+            match = re.search(autoshut_off_re, log_line)
+            if match:
+                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
+                autoshut_off_val = float(log_line.split(" ")[-1])
+                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
+    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
+    if delete:
+        os.remove(new_filepath)
+        os.remove(log_file)
+    return results, fdtd_runtime, analysis_runtime, autoshut_off_list
 
 def fdtd_run_analysis(basefile: str,
                       get_results: Dict[str, Dict[str, Union[str, List]]],
