@@ -275,8 +275,9 @@ def _get_lumerical_results(
                     key, value_i
                 )
     if "source" in get_results_info:
-        f_min = lum_handler.getglobalsource("frequency start")
-        f_max = lum_handler.getglobalsource("frequency stop")
+        lum_handler.select(get_results["source"])
+        f_min = lum_handler.get("frequency start")
+        f_max = lum_handler.get("frequency stop")
         f_points = lum_handler.getglobalmonitor("frequency points")
         logger.debug(f"fmin: {f_min} | fmax: {f_max} | fpoint: {f_points}")
         freq = np.linspace(f_min, f_max, int(f_points))
