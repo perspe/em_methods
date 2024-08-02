@@ -68,7 +68,7 @@ def am_rozenberg(zenith: Union[float, npt.NDArray]) -> Union[float, npt.NDArray]
 
 
 def solar_angle(
-    longitude: float, latitude: float, dt: datetime.datetime, default_tz=timezone("GMT")
+    longitude: float, latitude: float, dt: datetime.datetime, default_tz=timezone("GMT"), eot_function=eot_main
 ):
     """
     Determine the solar angle from coordinate and time information
@@ -88,7 +88,7 @@ def solar_angle(
     time_diff = dt.strftime("%z")
     time_diff = int(time_diff[1:2]) + int(time_diff[2:]) / 60
     lstm = 15 * time_diff
-    eot = eot_main(days_start_year)
+    eot = eot_function(days_start_year)
     declination = solar_declination(days_start_year)
     if not isinstance(eot, float) or not isinstance(declination, float):
         raise TypeError("EoT or declination have wrong type")
