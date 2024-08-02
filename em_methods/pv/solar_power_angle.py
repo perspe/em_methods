@@ -151,6 +151,7 @@ def solar_power(
     tilt: float,
     dt: datetime.datetime,
     default_tz=timezone("GMT"),
+    am_function=am_kasten
 ):
     """
     Determine the solar power incident on a module, from its location on
@@ -168,7 +169,7 @@ def solar_power(
     """
     zenith, azimuth, *_ = solar_angle(longitude, latitude, dt, default_tz)
     zenith_rad, azimuth_rad = math.radians(zenith), math.radians(azimuth)
-    air_mass = am_kasten(zenith)
+    air_mass = am_function(zenith)
     tilt_rad = math.radians(tilt)
     elevation = scc.pi / 2 - zenith_rad
     azimuth_pannel = scc.pi if latitude > 0 else 0
