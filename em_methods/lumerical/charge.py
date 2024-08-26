@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List
 import logging
 from uuid import uuid4
 import shutil
@@ -9,7 +9,7 @@ import sys
 from dataclasses import dataclass 
 from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
-from multiprocessing import Queue
+from multiprocessing import Queue, Manager
 from em_methods.lumerical.lum_helper import (
     RunLumerical,
     _get_lumerical_results,
@@ -18,7 +18,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -105,10 +105,10 @@ def charge_run(
     #       - If thread finds error then it kill the RunLumerical process
     get_results = {"results": {"CHARGE": str(names.Cathode)}
     }  # get_results: Dictionary with the properties to be calculated
-    process_queue = Queue()
+    results = Manager().dict()
     run_process = RunLumerical(
         LumMethod.CHARGE,
-        proc_queue=process_queue,
+        results=results,
         log_queue=Queue(-1),
         filepath=new_filepath,
         properties=properties,
@@ -123,23 +123,24 @@ def charge_run(
     # check_thread.start()
     logger.debug("Run Process Started...")
     run_process.join()
-    if process_queue.empty():
+    logger.debug(f"Simulation finished")
+    results_keys = list(results.keys())
+    if "runtime" not in results_keys:
         raise LumericalError("Simulation Finished Prematurely")
     if delete:
+        logger.debug(f"Deleting unwanted files")
         os.remove(new_filepath)
         os.remove(log_file)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+       raise LumericalError(results["Error"]) 
     # Extract data from process
-    data = []
-    while not process_queue.empty():
-        data.append(process_queue.get())
-    logger.debug(f"Simulation data:\n{data}")
+    logger.debug(f"Simulation data:\n{results}")
     # Check for other possible runtime problems
-    if not len(data) == 4:
-        raise LumericalError(f"Too much data from simulation... {len(data)} != 3")
-    if isinstance(data[2], lumapi.LumApiError):
-       raise LumericalError(data[2]) 
-    charge_runtime, analysis_runtime, results, data_info = tuple(data)
-    return results, charge_runtime, analysis_runtime, data_info
+    if "data" not in results_keys:
+       raise LumericalError("No data available from simulation") 
+    return results["data"], results["runtime"], results["analysis runtime"], results["data_info"]
 
 
 def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
@@ -180,6 +181,7 @@ def iv_curve(results, regime, names):
 
     current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
     voltage = np.array(results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)])
+    #a = results["results.CHARGE.monitor.bandstructure"]["Ec"]
     Lx = results["func_output"][0]
     Ly = results["func_output"][1]
 
@@ -851,3 +853,57 @@ def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
             fdtd.save()
         fdtd.close()
 
+def sweep_bandgap_SnO2(fdtd_file, mat_data, min_shift, max_shift, interval, mat_Eg, properties):
+    '''
+    Shifts the refractive index data in wavelength, between 'min_shift' and 'max_shift', for interval steps.
+    Note: the same FDTD file is used throughout the sweep! No new files are created.
+    Arguments:
+            fdtd_file: path of FDTD file
+            mat_data: material refractive index data, with 3 columns headed as 'wvl'(wavelenth [nm]), 'n'(real part) and 'k'(extinction coefficient)
+            min_shift: minimum Eg shift to test, in wavelength [nm]
+            max_shift: maximum Eg shift to test, in wavelength [nm]
+            interval: amount of sweep iterations (pref 20)
+            mat_Eg: unshifted material bandgap in [eV]
+
+    '''
+    # Physical constants
+    q = 1.602e-19 # C
+    h = 6.626e-34 # J.s
+    c = 3e8 # m/s
+    # Transform refractive index in complex permitivitty values
+    n = mat_data['n']
+    k = mat_data['k']
+    wvl = mat_data['wvl']
+    index = n + k*1j
+    perm = index**2
+    # Wavelength shift
+    mat_Eg = mat_Eg*1.60218e-19 #Eg in J
+    lim_lam = h*c/mat_Eg #wl in m
+    wvl_lim = [i*1e-9 for i in range(min_shift, max_shift, interval)] #wl in m
+    for lam in wvl_lim:
+        print(lam)
+        dif = -wvl[0]*1e-9 + lam
+        #new_lim = lim_lam + lam
+        new_wvl = wvl*1e-9 + dif
+        new_lim = lam
+        Eg = round(h*c/(new_lim*q), 3)
+        Eg = Eg*1000
+        freq = c/new_wvl
+        with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
+            fdtd.switchtolayout()
+            for structure_key, structure_value in properties.items():
+                fdtd.select(structure_key)
+                for parameter_key, parameter_value in structure_value.items():
+                    fdtd.set(parameter_key, parameter_value)
+            fdtd.save()
+            fdtd.setmaterial(fdtd.addmaterial("Sampled 3D data"), "name", "SnO2_"+str(Eg)+"_Eg")
+            fdtd.setmaterial("SnO2_"+str(Eg)+"_Eg",'sampled 3d data', np.c_[freq, perm])
+            fdtd.select('SnO2')
+            fdtd.set('material', "SnO2_"+str(Eg)+"_Eg")
+            fdtd.select("solar_generation_PVK")
+            fdtd.set("export filename", "SnO2_"+str(Eg)+"_Eg")
+            fdtd.run()
+            fdtd.runanalysis()
+            fdtd.switchtolayout()
+            fdtd.save()
+        fdtd.close()

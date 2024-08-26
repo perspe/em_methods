@@ -1,17 +1,21 @@
 import sys
 import os
 import shutil
-from typing import Union, Dict, List, Tuple
+from typing import Union, Dict, List
 from uuid import uuid4
 import logging
-import time
-import re
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
 import scipy.constants as scc
+from multiprocessing import Queue, Manager
+from em_methods.lumerical.lum_helper import (
+    RunLumerical,
+    LumericalError,
+    LumMethod,
+)
 
 # Get module logger
 logger = logging.getLogger("sim")
@@ -65,7 +69,91 @@ def _get_fdtd_results(fdtd_handler: lumapi.FDTD, get_results: Dict[str, Dict[str
 
 """ Main functions """
 
-def fdtd_run(basefile: str,
+
+def fdtd_run(
+    basefile: str,
+    properties: Dict[str, Dict[str, float]],
+    get_results: Dict[str, Dict[str, Union[str, List]]],
+    *,
+    get_info: Dict[str, str] ={},
+    func=None,
+    savepath: Union[None, str] = None,
+    override_prefix: Union[None, str] = None,
+    delete: bool = False,
+    fdtd_kw={"hide": True},
+    **kwargs,
+):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+            basefile: Path to the original file
+            properties: Dictionary with the property object and property names and values
+            savepath (default=.): Override default savepath for the new file
+            override_prefix (default=None): Override prefix for the new file
+            delete (default=False): Delete newly generated file
+            names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+            func: optional funtion
+            get_info: Dictionary with additional data to extract from the CHARGE file 
+    Return:
+            results: Dictionary with all the results
+            time: Time to run the simulation
+    """
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Get logfile name
+    log_file: str = os.path.join(
+        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
+    )
+    # Run simulation - the process is as follows
+    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
+    # 2. Create a process (RunLumerical) to run the lumerical file
+    #       - This avoids problems when the simulation gives errors
+    # 3. Create a Thread to check run state
+    #       - If thread finds error then it kill the RunLumerical process
+    results = Manager().dict()
+    run_process = RunLumerical(
+        LumMethod.FDTD,
+        results=results,
+        log_queue=Queue(-1),
+        filepath=new_filepath,
+        properties=properties,
+        get_results=get_results,
+        get_info=get_info,
+        func=func,
+        lumerical_kw=fdtd_kw,
+        **kwargs,
+    )
+    run_process.start()
+    # check_thread = CheckRunState(log_file, run_process, process_queue)
+    # check_thread.start()
+    logger.debug("Run Process Started...")
+    run_process.join()
+    logger.debug(f"Simulation finished")
+    results_keys = list(results.keys())
+    if "runtime" not in results_keys:
+        raise LumericalError("Simulation Finished Prematurely")
+    if delete:
+        logger.debug(f"Deleting unwanted files")
+        os.remove(new_filepath)
+        os.remove(log_file)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+       raise LumericalError(results["Error"]) 
+    # Extract data from process
+    logger.debug(f"Simulation data:\n{results}")
+    # Check for other possible runtime problems
+    if "data" not in results_keys:
+       raise LumericalError("No data available from simulation") 
+    return results["data"], results["runtime"], results["analysis runtime"], results["data_info"]
+
+def fdtd_run_large_data(basefile: str,
              properties: Dict[str, Dict[str, float]],
              get_results: Dict[str, Dict[str, Union[str, List]]],
              *,
