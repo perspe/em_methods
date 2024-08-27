@@ -59,7 +59,7 @@ class SimInfo:
 def charge_run(
     basefile: str,
     properties: Dict[str, Dict[str, float]],
-    names: SimInfo,
+    get_results,
     *,
     get_info: Dict[str, str] ={},
     func=None,
@@ -103,8 +103,6 @@ def charge_run(
     #       - This avoids problems when the simulation gives errors
     # 3. Create a Thread to check run state
     #       - If thread finds error then it kill the RunLumerical process
-    get_results = {"results": {"CHARGE": str(names.Cathode)}
-    }  # get_results: Dictionary with the properties to be calculated
     results = Manager().dict()
     run_process = RunLumerical(
         LumMethod.CHARGE,
@@ -329,11 +327,12 @@ def get_gen(path, fdtd_file, properties, active_region_list):
                     g_name = file.replace(".mat", "")
                     fdtd.select(str(gen_obj))
                     fdtd.set("export filename", str(g_name))
-            gen_obj = names.SolarGenName  # Solar Generation analysis object name
-            file = names.GenName # generation file name
-            g_name = file.replace(".mat", "")
-            fdtd.select(str(gen_obj))
-            fdtd.set("export filename", str(g_name))
+            else: #if it is 4T:
+                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
+                file = names.GenName # generation file name
+                g_name = file.replace(".mat", "")
+                fdtd.select(str(gen_obj))
+                fdtd.set("export filename", str(g_name))
         fdtd.run()
         fdtd.runanalysis()
         fdtd.save()
@@ -628,6 +627,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                             A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
                             will be created
     """ 
+    
     PCE = []
     FF = []
     Voc = []
@@ -639,13 +639,14 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_gen(path, fdtd_file, properties, active_region_list)
     results = None
     for names in active_region_list:
+        get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
-            results = charge_run(charge_path, properties, names, 
+            results = charge_run(charge_path, properties, get_results, 
                                 func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
-                results = charge_run(charge_path, properties, names, 
+                results = charge_run(charge_path, properties, get_results, 
                                func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
