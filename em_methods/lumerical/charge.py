@@ -385,7 +385,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point=False, def_sim_region=None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point, def_sim_region=None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -483,7 +483,12 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         if single_point == True:
             charge.set("sweep type", "single")
             charge.save()
+            #charge.set("voltage", 0)
+            #charge.save()
             print("single")
+            charge.select("CHARGE::"+ str(name.GenName[:-4]))
+            charge.delete()
+            charge.save()
         else:
             charge.set("sweep type", "range")
             charge.save()
@@ -645,12 +650,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"def_sim_region":def_sim_region})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
@@ -807,7 +812,7 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
 
 
 
-def band_diagram(active_region_list,charge_file, path, properties, def_sim_region="2d", v_max = None):
+def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_max = None):
     charge_path = os.path.join(path, charge_file)
     get_results = {"CHARGE": {"monitor": " bandstructure"}}
     Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
