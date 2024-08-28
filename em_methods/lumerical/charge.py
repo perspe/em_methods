@@ -821,11 +821,11 @@ def band_diagram(active_region_list,charge_file, path, properties, def_sim_regio
         ev = bandstructure['results.CHARGE::monitor.bandstructure']["Ev"].flatten()
         efn = bandstructure['results.CHARGE::monitor.bandstructure']["Efn"].flatten()
         efp = bandstructure['results.CHARGE::monitor.bandstructure']["Efp"].flatten()
-    Ec.append(ec)
-    Ev.append(ev)
-    Efn.append(efn)
-    Efp.append(efp)
-    Thickness.append(thickness)
+        Ec.append(ec)
+        Ev.append(ev)
+        Efn.append(efn)
+        Efp.append(efp)
+        Thickness.append(thickness)
     if len(active_region_list) > 1 :
         return Thickness,Ec, Ev, Efn, Efp
     else:
