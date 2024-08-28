@@ -167,7 +167,7 @@ def lambertian_thickness(
         ]
     )
 
-def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim = -1, label_vary = [], unit = "", parameters = None, legend = None ):
+def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim = -1, label_vary = [], unit = "", parameters = None, legend = None, save_path = None):
     """
     Plots the IV curve(s) provided in the inputs. Has the capacity to plot several curves with the same color range 
     (useful when plotting several IV curves and changing only one variable) 
@@ -184,7 +184,8 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim 
             parameters: array with the parameters that might be changing in the same IV curve set, empty by default
             y_lim: scalar which determines the maximum heigth of the plot in the y scale   
             legend: 'out' or 'no' or None. By default 'out' When 'out' the legend is displayed outside the plot. When 'no' the legend is not displayed. 
-                    When None the legend is displayed inside the plot at random position.   
+                    When None the legend is displayed inside the plot at random position.
+            save_path: string with the path where the plot should be saved. If None, the plot is not saved.   
             
             input format example (any number of curves is allowed): 
                 labels = {"label_1":label_1, "label_2":label_2, "label_3":label_3 }
@@ -272,9 +273,11 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim 
     plt.grid(True, linestyle='--')
     ax.set_ylim(y_lim, j_max)
     ax.set_xlim(0, v_max)
+    if save_path is not None:
+        plt.savefig(save_path, dpi = 300, bbox_inches = 'tight')
     plt.show()
 
-def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out'):
+def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out', save_path= None):
     """
     Plots the Band Diagrams provided in the inputs. This code is modular: it can plot results from CHARGE and AFORS-HET without manipulating the data previously.
     Args:
@@ -283,7 +286,8 @@ def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out'):
             color: dictionary with the colors for each IV curve
             labels: dictionary with the labels for each IV curve
             legend: 'out' or 'no' or None. By default 'out' When 'out' the legend is displayed outside the plot. When 'no' the legend is not displayed. 
-                    When None the legend is displayed inside the plot at random position.  
+                    When None the legend is displayed inside the plot at random position.
+            save_path: string with the path where the plot should be saved. If None, the plot is not saved.     
             
             input format example (any number of curves is allowed): 
                 labels = {"label_1":label_1, "label_2":label_2, "label_3":label_3, "label_4":label_4 }
@@ -323,4 +327,6 @@ def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out'):
     plt.ylabel("[eV]")
     plt.xlabel("thickness [um]")
     plt.grid(True, linestyle='--')
+    if save_path is not None:
+        plt.savefig(save_path, dpi = 300, bbox_inches = 'tight')
     plt.show()
