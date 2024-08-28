@@ -18,7 +18,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("sim")
+logger = logging.getLogger("dev")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -150,7 +150,6 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
 
     Return:
             results: Dictionary with all the results
-            time: Time to run the simulation
     """
     get_results = {"results": {"CHARGE": str(names.Cathode)}}
     with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
@@ -386,7 +385,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max ,def_sim_region=None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point=False, def_sim_region=None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -407,8 +406,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
-    print(name.GenName)
-    print(isinstance(name.GenName, list))
     if isinstance(name.GenName, list):
         print("2T") 
         terminal = 2
@@ -483,13 +480,18 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.save()
         # Setting sweep parameters
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        charge.set("sweep type", "range")
-        charge.save()
-        charge.set("range start", 0)
-        charge.set("range stop", v_max)
-        charge.set("range num points", 41)
-        charge.set("range backtracking", "enabled")
-        charge.save()
+        if single_point == True:
+            charge.set("sweep type", "single")
+            charge.save()
+            print("single")
+        else:
+            charge.set("sweep type", "range")
+            charge.save()
+            charge.set("range start", 0)
+            charge.set("range stop", v_max)
+            charge.set("range num points", 41)
+            charge.set("range backtracking", "enabled")
+            charge.save()
     #Reverse bias regime
     elif bias_regime == "reverse":
         charge.select("CHARGE")
@@ -519,6 +521,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.select(str(sim_region))
         Ly = charge.get("y span")
     return Lx, Ly
+
 
 def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
     """ 
@@ -675,6 +678,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         return PCE, FF, Voc, Jsc, Current_Density, Voltage
     else:
         return pce, ff, voc, jsc, current_density, voltage
+    
 
 
 def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None):
@@ -803,14 +807,29 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
 
 
 
-
-
-
-
-
-
-
-
+def band_diagram(active_region_list,charge_file, path, properties, def_sim_region="2d", v_max = None):
+    charge_path = os.path.join(path, charge_file)
+    get_results = {"CHARGE": {"monitor": " bandstructure"}}
+    Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
+    for names in active_region_list:
+        get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated
+        results = charge_run(charge_path, properties, get_results, 
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max , "single_point":True,"def_sim_region":def_sim_region})
+        bandstructure =results[0]
+        ec= bandstructure['results.CHARGE::monitor.bandstructure']["Ec"].flatten()
+        thickness = bandstructure['results.CHARGE::monitor.bandstructure']["z"].flatten()
+        ev = bandstructure['results.CHARGE::monitor.bandstructure']["Ev"].flatten()
+        efn = bandstructure['results.CHARGE::monitor.bandstructure']["Efn"].flatten()
+        efp = bandstructure['results.CHARGE::monitor.bandstructure']["Efp"].flatten()
+    Ec.append(ec)
+    Ev.append(ev)
+    Efn.append(efn)
+    Efp.append(efp)
+    Thickness.append(thickness)
+    if len(active_region_list) > 1 :
+        return Thickness,Ec, Ev, Efn, Efp
+    else:
+        return thickness, ec, ev, efn, efp
 
 def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
     '''
