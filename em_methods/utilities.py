@@ -7,6 +7,9 @@ import os
 from pathlib import Path
 import numpy as np
 from em_methods import Units
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import matplotlib.colors as mcolors
 
 # Get some module paths
 file_path = Path(os.path.abspath(__file__))
@@ -163,3 +166,161 @@ def lambertian_thickness(
             for t_i in thicknesses
         ]
     )
+
+def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim = -1, label_vary = [], unit = "", parameters = None, legend = None ):
+    """
+    Plots the IV curve(s) provided in the inputs. Has the capacity to plot several curves with the same color range 
+    (useful when plotting several IV curves and changing only one variable) 
+    Args:
+            v: dictionary with the voltage arrays
+            j: dictionary with the current density arrays in mA/cm2
+            color: dictionary with the colors for each IV curve
+            labels: dictionary with the labels for each IV curve
+            voc, pce, ff, jsc: dictionaries with the IV curve metrics for each curve
+            j_max: scalar which determines the maximum heigth of the plot in the y scale
+            v_max: scalar which determines the maximum heigth of the plot in the x scale
+            label_vary: array with the names/values of a variable that might be changing in the same IV curve set, empty by default
+            unit: string with the unit of the variable that might be changing in the same IV curve set, empty by default
+            parameters: array with the parameters that might be changing in the same IV curve set, empty by default
+            y_lim: scalar which determines the maximum heigth of the plot in the y scale   
+            legend: 'out' or 'no' or None. By default 'out' When 'out' the legend is displayed outside the plot. When 'no' the legend is not displayed. 
+                    When None the legend is displayed inside the plot at random position.   
+            
+            input format example (any number of curves is allowed): 
+                labels = {"label_1":label_1, "label_2":label_2, "label_3":label_3 }
+                color = {"color_1":color_1, "color_2":color_2, "color_3":color_3 }
+                voc = {"voc_1":voc_1, "voc_2" : voc_2, "voc_3": voc_3}
+                v = {"v_1":v_1, "v_2":v_2, "v_3":v_3}
+                j = {"j_1":j_1, "j_2":j_2, "j_3":j_3} 
+                pce = {"pce_1":pce_1, "pce_2": pce_2, "pce_3": pce_3}
+                ff = {"ff_1":ff_1, "ff_2":ff_2, "ff_3": ff_3}
+                jsc = {"jsc_1":jsc_1, "jsc_2":jsc_2, "jsc_3":jsc_3}
+    """
+    def colorFader(c1,c2 = '#FFFFFF',mix=0): 
+        c1=np.array(mpl.colors.to_rgb(c1))
+        c2=np.array(mpl.colors.to_rgb(c2))
+        return mpl.colors.to_hex((1-mix)*c1 + mix*c2)
+
+    fig, ax = plt.subplots()
+    textstr_name = f"Voc =\nJsc =\nFF  =\nPce ="
+    textstr_units = f"  V \n  mA/cm² \n\n  %"
+    vary_true = 0
+    for i in range(1,len(v.keys())+1):
+        v_key = f'v_{i}'
+        j_key = f'j_{i}'
+        color_key = f'color_{i}'
+        label_key = f'label_{i}'
+        voc_key = f'voc_{i}'
+        jsc_key = f'jsc_{i}'
+        pce_key = f'pce_{i}'
+        ff_key = f'ff_{i}'
+        
+        if isinstance(voc[voc_key], (list, tuple, np.ndarray)): 
+            vary_true = vary_true + 1
+            for z in range(0, len(voc[voc_key])):
+                plt.plot(v[v_key][z], j[j_key][z], "-", color=colorFader(color[color_key],mix=(z)/len(voc[voc_key])) ,label = f"{labels[label_key]} {label_vary[z]} {unit}" )
+                plt.plot(voc[voc_key][z], 0, "o", color=colorFader(color[color_key],mix=(z)/len(voc[voc_key])))
+            if parameters is not None: 
+                vary_true = vary_true - 1
+                textstr = f"     {voc[voc_key][parameters]:05.2f}\n     {abs(jsc[jsc_key][parameters]):05.2f}\n     {ff[ff_key][parameters]:05.2f} \n     {pce[pce_key][parameters]:05.2f}"
+                color[color_key] = colorFader(color[color_key],mix=(voc[voc_key].index(voc[voc_key][parameters]))/len(voc[voc_key]))
+            else: 
+                textstr = ""    
+                
+    
+        else:
+            plt.plot(v[v_key], j[j_key], "-", color= color[color_key], label = labels[label_key])
+            plt.plot(voc[voc_key], 0, "o", color=color[color_key])
+            textstr = f"     {voc[voc_key]:05.2f}\n     {abs(jsc[jsc_key]):05.2f}\n     {ff[ff_key]:05.2f} \n     {pce[pce_key]:05.2f}"
+        x_position = 1.00 + (0.20*(i)) - (0.20*vary_true)
+        plt.text(
+            x_position,
+            0.80,
+            textstr,
+            transform=ax.transAxes,
+            fontsize=17,
+            verticalalignment="top",
+            color = color[color_key] 
+        )
+    x_position  = x_position + 0.20
+    plt.text(
+        1.05,
+        0.80,
+        textstr_name,
+        transform=ax.transAxes,
+        fontsize=17,
+        verticalalignment="top",
+        color = "black" 
+        )
+    plt.text(
+        x_position,
+        0.80,
+        textstr_units,
+        transform=ax.transAxes,
+        fontsize=17,
+        verticalalignment="top",
+        color = "black" 
+        )
+    if legend is None:    
+        plt.legend()
+    elif legend == "out":
+        plt.legend(bbox_to_anchor=(1.05, 0.4), loc='upper left')
+    elif legend == 'no':
+        print('no legend')
+    plt.ylabel("Current density [mA/cm²] ")
+    plt.xlabel("Voltage [V]")
+    plt.grid(True, linestyle='--')
+    ax.set_ylim(y_lim, j_max)
+    ax.set_xlim(0, v_max)
+    plt.show()
+
+def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out'):
+    """
+    Plots the Band Diagrams provided in the inputs. This code is modular: it can plot results from CHARGE and AFORS-HET without manipulating the data previously.
+    Args:
+            ec: dictionary with the conduction band arrays
+            ev: dictionary with the valence band arrays
+            color: dictionary with the colors for each IV curve
+            labels: dictionary with the labels for each IV curve
+            legend: 'out' or 'no' or None. By default 'out' When 'out' the legend is displayed outside the plot. When 'no' the legend is not displayed. 
+                    When None the legend is displayed inside the plot at random position.  
+            
+            input format example (any number of curves is allowed): 
+                labels = {"label_1":label_1, "label_2":label_2, "label_3":label_3, "label_4":label_4 }
+                color = {"color_1":color_1, "color_2":color_2, "color_3":color_3, "color_4":color_4 }
+                ec = {"ec_1":ec_1, "ec_2":ec_2, "ec_3":ec_3, "ec_4":ec_4}
+                ev = {"ev_1":ev_1, "ev_2":ev_2, "ev_3":ev_3, "ev_4":ev_4}
+                efn = {"efn_1":efn_1, "efn_2":efn_2, "efn_3":efn_3, "efn_4":efn_4}
+                efp = {"efp_1":efp_1, "efp_2":efp_2, "efp_3":efp_3, "efp_4":efp_4}   
+                thickness = {"thickness_1":thickness_1, "thickness_2":thickness_2, "thickness_3":thickness_3, "thickness_4":thickness_4}
+    """ 
+    fig, ax = plt.subplots(1,1, figsize=(10,6))
+    for i in range(1,len(ec.keys())+1):
+        ec_key = f'ec_{i}'
+        ev_key = f'ev_{i}'
+        efn_key = f'efn_{i}'
+        efp_key = f'efp_{i}'
+        thickness_key = f'thickness_{i}'
+        color_key = f'color_{i}'
+        label_key = f'label_{i}'
+        corrector = 0
+        if efp[efp_key][0] != 0: #method of finding the afors data
+            corrector = efp[efp_key][0]
+            thickness_fix = thickness[thickness_key][::-1]*1e+4
+        else:
+            thickness_fix = np.array(thickness[thickness_key]) * 1e6 - thickness[thickness_key][0] * 1e6
+        plt.plot(thickness_fix , ec[ec_key]-corrector, "-", color= color[color_key], label = labels[label_key])
+        plt.plot(thickness_fix, ev[ev_key]-corrector, "-", color= color[color_key])
+        plt.plot(thickness_fix , efn[efn_key]-corrector, "--", color= color[color_key])
+        plt.plot(thickness_fix , efp[efp_key]-corrector, "--", color= color[color_key])
+
+    if legend is None:    
+        plt.legend()
+    elif legend == "out":
+        plt.legend(bbox_to_anchor=(1.05, 0), loc='upper left')
+    elif legend == 'no':
+        print('no legend')
+    plt.ylabel("[eV]")
+    plt.xlabel("thickness [um]")
+    plt.grid(True, linestyle='--')
+    plt.show()
