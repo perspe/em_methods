@@ -18,7 +18,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -483,8 +483,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         if single_point == True:
             charge.set("sweep type", "single")
             charge.save()
-            #charge.set("voltage", 0)
-            #charge.save()
+            charge.set("voltage", 1)
+            charge.save()
             print("single")
             charge.select("CHARGE::"+ str(name.GenName[:-4]))
             charge.delete()
@@ -814,7 +814,7 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
 
 def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_max = None):
     charge_path = os.path.join(path, charge_file)
-    get_results = {"CHARGE": {"monitor": " bandstructure"}}
+    #get_results = {"CHARGE": {"monitor": " bandstructure"}}
     Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
     for names in active_region_list:
         get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated

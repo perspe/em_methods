@@ -277,7 +277,7 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim 
         plt.savefig(save_path, dpi = 300, bbox_inches = 'tight')
     plt.show()
 
-def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out', save_path= None):
+def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out', biased = False, save_path= None):
     """
     Plots the Band Diagrams provided in the inputs. This code is modular: it can plot results from CHARGE and AFORS-HET without manipulating the data previously.
     Args:
@@ -308,15 +308,26 @@ def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out', save
         color_key = f'color_{i}'
         label_key = f'label_{i}'
         corrector = 0
-        if efp[efp_key][0] != 0: #method of finding the afors data
-            corrector = efp[efp_key][0]
-            thickness_fix = thickness[thickness_key][::-1]*1e+4
-        else:
-            thickness_fix = np.array(thickness[thickness_key]) * 1e6 - thickness[thickness_key][0] * 1e6
-        plt.plot(thickness_fix , ec[ec_key]-corrector, "-", color= color[color_key], label = labels[label_key])
-        plt.plot(thickness_fix, ev[ev_key]-corrector, "-", color= color[color_key])
-        plt.plot(thickness_fix , efn[efn_key]-corrector, "--", color= color[color_key])
-        plt.plot(thickness_fix , efp[efp_key]-corrector, "--", color= color[color_key])
+        if biased == False:
+            if efp[efp_key][0] != 0: #method of finding the afors data
+                corrector = efp[efp_key][0]
+                thickness_fix = thickness[thickness_key][::-1]*1e+4
+            else:
+                thickness_fix = np.array(thickness[thickness_key]) * 1e6 - thickness[thickness_key][0] * 1e6
+            plt.plot(thickness_fix , ec[ec_key]-corrector, "-", color= color[color_key], label = labels[label_key])
+            plt.plot(thickness_fix, ev[ev_key]-corrector, "-", color= color[color_key])
+            plt.plot(thickness_fix , efn[efn_key]-corrector, "--", color= color[color_key])
+            plt.plot(thickness_fix , efp[efp_key]-corrector, "--", color= color[color_key])
+        else: 
+            if ec[ec_key][len(ec[ec_key])/2] < 0: # if the middle of the conduction band is negative, then it is affors
+                corrector = efp[efp_key][len(efp[efp_key])/2]/2
+                thickness_fix = thickness[thickness_key][::-1]*1e+4
+            else:
+                thickness_fix = np.array(thickness[thickness_key]) * 1e6 - thickness[thickness_key][0] * 1e6
+            plt.plot(thickness_fix , ec[ec_key]-corrector, "-", color= color[color_key], label = labels[label_key])
+            plt.plot(thickness_fix, ev[ev_key]-corrector, "-", color= color[color_key])
+            plt.plot(thickness_fix , efn[efn_key]-corrector, "--", color= color[color_key])
+            plt.plot(thickness_fix , efp[efp_key]-corrector, "--", color= color[color_key]) 
 
     if legend is None:    
         plt.legend()
