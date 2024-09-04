@@ -306,7 +306,9 @@ def get_gen(path, fdtd_file, properties, active_region_list):
     override_prefix: str = str(uuid4())[0:5]
     new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
     shutil.copyfile(fdtd_path, new_filepath)
-
+    log_file: str = os.path.join(
+        path, f"{override_prefix}_{os.path.splitext(fdtd_file)[0]}_p0.log"
+    )
     with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
         # CHANGE CELL GEOMETRY
         for structure_key, structure_value in properties.items():
@@ -337,6 +339,8 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.save()
         fdtd.close()
         os.remove(new_filepath)
+        os.remove(log_file)
+
 
 def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
     """
