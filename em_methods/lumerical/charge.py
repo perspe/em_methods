@@ -41,7 +41,8 @@ sys.path.append(LUMAPI_PATH)
 if os.name == "nt":
     os.add_dll_directory(LUMAPI_PATH)
 import lumapi
-
+import pandas as pd
+from scipy.constants import h, c, k, e
 
 
 @dataclass
@@ -319,7 +320,6 @@ def get_gen(path, fdtd_file, properties, active_region_list):
 
 
         # EXPORT GENERATION FILES
-
         for names in active_region_list:
             if isinstance(names.GenName, list): #if it is 2T:
                 for i in range(0, len(names.GenName)):
@@ -389,7 +389,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point, def_sim_region=None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point,  def_sim_region=None, B = None, V_band_diagram = 1):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -487,7 +487,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         if single_point == True:
             charge.set("sweep type", "single")
             charge.save()
-            charge.set("voltage", 1)
+            charge.set("voltage", V_band_diagram)
             charge.save()
             print("single")
             charge.select("CHARGE::"+ str(name.GenName[:-4]))
@@ -529,6 +529,10 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     else:
         charge.select(str(sim_region))
         Ly = charge.get("y span")
+    if B is not None:
+        charge.select("materials::"+ name.SCName + "::" + name.SCName)
+        charge.set("recombination.radiative.copt.constant", B)
+        charge.save()
     return Lx, Ly
 
 
@@ -624,7 +628,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
 
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -639,7 +643,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                             A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
                             will be created
     """ 
-    
+
     PCE = []
     FF = []
     Voc = []
@@ -654,12 +658,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
@@ -816,14 +820,14 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
 
 
 
-def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_max = None):
+def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_max = None, V_band_diagram = 1):
     charge_path = os.path.join(path, charge_file)
     #get_results = {"CHARGE": {"monitor": " bandstructure"}}
     Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
     for names in active_region_list:
         get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated
         results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max , "single_point":True,"def_sim_region":def_sim_region})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max , "single_point":True,"def_sim_region":def_sim_region, "V_band_diagram":V_band_diagram })
         bandstructure =results[0]
         ec= bandstructure['results.CHARGE::monitor.bandstructure']["Ec"].flatten()
         thickness = bandstructure['results.CHARGE::monitor.bandstructure']["z"].flatten()
@@ -881,6 +885,69 @@ def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
             fdtd.switchtolayout()
             fdtd.save()
         fdtd.close()
+
+def abs_extraction(names, path, fdtd_file): 
+    fdtd_path = os.path.join(path, fdtd_file)
+    with lumapi.FDTD(filename = fdtd_path, hide = True) as fdtd: 
+        fdtd.run()
+        fdtd.runanalysis(names.SolarGenName)
+        abs = fdtd.getresult(names.SolarGenName, "Pabs_total")
+        fdtd.close()
+    results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
+    results_path = os.path.join(path, names.SolarGenName)
+    results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False) #saves the results in file in path
+    
+#untested: 
+def charge_extract( names, path, charge_file):
+    charge_path = os.path.join(path, charge_file)
+    with lumapi.DEVICE(filename=charge_path, hide = True) as charge:
+        charge.select("materials::"+ names.SCName + "::" + names.SCName)
+        T = 300
+        Eg = charge.get("electronic.gamma.Eg.constant")
+        mn = charge.get("electronic.gamma.mn.constant")
+        mp = charge.get("electronic.gamma.mp.constant")
+        mn = mn*9.11*10**-31
+        mp = mp*9.11*10**-31
+        Nc = 2*((2*np.pi*mn*k*T/(h**2))**1.5)*10**-6
+        Nv = 2*((2*np.pi*mp*k*T/(h**2))**1.5)*10**-6
+        ni = ((Nv*Nc)**0.5)*(np.exp(-Eg*e/(2*k*T)))
+        charge.select("geometry::" + names.SCName)
+        L = charge.get("z span") # in m 
+        return Eg, L, ni
+
+def adjust_abs(energy, new_abs, Eg):
+    return [0 if e < Eg else new_abs[i] for i, e in enumerate(energy)]
+
+def phi_bb(E):
+    h_ev = h/e 
+    k_b = k / e 
+    return ((2*np.pi*E**2)/(h_ev**3*c**2) * (np.exp(E/(k_b*300))-1)**-1) #(eV.s.m2)-1
+
+def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, run_abs = True):
+        B_list = []
+        for names in active_region_list:
+            results_path = os.path.join(path, names.SolarGenName)
+            if run_abs == True:
+                abs_extraction(names, path, fdtd_file)
+            else: 
+                try:
+                    abs_data = pd.read_csv(results_path +'.csv')
+                except FileNotFoundError: 
+                    abs_extraction(names, path, fdtd_file)
+            abs_data = pd.read_csv(results_path +'.csv')   
+            wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
+            abs = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
+            energy = 1240/(wvl*1e9)
+            Eg, L, ni = charge_extract( names, path, charge_file)
+            abs = adjust_abs(energy, abs, Eg) #new absorption with cut off below Eg
+            bb_spectrum = phi_bb(energy)
+            Jo  = e * np.trapz(-bb_spectrum*abs, energy) #A/m2
+            Jo = Jo* 0.1 #mA/cm2
+            B = Jo*10**-5/(e*(ni**2)*(L))
+        B_list.append(B)
+        return B_list 
+
+
 
 def sweep_bandgap_SnO2(fdtd_file, mat_data, min_shift, max_shift, interval, mat_Eg, properties):
     '''
