@@ -653,17 +653,19 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     charge_path = os.path.join(path, charge_file)
     if run_FDTD:
         get_gen(path, fdtd_file, properties, active_region_list)
+    if B == None:
+        B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)]})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)]})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
