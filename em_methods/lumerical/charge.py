@@ -888,9 +888,16 @@ def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
             fdtd.save()
         fdtd.close()
 
-def abs_extraction(names, path, fdtd_file): 
+def abs_extraction(names, path, fdtd_file, properties = {}): 
+        # CHANGE CELL GEOMETRY
+
     fdtd_path = os.path.join(path, fdtd_file)
     with lumapi.FDTD(filename = fdtd_path, hide = True) as fdtd: 
+        for structure_key, structure_value in properties.items():
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                fdtd.set(parameter_key, parameter_value)
+        fdtd.save()
         fdtd.run()
         fdtd.runanalysis(names.SolarGenName)
         abs = fdtd.getresult(names.SolarGenName, "Pabs_total")
@@ -925,17 +932,17 @@ def phi_bb(E):
     k_b = k / e 
     return ((2*np.pi*E**2)/(h_ev**3*c**2) * (np.exp(E/(k_b*300))-1)**-1) #(eV.s.m2)-1
 
-def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, run_abs = True):
+def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, properties = {} , run_abs = True):
         B_list = []
         for names in active_region_list:
             results_path = os.path.join(path, names.SolarGenName)
             if run_abs == True:
-                abs_extraction(names, path, fdtd_file)
+                abs_extraction(names, path, fdtd_file, properties)
             else: 
                 try:
                     abs_data = pd.read_csv(results_path +'.csv')
                 except FileNotFoundError: 
-                    abs_extraction(names, path, fdtd_file)
+                    abs_extraction(names, path, fdtd_file, properties)
             abs_data = pd.read_csv(results_path +'.csv')   
             wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
             abs = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
