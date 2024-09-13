@@ -889,10 +889,15 @@ def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
         fdtd.close()
 
 def abs_extraction(names, path, fdtd_file, properties = {}): 
-        # CHANGE CELL GEOMETRY
-
     fdtd_path = os.path.join(path, fdtd_file)
-    with lumapi.FDTD(filename = fdtd_path, hide = True) as fdtd: 
+    override_prefix: str = str(uuid4())[0:5]
+    new_fdtd_file = override_prefix + "_" + fdtd_file
+    new_filepath_fdtd: str = os.path.join(path, new_fdtd_file)
+    shutil.copyfile(fdtd_path, new_filepath_fdtd)
+    log_file_fdtd: str = os.path.join(
+        path, f"{override_prefix}_{os.path.splitext(fdtd_file)[0]}_p0.log"
+    )
+    with lumapi.FDTD(filename = new_filepath_fdtd, hide = True) as fdtd: 
         for structure_key, structure_value in properties.items():
             fdtd.select(structure_key)
             for parameter_key, parameter_value in structure_value.items():
@@ -901,15 +906,32 @@ def abs_extraction(names, path, fdtd_file, properties = {}):
         fdtd.run()
         fdtd.runanalysis(names.SolarGenName)
         abs = fdtd.getresult(names.SolarGenName, "Pabs_total")
+        fdtd.switchtolayout()
         fdtd.close()
     results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
     results_path = os.path.join(path, names.SolarGenName)
     results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False) #saves the results in file in path
+    os.remove(new_filepath_fdtd)
+    os.remove(log_file_fdtd)
+    
     
 #untested: 
-def charge_extract( names, path, charge_file):
+def charge_extract( names, path, charge_file, properties = {}):
     charge_path = os.path.join(path, charge_file)
-    with lumapi.DEVICE(filename=charge_path, hide = True) as charge:
+    override_prefix: str = str(uuid4())[0:5]
+    new_charge_file = override_prefix + "_" + charge_file
+    new_filepath_charge: str = os.path.join(path, new_charge_file)
+    shutil.copyfile(charge_path, new_filepath_charge)
+    log_file_charge: str = os.path.join(
+        path, f"{override_prefix}_{os.path.splitext(charge_file)[0]}_p0.log"
+    )
+    with lumapi.DEVICE(filename=new_filepath_charge, hide = True) as charge:
+        charge.switchtolayout()
+        for structure_key, structure_value in properties.items():
+            charge.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                charge.set(parameter_key, parameter_value)
+        charge.save()
         charge.select("materials::"+ names.SCName + "::" + names.SCName)
         T = 300
         Eg = charge.get("electronic.gamma.Eg.constant")
@@ -922,6 +944,9 @@ def charge_extract( names, path, charge_file):
         ni = ((Nv*Nc)**0.5)*(np.exp(-Eg*e/(2*k*T)))
         charge.select("geometry::" + names.SCName)
         L = charge.get("z span") # in m 
+        charge.close()
+        os.remove(new_filepath_charge)
+        os.remove(log_file_charge)
         return Eg, L, ni
 
 def adjust_abs(energy, new_abs, Eg):
@@ -947,13 +972,13 @@ def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, proper
             wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
             abs = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
             energy = 1240/(wvl*1e9)
-            Eg, L, ni = charge_extract( names, path, charge_file)
+            Eg, L, ni = charge_extract( names, path, charge_file, properties)
             abs = adjust_abs(energy, abs, Eg) #new absorption with cut off below Eg
             bb_spectrum = phi_bb(energy)
             Jo  = e * np.trapz(-bb_spectrum*abs, energy) #A/m2
             Jo = Jo* 0.1 #mA/cm2
             B = Jo*10**-5/(e*(ni**2)*(L))
-        B_list.append(B)
+            B_list.append(B)
         return B_list 
 
 
