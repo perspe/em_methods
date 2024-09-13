@@ -945,9 +945,9 @@ def charge_extract( names, path, charge_file, properties = {}):
         charge.select("geometry::" + names.SCName)
         L = charge.get("z span") # in m 
         charge.close()
-        os.remove(new_filepath_charge)
-        os.remove(log_file_charge)
-        return Eg, L, ni
+    os.remove(new_filepath_charge)
+    #os.remove(log_file_charge)
+    return Eg, L, ni
 
 def adjust_abs(energy, new_abs, Eg):
     return [0 if e < Eg else new_abs[i] for i, e in enumerate(energy)]
