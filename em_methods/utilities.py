@@ -10,6 +10,7 @@ from em_methods import Units
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import matplotlib.colors as mcolors
+from PyAstronomy import pyaC
 
 # Get some module paths
 file_path = Path(os.path.abspath(__file__))
@@ -167,7 +168,7 @@ def lambertian_thickness(
         ]
     )
 
-def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim = -1, label_vary = [], unit = "", parameters = None, legend = None, save_path = None):
+def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, y_max, x_max, y_min = -1, label_vary = [], unit = "", parameters = None, legend = None, save_path = None):
     """
     Plots the IV curve(s) provided in the inputs. Has the capacity to plot several curves with the same color range 
     (useful when plotting several IV curves and changing only one variable) 
@@ -203,8 +204,8 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim 
         return mpl.colors.to_hex((1-mix)*c1 + mix*c2)
 
     fig, ax = plt.subplots()
-    textstr_name = f"Voc =\nJsc =\nFF  =\nPce ="
-    textstr_units = f"  V \n  mA/cm² \n\n  %"
+    textstr_name = '$V_{oc}$ =\n$J_{sc}$ =\nFF  =\nPCE ='
+    textstr_units = f"  V \n  mA/cm² \n  %\n  %"
     vary_true = 0
     for i in range(1,len(v.keys())+1):
         v_key = f'v_{i}'
@@ -271,8 +272,8 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, j_max, v_max, y_lim 
     plt.ylabel("Current density [mA/cm²] ")
     plt.xlabel("Voltage [V]")
     plt.grid(True, linestyle='--')
-    ax.set_ylim(y_lim, j_max)
-    ax.set_xlim(0, v_max)
+    ax.set_ylim(y_min, y_max)
+    ax.set_xlim(0, x_max)
     if save_path is not None:
         plt.savefig(save_path, dpi = 300, bbox_inches = 'tight')
     plt.show()
@@ -341,3 +342,38 @@ def band_plotting(ec, ev, efn, efp, thickness, color, labels, legend='out', bias
     if save_path is not None:
         plt.savefig(save_path, dpi = 300, bbox_inches = 'tight')
     plt.show()
+
+def iv_parameters(voltage, current_density, area , current = []):
+    "area: in cm2"
+    Ir = 1000  # W/m²
+    current_density = np.array(current_density ) 
+    if current == []:
+        current = current_density*area*10**-3
+    else: 
+        current = np.array(current)
+    abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
+    if abs_voltage_min in voltage:
+        Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
+        Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
+        # Jsc = current_density[voltage.index(abs_voltage_min)]
+        # Isc = current[voltage.index(abs_voltage_min)]
+    elif -abs_voltage_min in voltage:
+        # the position in the array of Jsc and Isc should be the same
+        Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
+        Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
+        # Jsc = current_density[voltage.index(-abs_voltage_min)]
+        # Isc = current[voltage.index(-abs_voltage_min)]
+
+    Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
+    Voc = Voc[0]
+    P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
+    vals_v = np.linspace(min(voltage), max(voltage), 100)
+    new_j = np.interp(vals_v, voltage, current)
+    P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
+    
+
+    FF = abs(max(P) / (Voc * Isc))
+
+    PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+    Jsc = -current_density[0]
+    return abs(FF), abs(PCE), abs(Jsc), abs(Voc)
