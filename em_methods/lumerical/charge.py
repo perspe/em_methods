@@ -339,7 +339,7 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         fdtd.save()
         fdtd.close()
         os.remove(new_filepath)
-        #os.remove(log_file)
+        os.remove(log_file)
 
 
 def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
@@ -389,7 +389,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point, method_solver, def_sim_region=None, B = None, V_band_diagram = 1):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point,  def_sim_region=None, B = None, V_band_diagram = 1):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -478,7 +478,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     # Defining solver parameters
     if bias_regime == "forward":
         charge.select("CHARGE")
-        charge.set("solver type", method_solver)
+        charge.set("solver type", "NEWTON")
         charge.set("enable initialization", True)
         #charge.set("init step size",1) #unsure if it works properly
         charge.save()
@@ -628,7 +628,7 @@ def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
 
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None,  method_solver = "NEWTON" ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -660,12 +660,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)]})
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)]})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
