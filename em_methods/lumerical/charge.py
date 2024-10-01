@@ -389,7 +389,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return jph_pvk
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, single_point, method_solver, def_sim_region=None, B = None, V_band_diagram = 1):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
@@ -484,10 +484,10 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.save()
         # Setting sweep parameters
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        if single_point == True:
+        if v_single_point is not None:
             charge.set("sweep type", "single")
             charge.save()
-            charge.set("voltage", V_band_diagram)
+            charge.set("voltage", v_single_point)
             charge.save()
             print("single")
             charge.select("CHARGE::"+ str(name.GenName[:-4]))
@@ -534,98 +534,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.set("recombination.radiative.copt.constant", B)
         charge.save()
     return Lx, Ly
-
-
-def __set_EQE_parameters(charge, name: SimInfo, def_sim_region=None):
-    """ 
-    Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
-    sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...)
-    Args:
-            charge: as in "with lumapi.DEVICE(...) as charge
-            bias_regime: forward or reverse bias
-            name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
-            path: CHARGE file directory
-            def_sim_region: optional input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
-                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
-                        will be created
-    Returns:
-            
-            Lx,Ly: dimentions of solar cell surface area normal to the incident light direction
-    """
-    valid_dimensions = {"2d", "3d"}
-    if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
-        raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
-    charge.switchtolayout()
-    # Create "Import generation rate" objects
-    charge.addimportgen()
-    charge.set("name", str(name.GenName[:-4]))
-    print(str(name.GenName[:-4]))
-    # Import generation file path
-    charge.set("volume type", "solid")
-    charge.set("volume solid", str(name.SCName))
-    charge.importdataset(name.GenName)
-    charge.save()
-    if def_sim_region is not None: 
-        # Defines boundaries for simulation region -UNTESTED
-        charge.select("geometry::" + name.Anode)  # anode
-        z_max = charge.get("z max")
-        charge.select("geometry::" + name.Cathode)  # cathode
-        z_min = charge.get("z min")
-        charge.select("CHARGE::" + str(name.GenName[:-4]))  # solar generation
-        x_span = charge.get("x span")
-        x = charge.get("x")
-        y_span = charge.get("y span")
-        y = charge.get("y")
-        # Creates the simulation region (2D or 3D)
-        charge.addsimulationregion()
-        charge.set("name", name.SCName) 
-        if "2" in def_sim_region: 
-            charge.set("dimension", "2D Y-Normal")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-        elif "3" in def_sim_region:
-            charge.set("dimension", "3D")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-            charge.set("y span", y_span)
-        charge.select(str(name.SCName))
-        charge.set("z max", z_max)
-        charge.set("z min", z_min)
-        charge.select("CHARGE")
-        charge.set("simulation region", name.SCName)
-        charge.save()
-    # Defining solver parameters
-    charge.select("CHARGE")
-    charge.set("solver type", "NEWTON")
-    charge.set("enable initialization", True)
-    #charge.set("init step size",1) #unsure if it works properly
-    charge.save()
-    # Setting sweep parameters
-    print("we are in the forward section")
-    charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-    charge.set("sweep type", "single")
-    charge.save()
-    charge.set("voltage", 0)
-    charge.save()
-    #Determining simulation region dimentions
-    if def_sim_region is not None:
-        sim_region = name.SCName
-    else:
-        sim_region = charge.getnamed("CHARGE","simulation region")
-    charge.select(sim_region)
-    Lx = charge.get("x span")
-    if "3D" not in charge.get("dimension"):
-        print("This is a 2D simulation")
-        charge.select("CHARGE")
-        Ly = charge.get("norm length")
-    else:
-        print("This is a 3D simulation")
-        charge.select(str(sim_region))
-        Ly = charge.get("y span")
-    return Lx, Ly
-
     
 
 def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None,  method_solver = "NEWTON" ):
@@ -660,12 +568,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver })
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max ,"single_point": False,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
@@ -696,7 +604,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     
 
 
-def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None):
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, v_max = 1.5, def_sim_region=None, B = None, method_solver = "NEWTON", v_single_point = 0):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -712,21 +620,23 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
                             will be created
     """ 
     Jsc = []
+    Current_Density = []
     charge_path = os.path.join(path, charge_file)
     jph_pvk = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
     results = None
     for names in active_region_list:
+        get_results = {"results": {"CHARGE": str(names.Cathode)}}
         try:
-            results = charge_run(charge_path, properties, names, 
-                                func= __set_EQE_parameters, delete = True, **{"name": names, "def_sim_region":def_sim_region})
+            results = charge_run(charge_path, properties, get_results, 
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
-                results = charge_run(charge_path, properties, names, 
-                               func= __set_EQE_parameters, delete = True,**{"name": names, "def_sim_region":def_sim_region})
+                results = charge_run(charge_path, properties, get_results, 
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
             except LumericalError:
                 current_density = np.nan
-                current_density.append(current_density)
+                Current_Density.append(current_density)
                 continue
 
         current = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0]
@@ -803,16 +713,14 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
             FF_temp.append(ff)
             Voc_temp.append(voc)
             Jsc_temp.append(jsc)
-            
-            
-            
             Current_Density.append(current_density)
             Voltage.append(voltage)
             print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
         PCE = np.average(PCE_temp)
         FF = np.average(FF_temp)
         Voc = np.average(Voc_temp)
-        Jsc
+        Jsc = np.average(Jsc_temp)
+
         
         
         # plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
@@ -845,48 +753,6 @@ def band_diagram(active_region_list,charge_file, path, properties, def_sim_regio
         return Thickness,Ec, Ev, Efn, Efp
     else:
         return thickness, ec, ev, efn, efp
-
-def sweep_bandgap(fdtd_file, mat_data, min_shift, max_shift, n, mat_Eg):
-    '''
-    Shifts the refractive index data in wavelength, between 'min_shift' and 'max_shift', for n steps.
-    Note: the same FDTD file is used throughout the sweep! No new files are created.
-    Arguments:
-            fdtd_file: path of FDTD file
-            mat_data: material refractive index data, with 3 columns headed as 'wvl'(wavelenth [nm]), 'n'(real part) and 'k'(extinction coefficient)
-            min_shift: minimum Eg shift to test, in wavelength [nm]
-            max_shift: maximum Eg shift to test, in wavelength [nm]
-            n: amount of sweep iterations (pref 20)
-            mat_Eg: unshifted material bandgap
-
-    '''
-    # Physical constants
-    q = 1.602e-19 # C
-    h = 6.626e-34 # J.s
-    c = 3e8 # m/s
-    # Transform refractive index in complex permitivitty values
-    n = mat_data['n']
-    k = mat_data['k']
-    wvl = mat_data['wvl']
-    index = n + k*1j
-    perm = index**2
-    # Wavelength shift
-    lim_lam = h*c/mat_Eg
-    wvl_lim = np.linspace(min_shift*1e-9, max_shift*1e-9, n)
-    for lam in wvl_lim:
-        new_lim = lim_lam + lam
-        new_wvl = wvl*1e-9 + lam
-        Eg = round(h*c/(new_lim*q), 3)
-        freq = c/new_wvl
-        with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
-            fdtd.setmaterial(fdtd.addmaterial("Sampled 3D data"), "name", "PVK_"+str(Eg)+"_Eg")
-            fdtd.setmaterial("PVK_"+str(Eg)+"_Eg",'sampled 3d data', np.c_[freq, perm])
-            fdtd.select('Perovskite')
-            fdtd.set('material', "PVK_"+str(Eg)+"_Eg")
-            fdtd.run()
-            fdtd.runanalysis()
-            fdtd.switchtolayout()
-            fdtd.save()
-        fdtd.close()
 
 def abs_extraction(names, path, fdtd_file, properties = {}): 
     fdtd_path = os.path.join(path, fdtd_file)
@@ -981,62 +847,6 @@ def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, proper
             B_list.append(B)
         return B_list 
 
-
-
-def sweep_bandgap_SnO2(fdtd_file, mat_data, min_shift, max_shift, interval, mat_Eg, properties):
-    '''
-    Shifts the refractive index data in wavelength, between 'min_shift' and 'max_shift', for interval steps.
-    Note: the same FDTD file is used throughout the sweep! No new files are created.
-    Arguments:
-            fdtd_file: path of FDTD file
-            mat_data: material refractive index data, with 3 columns headed as 'wvl'(wavelenth [nm]), 'n'(real part) and 'k'(extinction coefficient)
-            min_shift: minimum Eg shift to test, in wavelength [nm]
-            max_shift: maximum Eg shift to test, in wavelength [nm]
-            interval: amount of sweep iterations (pref 20)
-            mat_Eg: unshifted material bandgap in [eV]
-
-    '''
-    # Physical constants
-    q = 1.602e-19 # C
-    h = 6.626e-34 # J.s
-    c = 3e8 # m/s
-    # Transform refractive index in complex permitivitty values
-    n = mat_data['n']
-    k = mat_data['k']
-    wvl = mat_data['wvl']
-    index = n + k*1j
-    perm = index**2
-    # Wavelength shift
-    mat_Eg = mat_Eg*1.60218e-19 #Eg in J
-    lim_lam = h*c/mat_Eg #wl in m
-    wvl_lim = [i*1e-9 for i in range(min_shift, max_shift, interval)] #wl in m
-    for lam in wvl_lim:
-        print(lam)
-        dif = -wvl[0]*1e-9 + lam
-        #new_lim = lim_lam + lam
-        new_wvl = wvl*1e-9 + dif
-        new_lim = lam
-        Eg = round(h*c/(new_lim*q), 3)
-        Eg = Eg*1000
-        freq = c/new_wvl
-        with lumapi.FDTD(filename = fdtd_file, hide = True) as fdtd:
-            fdtd.switchtolayout()
-            for structure_key, structure_value in properties.items():
-                fdtd.select(structure_key)
-                for parameter_key, parameter_value in structure_value.items():
-                    fdtd.set(parameter_key, parameter_value)
-            fdtd.save()
-            fdtd.setmaterial(fdtd.addmaterial("Sampled 3D data"), "name", "SnO2_"+str(Eg)+"_Eg")
-            fdtd.setmaterial("SnO2_"+str(Eg)+"_Eg",'sampled 3d data', np.c_[freq, perm])
-            fdtd.select('SnO2')
-            fdtd.set('material', "SnO2_"+str(Eg)+"_Eg")
-            fdtd.select("solar_generation_PVK")
-            fdtd.set("export filename", "SnO2_"+str(Eg)+"_Eg")
-            fdtd.run()
-            fdtd.runanalysis()
-            fdtd.switchtolayout()
-            fdtd.save()
-        fdtd.close()
 
 
 def _get_replacement(lst):
