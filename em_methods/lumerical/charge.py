@@ -536,7 +536,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None,  method_solver = "NEWTON", v_single_point = None ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -594,6 +594,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         Current_Density.append(current_density)
         Voltage.append(voltage)
         print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+        if save_csv:
+            df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
+            csv_path = os.path.join(path, f"{names.SCName}_IV_curve.csv")
+            df.to_csv(csv_path, sep = '\t', index = False)
         if plot:
             plot(pce, ff, voc, jsc, current_density, voltage, stop, 'am',p) 
     
@@ -855,19 +859,18 @@ def _get_replacement(lst):
             lst[i] = 0
     return(lst)
 
-def get_iv_4t(folder, pvk_voltage_file, pvk_current_file, si_voltage_file, si_current_file):
+def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     '''Plots the IV curve of a tandem solar cell, in 4-terminal configuration, with 2 subcells in parallel.
     Note: Bottom subcell is divided into 2 cells, connected in series, to double the VOC.
     Args:
             folder: folder where the .txt files are stored
-            pvk_voltage_file: name of the PVK voltage file
-            pvk_current_file: name of the PVK current file
-            si_voltage_file: name of the Silicon voltage file
-            si_current_file: name of the Silicon current file
+            pvk_v: array of PVK voltage
+            pvk_iv: array of PVK current
+            si_v: array of Silicon voltage
+            si_iv: array of Silicon current
     '''
+    
     # PEROVSKITE______________________
-    pvk_v = np.array(pd.read_csv(os.path.join(folder, f"{pvk_voltage_file}.txt"), header = None)).flatten()
-    pvk_iv = - pd.read_csv(os.path.join(folder, f"{pvk_current_file}.txt"), header = None)
     pvk_iv = _get_replacement(np.array(pvk_iv).flatten())
 
     plt.figure(figsize=(5.5,5))
@@ -876,10 +879,9 @@ def get_iv_4t(folder, pvk_voltage_file, pvk_current_file, si_voltage_file, si_cu
     # Determine Voc,pvk
     Voc_pvk = pvk_v[np.where(pvk_iv == 0)[0]][0]
 
-    # SILICON__________________________
-    si_v = np.array(pd.read_csv(os.path.join(folder, f"{si_voltage_file}.txt"), header = None))*2 # multiplied to get 2 series cells
-    si_iv = - (np.array(pd.read_csv(os.path.join(folder, f"{si_current_file}.txt"), header = None))/2).flatten()
-    si_iv = _get_replacement(si_iv)
+    # SILICON__________________________ 2 series cells
+    si_v = si_v*2
+    si_iv = _get_replacement(si_iv/2)
     plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')
 
     # Determine Voc,Si
