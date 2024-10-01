@@ -536,7 +536,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None,  method_solver = "NEWTON" ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, plot=False, B = None,  method_solver = "NEWTON", v_single_point = None ):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -568,12 +568,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver, "v_single_point": v_single_point})
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                 PCE.append(pce)
