@@ -5,20 +5,50 @@ Functions:
 """
 import logging
 import os
+import sys
 from random import random
-from typing import Dict, List, Tuple, Union, Callable
+from typing import Dict, Iterator, List, Tuple, Union, Callable
 import matplotlib.pyplot as plt
 import glob
 import re
 from io import StringIO
 
+from em_methods.optimization.ui.pso_gui_main import init_gui
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
+import pickle
 
 logger = logging.getLogger()
 
-from em_methods.optimization.ui.pso_gui_main import init_gui
+CRASH=False
+
+PSO_SAVE_ARGS=[
+        'func', 'param_dict', 'maximize', 'inert_prop', 'ind_cog', 'soc_learning',
+            'particles', 'iterations', 'tolerance', 'progress', 'export',
+            'export_summary', 'basepath', 'func_kwargs',
+        'iteration', 'max_iteration', 'gbest', 'gbest_array', 'gfitness', 'pbest',
+            'pfitness', 'tol_array', 'tolerance',
+        'param_space', 'vel_space', 'param_names', 'vparam_names', 'param_min',
+            'param_max'
+        ]
+
+def __save_state(
+                 filename: Union[str, None] = "pso_state.pkl",
+                 *args,
+                 ):
+    #Save the current PSO state to a file.
+    state={}
+    for arg_name, arg_i in zip(PSO_SAVE_ARGS, args):
+        state[arg_name] = arg_i
+    with open(filename, 'wb') as f:
+        pickle.dump(state, f)
+
+def __load_state(filename: str) -> dict:
+    #Load the PSO state from a file.
+    with open(filename, 'rb') as f:
+        return pickle.load(f)
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
@@ -86,7 +116,6 @@ def _update_parameters(
     logger.debug(f"Velocity space:\n{v_new}")
     return param_new, v_new
 
-
 def _preview_results(
     ax,
     iteration: npt.NDArray,
@@ -113,7 +142,6 @@ def _preview_results(
     plt.savefig("pso_update_res.png", dpi=200)
     logger.debug("Updated Summary Figure")
 
-
 def _particle_swarm(
     func,
     param_dict: Dict[str, List[float]],
@@ -129,6 +157,7 @@ def _particle_swarm(
     export: bool = False,
     export_summary: bool = True,
     basepath: str = "PSO_Results",
+    state_file: Union[str, None] = "pso_state.pkl",
     **func_kwargs,
 ) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
     """Implementation of the particle swarm algorithm
@@ -152,7 +181,7 @@ def _particle_swarm(
         - gbest: Best parameters
         - pbest: Best parameters for each particle
         - gbest_array: Array with the gfitness value for each iteration
-    """
+    """  
     # Create export path
     if export and not os.path.isdir(basepath):
         logger.info(f"Creating {basepath=}...")
@@ -204,9 +233,43 @@ def _particle_swarm(
     logger.debug(f"Initial Velocity Space:\n{vel_space}")
     # First run of the PSO outside loop
     iteration = 1
+    #Loads from state file
+    if os.path.exists(state_file):
+        state = __load_state(state_file)
+        func = state['func']
+        param_dict = state['param_dict']
+        maximize=state['maximize']
+        inert_prop=state['inert_prop']
+        ind_cog=state['ind_cog']
+        soc_learning=state['soc_learning']
+        particles = state['particles']
+        iterations = state['iterations']
+        tolerance=state['tolerance']
+        progress=state['progress']
+        export=state['export']
+        export_summary=state['export_summary']
+        basepath=state['basepath']
+        func_kwargs=state['func_kwargs']
+        iteration=state['iteration']
+        max_iteration=state['max_iteration']
+        gbest=state['gbest']
+        gbest_array=state['gbest_array']
+        gfitness=state['gfitness']
+        pbest=state['pbest']
+        pfitness=state['pfitness']
+        tol_array=state['tol_array']
+        tolerance=state['tolerance']   
+        param_space=state['param_space']
+        vel_space=state['vel_space']
+        param_names=state['param_names']
+        vparam_names=state['vparam_names']
+        param_min=state['param_min']
+        param_max=state['param_max']      
+        logger.info(f"Loading saved state from iteration {iteration}...")       
     func_input = {
         param_name: param_space[i] for i, param_name in enumerate(param_names)
     }
+    
     func_results = func(**func_input, **func_kwargs)
     logger.debug(f"Initial Function Results:\n{func_results}")
     if maximize:
@@ -215,12 +278,15 @@ def _particle_swarm(
         fitness_arg = np.argmin(func_results)
     # PSO optimization arrays (gfitness, pfitness, gbest, pbest, tol_array)
     tolerance_percent, tolerance_num = tolerance
-    gfitness = func_results[fitness_arg]
-    pfitness = func_results
-    gbest = param_space[:, fitness_arg].flatten()
-    tol_array = [0]
-    gbest_array = [gfitness]
-    pbest = param_space
+    #Initialization if variables were not loaded
+    if os.path.exists(state_file)==False:
+        gfitness = func_results[fitness_arg]
+        pfitness = func_results
+        gbest = param_space[:, fitness_arg].flatten()
+        pbest = param_space
+        tol_array = [0]
+        gbest_array = [gfitness]
+
     # Create figure handler to show the results
     if progress:
         _, ax = plt.subplots(
@@ -308,12 +374,27 @@ def _particle_swarm(
                 sep=" ",
                 index=False,
             )
+        # Save the iteration results
+        state_args = (
+        func, param_dict, maximize, inert_prop, ind_cog, soc_learning,
+            particles, iterations, tolerance, progress, export,
+            export_summary, basepath, func_kwargs,
+        iteration, max_iteration, gbest, gbest_array, gfitness, pbest,
+            pfitness, tol_array, tolerance,
+        param_space, vel_space, param_names, vparam_names, param_min,
+            param_max
+        )
+        __save_state(state_file, *state_args)  # Save the current state
+        logger.info('Updating state file...')
+        if CRASH and iteration==6:
+            logger.debug('Dying according to test...')
+            return gfitness, gbest, pbest, gbest_array
     logger.debug(
         f"Results:\ngfitness:{gfitness}\ngbest:\n{gbest}\npbest:\n{pbest}\ngbest_array:\n{gbest_array}"
     )
-    # Save the iteration results
+    os.remove(state_file)
     if export_summary:
-        logger.debug("Saving results to summary file")
+        logger.debug("Saving results to summary file...")
         with open(os.path.join(basepath, "PSO_Summary.txt"), "w") as file:
             file.write(f"Best FoM: {gfitness}\n\n")
             file.write("Best Parameters:\n")
@@ -323,15 +404,15 @@ def _particle_swarm(
             np.savetxt(file, pbest.T)
             file.write("\nFoM Iterations:\n")
             np.savetxt(file, gbest_array)
+    logger.info('Main PSO ending...')
     return gfitness, gbest, pbest, gbest_array
-
 
 def particle_swarm(
     func,
     param_dict: Dict[str, List[float]],
     *,
     maximize: bool = True,
-    pso_gui: bool = True,
+    pso_gui: bool = False,
     inert_prop: Tuple[float, float, bool] = (0.9, 0.4, True),
     ind_cog: float = 1.45,
     soc_learning: float = 1.45,
@@ -394,6 +475,46 @@ def particle_swarm(
                         export=export,
                         basepath=basepath)
     
+def pso_resume(state_file: str = "pso_state.pkl") -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
+    """Resumes the Particle Swarm Optimization process from the last checkpoint."""
+    if not os.path.exists(state_file):
+        raise FileNotFoundError(f"No saved state found at {state_file}")
+    # Load state from file
+    state = __load_state(state_file)
+    # Resume the _particle_swarm function from the saved state
+    func = state.get('func')
+    param_dict = state.get('param_dict')
+    maximize=state.get('maximize')
+    inert_prop=state.get('inert_prop')
+    ind_cog=state.get('ind_cog')
+    soc_learning=state.get('soc_learning')
+    particles = state.get('particles')
+    iterations=state.get('iterations')
+    tolerance=state.get('tolerance')
+    progress=state.get('progress')
+    export=state.get('export')
+    export_summary=state.get('export_summary')
+    basepath=state.get('basepath')
+    tolerance=state.get('tolerance')
+    func_kwargs=state.get('func_kwargs')
+    # Continue running _particle_swarm with the loaded state
+    return _particle_swarm(
+        func=func,
+        param_dict=param_dict,
+        maximize=maximize,
+        inert_prop=inert_prop,
+        ind_cog=ind_cog,
+        soc_learning=soc_learning,
+        particles=particles,
+        iterations=iterations,
+        tolerance=tolerance,
+        progress=progress,
+        export=export,
+        export_summary=export_summary,
+        basepath=basepath,
+        state_file=state_file,
+        func_kwargs=func_kwargs  # Re-save the state periodically
+    )
 
 def pso_iter_plt(
     param: str,
@@ -418,7 +539,7 @@ def pso_iter_plt(
         group_func (function): function to apply to each iteration
                             (can be used to transform the values of a variable)
         savefig_name (None|str): name of the file to export
-        colorbar (bool): wh0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000ether to add or not the colorbar
+        colorbar (bool): whether to add or not the colorbar
         ax (none|plt.axes): set of axes to plot the data (disables savefig_name and colorbar)
         scatter_kwargs (dict): extra arguments to pass to scatter
         savefig_kwargs (dict): extra argument to pass to savefig
@@ -517,7 +638,7 @@ if __name__ == "__main__":
     def test_func_3(x, y):
         return np.sin(x * y)
 
-    fit, gbest, pbest, _ = particle_swarm(
+    fit, gbest, pbest, _ = _particle_swarm(
         test_func_3,
         {"x": [0, 3.14], "y": [0, 3.14]},
         maximize=True,
