@@ -70,7 +70,6 @@ def __load_state(filename: str) -> dict:
     """Load the data for the most recent state file"""
     with open(filename, "rb") as f:
         return pickle.load(f)
->>>>>>> pso_gui
 
 
 def _update_parameters(
