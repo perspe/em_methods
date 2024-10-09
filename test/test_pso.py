@@ -1,11 +1,11 @@
-from matplotlib.pyplot import logging
-from em_methods.optimization.pso import _particle_swarm, pso_resume
+from em_methods.optimization.pso import particle_swarm, pso_resume, DEFAULT_STATE_FILE
 from em_methods.optimization import pso
+import logging
 import numpy as np
 import unittest
 import random
 
-logger = logging.getLogger()
+logger = logging.getLogger("sim")
 
 def test_func_1(x, y):
     return -np.exp(-(x**2)) * np.exp(-(y**2))
@@ -38,7 +38,7 @@ class Test_PSO_func(unittest.TestCase):
         logger.setLevel(logging.DEBUG)
         random.seed(1)
         np.random.seed(1)
-        fit, _, _, gbest_arr = _particle_swarm(
+        fit, _, _, gbest_arr = particle_swarm(
             test_func_2,
             {"x": [-5, 5], "y": [-5, 5]},
             particles=5,
@@ -69,7 +69,7 @@ class Test_PSO_func(unittest.TestCase):
         This run should fail by passing False to test_func_1_kwargs
         """
         logger.setLevel(logging.DEBUG)
-        _, _, _, _ = _particle_swarm(
+        _, _, _, _ = particle_swarm(
             test_func_1_kwargs,
             {"x": [-5, 5], "y": [-5, 5]},
             particles=5,
@@ -84,7 +84,7 @@ class Test_PSO_func(unittest.TestCase):
         """ Complete run of the PSO algorithm """
         logger.setLevel(logging.INFO)
         # Set a smaller than normal particles and iterations
-        fit, _, _, _ = _particle_swarm(
+        fit, _, _, _ = particle_swarm(
             test_func_2,
             {"x": [-10, 10], "y": [-10, 10]},
             particles=10,
@@ -99,7 +99,7 @@ class Test_PSO_func(unittest.TestCase):
         logger.setLevel(logging.WARN)
         for i in range(10, 51):
             with self.subTest(i=i - 9):
-                fit, _, _, _ = _particle_swarm(
+                fit, _, _, _ = particle_swarm(
                     test_func_3,
                     {"x": [-i * 2, i * 2], "y": [-i * 2, i * 2], "z": [-i * 2, i * 2]},
                     particles=30,
@@ -113,7 +113,7 @@ class Test_PSO_func(unittest.TestCase):
         logger.setLevel(logging.WARN)
         for i in range(10, 51):
             with self.subTest(i=i - 9):
-                fit, _, _, _ = _particle_swarm(
+                fit, _, _, _ = particle_swarm(
                     test_func_4,
                     {
                         "x": [-i * 2, i * 2],
@@ -130,7 +130,7 @@ class Test_PSO_func(unittest.TestCase):
         pso.CRASH=True
         random.seed(1)
         np.random.seed(1)
-        fit, _, _, gbest_arr = _particle_swarm(
+        fit, _, _, gbest_arr = particle_swarm(
             test_func_2,
             {"x": [-5, 5], "y": [-5, 5]},
             particles=5,
@@ -174,7 +174,7 @@ class Test_PSO_func(unittest.TestCase):
             pso.CRASH=True
             random.seed(1)
             np.random.seed(1)
-            fit, _, _, gbest_arr = _particle_swarm(
+            fit, _, _, gbest_arr = particle_swarm(
                 test_func_2,
                 {"x": [-5, 5], "y": [-5, 5]},
                 particles=5,
