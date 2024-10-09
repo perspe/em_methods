@@ -573,7 +573,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
 
     PCE, FF, Voc, Jsc, Current_Density, Voltage = [], [], [], [], [], []
     valid_solver = {"GUMMEL", "NEWTON"}
-    if method_solver.lower() not in valid_solver:
+    if method_solver.lower() is not None and method_solver not in valid_solver:
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
     charge_path = os.path.join(path, charge_file)
     if run_FDTD:
