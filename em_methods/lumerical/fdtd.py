@@ -1,7 +1,8 @@
 import sys
 import os
+import re
 import shutil
-from typing import Union, Dict, List
+from typing import Union, Dict, List, Tuple
 from uuid import uuid4
 import logging
 
@@ -44,6 +45,20 @@ import lumapi
 
 """ Helper functions """
 
+def __read_autoshutoff(log_file: str) -> List:
+    # Gather info from log and the delete it
+    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
+    autoshut_off_list: List[Tuple[float, float]] = []
+    with open(log_file, mode="r") as log:
+        for log_line in log.readlines():
+            match = re.search(autoshut_off_re, log_line)
+            if match:
+                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
+                autoshut_off_val = float(log_line.split(" ")[-1])
+                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
+    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
+    return autoshut_off_list
+
 def _get_fdtd_results(fdtd_handler: lumapi.FDTD, get_results: Dict[str, Dict[str, float]]) -> Dict:
     """
     Alias function to extract results from FDTD file (to avoid code redundancy)
@@ -68,7 +83,6 @@ def _get_fdtd_results(fdtd_handler: lumapi.FDTD, get_results: Dict[str, Dict[str
     return results
 
 """ Main functions """
-
 
 def fdtd_run(
     basefile: str,
@@ -151,7 +165,11 @@ def fdtd_run(
     # Check for other possible runtime problems
     if "data" not in results_keys:
        raise LumericalError("No data available from simulation") 
-    return results["data"], results["runtime"], results["analysis runtime"], results["data_info"]
+    autoshutoff = __read_autoshutoff(log_file)
+    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
+    data_results = results["data"]
+    data_results["autoshutoff"] = autoshutoff
+    return data_results, results["runtime"], results["analysis runtime"], results["data_info"]
 
 def fdtd_run_large_data(basefile: str,
              properties: Dict[str, Dict[str, float]],
