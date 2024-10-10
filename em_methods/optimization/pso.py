@@ -20,57 +20,57 @@ import pandas as pd
 logger = logging.getLogger("sim")
 # from em_methods.optimization.ui.pso_gui_main import init_gui
 
-logger = logging.getLogger("sim")
-
 CRASH = False
 DEFAULT_STATE_FILE = ".pso_status.pkl"
 
-PSO_SAVE_ARGS = [
-    # Function Arguments
-    "func",
-    "param_dict",
-    "maximize",
-    "inert_prop",
-    "ind_cog",
-    "soc_learning",
-    "particles",
-    "iterations",
-    "tolerance",
-    "progress",
-    "export",
-    "export_summary",
-    "basepath",
-    "func_kwargs",
-    # Progress Variables
-    "iteration",
-    "gbest_array",
-    "tol_array",
-    "param_space",
-    "vel_space",
-    "func_results",
-    "gbest",
-    "pbest",
-    "gfitness",
-    "pfitness",
+PSO_FUNC_ARGS = [
+        "func",
+        "param_dict",
+        "maximize",
+        "inert_prop",
+        "ind_cog",
+        "soc_learning",
+        "particles",
+        "iterations",
+        "tolerance",
+        "progress",
+        "export",
+        "export_summary",
+        "basepath",
+        "func_kwargs"
 ]
-
+    
+PSO_PROGRESS_ARGS = [
+        "iteration",
+        "gbest_array",
+        "tol_array",
+        "param_space",
+        "vel_space",
+        "func_results",
+        "gbest",
+        "pbest",
+        "gfitness",
+        "pfitness"
+    ]
 
 def __save_state(filename: str, *args):
     """
     Update the current state of the PSO to filename
     """
     state = {}
-    for arg_name, arg_i in zip(PSO_SAVE_ARGS, args):
+    for arg_name, arg_i in zip(PSO_FUNC_ARGS+PSO_PROGRESS_ARGS, args):
         state[arg_name] = arg_i
+    print(state)
     with open(filename, "wb") as f:
         pickle.dump(state, f)
 
-
-def __load_state(filename: str) -> dict:
-    """Load the data for the most recent state file"""
+def __load_state(filename: str) -> Tuple[dict, dict]:
+    """
+    Load the state from the specified file.
+    Returns a tuple of func_args and progress_args.
+    """
     with open(filename, "rb") as f:
         return pickle.load(f)
-
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
@@ -382,9 +382,11 @@ def particle_swarm(
         # Save the iteration results
         if state_file is not None:
             state_args = []
-            for arg_i in PSO_SAVE_ARGS:
+            for arg_i in PSO_FUNC_ARGS:
                 state_args.append(locals()[arg_i])
-            logging.debug(f"PSO Save Args: {state_args}")
+            for arg_i in PSO_PROGRESS_ARGS:
+                state_args.append(locals()[arg_i])
+            logger.debug(f"PSO Save Args: {state_args}")
             __save_state(state_file, *state_args)
             logger.info("Updating state file...")
         # Test crash for pso_resume function
@@ -489,39 +491,14 @@ def pso_resume(
         raise FileNotFoundError(f"No saved state found at {state_file}")
     # Load state from file
     state = __load_state(state_file)
-    # Resume the _particle_swarm function from the saved state
-    func = state["func"]
-    param_dict = state["param_dict"]
-    maximize = state["maximize"]
-    inert_prop = state["inert_prop"]
-    ind_cog = state["ind_cog"]
-    soc_learning = state["soc_learning"]
-    particles = state["particles"]
-    iterations = state["iterations"]
-    tolerance = state["tolerance"]
-    progress = state["progress"]
-    export = state["export"]
-    export_summary = state["export_summary"]
-    basepath = state["basepath"]
-    tolerance = state["tolerance"]
-    func_kwargs = state["func_kwargs"]
-    return particle_swarm(
-        func=func,
-        param_dict=param_dict,
-        maximize=maximize,
-        inert_prop=inert_prop,
-        ind_cog=ind_cog,
-        soc_learning=soc_learning,
-        particles=particles,
-        iterations=iterations,
-        tolerance=tolerance,
-        progress=progress,
-        export=export,
-        export_summary=export_summary,
-        basepath=basepath,
-        state_file=state_file,
-        **func_kwargs,
-    )
+    # Resume the particle_swarm function from the saved state
+    func_args = {
+        key: data
+        for key, data in state.items()
+        if key in PSO_FUNC_ARGS and key != "func_kwargs"
+    }
+    print("\n\n\n\n\n\n\n\n\n\n\n", func_args)
+    return particle_swarm(**func_args, **state["func_kwargs"])
 
 
 def pso_iter_plt(
