@@ -898,6 +898,8 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     Voc_pvk = pvk_v[np.where(pvk_iv == 0)[0]][0]
 
     # SILICON__________________________
+    plt.plot(si_v, _get_replacement(si_iv), label = 'Si subcell', c = 'yellowgreen', linestyle = '--')
+
     si_v = si_v*2
     si_iv = _get_replacement(si_iv/2)
     plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')

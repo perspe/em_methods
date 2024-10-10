@@ -17,9 +17,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-<<<<<<< HEAD
 logger = logging.getLogger("sim")
-=======
 # from em_methods.optimization.ui.pso_gui_main import init_gui
 
 logger = logging.getLogger("sim")
@@ -72,7 +70,6 @@ def __load_state(filename: str) -> dict:
     """Load the data for the most recent state file"""
     with open(filename, "rb") as f:
         return pickle.load(f)
->>>>>>> pso_gui
 
 
 def _update_parameters(
