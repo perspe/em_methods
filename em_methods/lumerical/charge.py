@@ -503,13 +503,14 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     if method_solver.upper() not in valid_solver:
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
     charge_path = os.path.join(path, charge_file)
-    conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point }
     if run_FDTD:
         get_gen(path, fdtd_file, properties, active_region_list)
     if B == None:
         B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point }
+
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
