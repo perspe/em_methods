@@ -229,7 +229,6 @@ def plot_IV_curves(v , j, color, labels, voc, pce, ff, jsc, y_max, x_max, y_min 
             else: 
                 textstr = ""    
                 
-    
         else:
             plt.plot(v[v_key], j[j_key], "-", color= color[color_key], label = labels[label_key])
             plt.plot(voc[voc_key], 0, "o", color=color[color_key])
