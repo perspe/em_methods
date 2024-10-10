@@ -358,6 +358,138 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
+    
+
+
+    if isinstance(name.GenName, list):
+        print("2T") 
+        terminal = 2
+        for i in range(0, len(name.GenName)): #ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
+            charge.addimportgen()
+            charge.set("name", str(name.GenName[i][:-4]))
+            #Import generation file path
+            charge.set("volume type", "solid")
+            charge.set("volume solid", str(name.SCName[i]))
+            charge.importdataset(name.GenName[i])
+            charge.save()
+    else:
+        print("4T")
+        terminal = 4
+        charge.addimportgen()
+        charge.set("name", str(name.GenName[:-4]))
+        print(str(name.GenName[:-4]))
+        # Import generation file path
+        charge.set("volume type", "solid")
+        charge.set("volume solid", str(name.SCName))
+        charge.importdataset(name.GenName)
+        charge.save()
+    if def_sim_region is not None: 
+        # Defines boundaries for simulation region
+        charge.select("geometry::" + name.Anode)
+        z_max = charge.get("z max")
+        charge.select("geometry::" + name.Cathode)
+        z_min = charge.get("z min")
+        if terminal == 2:
+            charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANY OTHER
+        elif  terminal == 4:
+            charge.select("CHARGE::" + str(name.GenName[:-4]))
+        x_span = charge.get("x span")
+        x = charge.get("x")
+        y_span = charge.get("y span")
+        y = charge.get("y")
+        # Creates the simulation region (2D or 3D)
+        #charge.addsimulationregion()
+
+        if terminal == 2: 
+            sim_name = "2Terminal"            
+        elif terminal == 4:
+            sim_name=name.SCName
+        charge.addsimulationregion()
+        charge.set("name", sim_name) 
+
+        if "2" in def_sim_region: 
+            charge.set("dimension", "2D Y-Normal")
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+        elif "3" in def_sim_region:
+            charge.set("dimension", "3D")
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+            charge.set("y span", y_span)
+        charge.select(str(sim_name))
+        charge.set("z max", z_max)
+        charge.set("z min", z_min)
+        charge.select("CHARGE")
+        charge.set("simulation region", sim_name)
+        charge.save()
+    # Defining solver parameters
+    if bias_regime == "forward":
+        charge.select("CHARGE")
+        charge.set("solver type", method_solver)
+        charge.set("enable initialization", True)
+        #charge.set("init step size",1) #unsure if it works properly
+        charge.save()
+        # Setting sweep parameters
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        if v_single_point is not None:
+            charge.set("sweep type", "single")
+            charge.save()
+            charge.set("voltage", v_single_point)
+            charge.save()
+            print("single")
+            if terminal == 2:
+                for i in range(0, len(name.GenName)):
+                    charge.select("CHARGE::"+ str(name.GenName[i][:-4]))
+                    charge.delete()
+                    charge.save()
+            else:
+                charge.select("CHARGE::"+ str(name.GenName[:-4])) 
+                charge.delete()   
+                charge.save()
+        else:
+            charge.set("sweep type", "range")
+            charge.save()
+            charge.set("range start", 0)
+            charge.set("range stop", v_max)
+            charge.set("range num points", 41)
+            charge.set("range backtracking", "enabled")
+            charge.save()
+    #Reverse bias regime
+    elif bias_regime == "reverse":
+        charge.select("CHARGE")
+        charge.set("solver type", "GUMMEL")
+        charge.set("enable initialization", False)
+        charge.save()
+        #Setting sweep parameters
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        charge.set("sweep type", "range")
+        charge.save()
+        charge.set("range start", 0)
+        charge.set("range stop", -1)
+        charge.set("range num points", 21)
+        charge.set("range backtracking", "enabled")
+        charge.save()
+         #Determining simulation region dimentions
+    if def_sim_region is not None:
+        sim_region = sim_name
+    else:
+        sim_region = charge.getnamed("CHARGE","simulation region")
+    charge.select(sim_region)
+    Lx = charge.get("x span")
+    if "3D" not in charge.get("dimension"):
+        charge.select("CHARGE")
+        Ly = charge.get("norm length")
+    else:
+        charge.select(str(sim_region))
+        Ly = charge.get("y span")
+    if B is not None:
+        charge.select("materials::"+ name.SCName + "::" + name.SCName)
+        charge.set("recombination.radiative.copt.constant", B)
+        charge.save()
+    
+    """
     if isinstance(name.GenName, list): 
         #2T cell
         sim_name = "2Terminal" 
@@ -467,6 +599,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
         charge.select("materials::"+ name.SCName + "::" + name.SCName)
         charge.set("recombination.radiative.copt.constant", B)
         charge.save()
+    """
     return Lx, Ly
     
 
@@ -513,12 +646,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point })
-        except LumericalError:                                  
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
+        except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point })
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
                 pce_array.append(pce)
