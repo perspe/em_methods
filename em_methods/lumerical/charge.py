@@ -223,7 +223,7 @@ def iv_curve(results, regime, names):
             FF = np.nan
             PCE = np.nan
 
-        return PCE, FF, Voc, Jsc, current_density, voltage, stop, P
+        return PCE, FF, Voc, Jsc, current_density, voltage
 
     elif regime == "dark":
         return current_density, voltage
