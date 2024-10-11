@@ -159,9 +159,6 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
     return results
 
 
-def find_index(wv_list, n):
-    index = [i for i in range(0, len(wv_list)) if wv_list[i] == n]
-    return index[0]
 
 
 def iv_curve(results, regime, names):
@@ -226,63 +223,13 @@ def iv_curve(results, regime, names):
             FF = np.nan
             PCE = np.nan
 
-        return PCE, FF, Voc, Jsc, current_density, voltage, stop, P
+        return PCE, FF, Voc, Jsc, current_density, voltage
 
     elif regime == "dark":
         return current_density, voltage
        
 
-def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str, P): #NOT FINISHED -> regime should not be an input, the performance metrics should be enough
-    """
-    Plots the IV curve
-    Args:
-            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
-            current_density, voltage: Arrays obtained from the iv_curve funtion
-            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
-            stop: Voc position in voltage array 
-            regime: "am" or "dark" for illuminated IV or dark IV
-    """
-    fig, ax = plt.subplots()
-    if regime == 'am' and stop is not np.nan and Voc is not np.nan:
-        plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
-        plt.plot(Voc, 0, "o", color="red")
-        props = dict(boxstyle="round", facecolor="white", alpha=0.5)
-        ax.add_patch(
-                Rectangle(
-                    (
-                        voltage[find_index(P, max(P))],
-                        current_density[find_index(P, max(P))],
-                    ),
-                    -voltage[find_index(P, max(P))],
-                    -current_density[find_index(P, max(P))],
-                    facecolor="lightsteelblue",
-                )
-            )
-        textstr = f"Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%"
-        plt.text(
-            0.05,
-            0.80,
-            textstr,
-            transform=ax.transAxes,
-            fontsize=17,
-            verticalalignment="top",
-            bbox=props,
-            )
-        plt.ylabel("Current density [mA/cm²] ")
-        plt.xlabel("Voltage [V]")
-        plt.axhline(0, color="gray", alpha=0.3)
-        plt.axvline(0, color="gray", alpha=0.3)
-        plt.grid()
-        plt.show()
 
-    if regime == 'dark':
-        plt.plot(voltage, current_density, "o-")
-        plt.ylabel("Current density [mA/cm²] ")
-        plt.xlabel("Voltage [V]")
-        plt.axhline(0, color="gray", alpha=0.3)
-        plt.axvline(0, color="gray", alpha=0.3)
-        plt.grid()
-        plt.show()
 
 
 def get_gen(path, fdtd_file, properties, active_region_list):
@@ -385,7 +332,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return Jph
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, dark = False):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...). 
@@ -411,19 +358,20 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
+    
+
+
     if isinstance(name.GenName, list):
         print("2T") 
         terminal = 2
         for i in range(0, len(name.GenName)): #ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
             charge.addimportgen()
             charge.set("name", str(name.GenName[i][:-4]))
-            #print(str(name.GenName[i][:-4]))
             #Import generation file path
             charge.set("volume type", "solid")
             charge.set("volume solid", str(name.SCName[i]))
             charge.importdataset(name.GenName[i])
             charge.save()
-    # Create "Import generation rate" objects
     else:
         print("4T")
         terminal = 4
@@ -523,6 +471,117 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.set("range num points", 21)
         charge.set("range backtracking", "enabled")
         charge.save()
+         #Determining simulation region dimentions
+    if def_sim_region is not None:
+        sim_region = sim_name
+    else:
+        sim_region = charge.getnamed("CHARGE","simulation region")
+    charge.select(sim_region)
+    Lx = charge.get("x span")
+    if "3D" not in charge.get("dimension"):
+        charge.select("CHARGE")
+        Ly = charge.get("norm length")
+    else:
+        charge.select(str(sim_region))
+        Ly = charge.get("y span")
+    if B is not None:
+        charge.select("materials::"+ name.SCName + "::" + name.SCName)
+        charge.set("recombination.radiative.copt.constant", B)
+        charge.save()
+    
+    """
+    if isinstance(name.GenName, list): 
+        #2T cell
+        sim_name = "2Terminal" 
+    else: 
+        #4T cell
+        sim_name=name.SCName
+        name.GenName = [name.GenName]
+        name.SCName = [name.SCName]
+        
+    for i in range(0, len(name.GenName)): #ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
+        charge.addimportgen()
+        charge.set("name", str(name.GenName[i][:-4]))
+        #Import generation file path
+        charge.set("volume type", "solid")
+        charge.set("volume solid", str(name.SCName[i]))
+        charge.importdataset(name.GenName[i])
+        charge.save()
+
+    if def_sim_region is not None: 
+        # Defines boundaries for simulation region
+        charge.select("geometry::" + name.Anode)
+        z_max = charge.get("z max")
+        charge.select("geometry::" + name.Cathode)
+        z_min = charge.get("z min")
+        charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANY OTHER
+        x_span = charge.get("x span")
+        x = charge.get("x")
+        y_span = charge.get("y span")
+        y = charge.get("y")
+
+        # Creates the simulation region (2D or 3D)
+        charge.addsimulationregion()
+        charge.set("name", sim_name) 
+        if "2" in def_sim_region: 
+            charge.set("dimension", "2D Y-Normal")
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+        elif "3" in def_sim_region:
+            charge.set("dimension", "3D")
+            charge.set("x", x)
+            charge.set("x span", x_span)
+            charge.set("y", y)
+            charge.set("y span", y_span)
+        charge.select(str(sim_name))
+        charge.set("z max", z_max)
+        charge.set("z min", z_min)
+        charge.select("CHARGE")
+        charge.set("simulation region", sim_name)
+        charge.save()
+    # Defining solver parameters
+    if bias_regime == "forward":
+        charge.select("CHARGE")
+        charge.set("solver type", method_solver)
+        charge.set("enable initialization", True)
+        #charge.set("init step size",1) #unsure if it works properly
+        charge.save()
+        # Setting sweep parameters
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        if v_single_point is not None:
+            charge.set("sweep type", "single")
+            charge.save()
+            charge.set("voltage", v_single_point)
+            charge.save()
+            print("single")
+            for i in range(0, len(name.GenName)):
+                charge.select("CHARGE::"+ str(name.GenName[i][:-4]))
+                charge.delete()
+                charge.save()
+        else:
+            charge.set("sweep type", "range")
+            charge.save()
+            charge.set("range start", 0)
+            charge.set("range stop", v_max)
+            charge.set("range num points", 41)
+            charge.set("range backtracking", "enabled")
+            charge.save()
+    #Reverse bias regime
+    elif bias_regime == "reverse":
+        charge.select("CHARGE")
+        charge.set("solver type", "GUMMEL")
+        charge.set("enable initialization", False)
+        charge.save()
+        #Setting sweep parameters
+        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+        charge.set("sweep type", "range")
+        charge.save()
+        charge.set("range start", 0)
+        charge.set("range stop", -1)
+        charge.set("range num points", 21)
+        charge.set("range backtracking", "enabled")
+        charge.save()
     #Determining simulation region dimentions
     if def_sim_region is not None:
         sim_region = sim_name
@@ -540,6 +599,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, path:str, v_max
         charge.select("materials::"+ name.SCName + "::" + name.SCName)
         charge.set("recombination.radiative.copt.constant", B)
         charge.save()
+    """
     return Lx, Ly
     
 
@@ -571,7 +631,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
             
     """ 
 
-    PCE, FF, Voc, Jsc, Current_Density, Voltage = [], [], [], [], [], []
+    pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = [], [], [], [], [], []
     valid_solver = {"GUMMEL", "NEWTON"}
     if method_solver.upper() not in valid_solver:
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
@@ -582,41 +642,40 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver.upper(), "v_single_point": v_single_point})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
             except LumericalError:
-                pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
-                PCE.append(pce)
-                FF.append(ff)
-                Voc.append(voc)
-                Jsc.append(jsc)
-                Current_Density.append(current_density)
-                Voltage.append(voltage)
-                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+                pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
+                pce_array.append(pce)
+                ff_array.append(ff)
+                voc_array.append(voc)
+                jsc_array.append(jsc)
+                current_density_array.append(current_density)
+                voltage_array.append(voltage)
+                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
                 continue
-        pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve( results[0],"am", names)
-        PCE.append(pce)
-        FF.append(ff)
-        Voc.append(voc)
-        Jsc.append(jsc)
-        Current_Density.append(current_density)
-        Voltage.append(voltage)
-        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%")
+        pce, ff, voc, jsc, current_density, voltage = iv_curve( results[0],"am", names)
+        pce_array.append(pce)
+        ff_array.append(ff)
+        voc_array.append(voc)
+        jsc_array.append(jsc)
+        current_density_array.append(current_density)
+        voltage_array.append(voltage)
+        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
         if save_csv:
             df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
             csv_path = os.path.join(path, f"{names.SCName}_IV_curve.csv")
             df.to_csv(csv_path, sep = '\t', index = False)
-    # if len(active_region_list) > 1 :
-    return PCE, FF, Voc, Jsc, Current_Density, Voltage
-    # else:
-        #return pce, ff, voc, jsc, current_density, voltage
+    
+    return pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array
     
 
 
@@ -656,12 +715,12 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         get_results = {"results": {"CHARGE": str(names.Cathode)}}
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
             except LumericalError:
                 current_density = np.nan
                 Jsc.append(current_density)
@@ -717,12 +776,12 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
         for i in range(times_to_run):
             try:
                 results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
             except LumericalError:
                 try:            
                     logger.warning("Retrying simulation")
                     results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "path": path, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver, "v_single_point": v_single_point})
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**{"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)],  "method_solver": method_solver, "v_single_point": v_single_point})
                 except LumericalError:
                     pce, ff, voc, jsc, current_density, voltage, stop, p = (np.nan for _ in range(8))
                     PCE_temp.append(pce)
@@ -780,7 +839,7 @@ def band_diagram(active_region_list,charge_file, path, properties, def_sim_regio
     for names in active_region_list:
         get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated
         results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "path": path, "v_max": None ,"def_sim_region":def_sim_region, "B":B[active_region_list.index(names)], "method_solver": method_solver,"v_single_point":v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": None ,"def_sim_region":def_sim_region, "B":B[active_region_list.index(names)], "method_solver": method_solver,"v_single_point":v_single_point })
         bandstructure =results[0]
         ec= bandstructure['results.CHARGE::monitor.bandstructure']["Ec"].flatten()
         thickness = bandstructure['results.CHARGE::monitor.bandstructure']["z"].flatten()
@@ -972,6 +1031,8 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     Voc_pvk = pvk_v[np.where(pvk_iv == 0)[0]][0]
 
     # SILICON__________________________
+    plt.plot(si_v, _get_replacement(si_iv), label = 'Si subcell', c = 'yellowgreen', linestyle = '--')
+
     si_v = si_v*2
     si_iv = _get_replacement(si_iv/2)
     plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')
@@ -1035,3 +1096,68 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     PCE = ((FF * Voc * abs(Isc)*10) / (Ir)) * 100
 
     print(f'FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2')
+
+
+
+
+#OLD CODE
+    """
+    def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str, P): #NOT FINISHED -> regime should not be an input, the performance metrics should be enough
+  
+    Plots the IV curve
+    Args:
+            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
+            current_density, voltage: Arrays obtained from the iv_curve funtion
+            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
+            stop: Voc position in voltage array 
+            regime: "am" or "dark" for illuminated IV or dark IV
+    
+    fig, ax = plt.subplots()
+    if regime == 'am' and stop is not np.nan and Voc is not np.nan:
+        plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
+        plt.plot(Voc, 0, "o", color="red")
+        props = dict(boxstyle="round", facecolor="white", alpha=0.5)
+        ax.add_patch(
+                Rectangle(
+                    (
+                        voltage[find_index(P, max(P))],
+                        current_density[find_index(P, max(P))],
+                    ),
+                    -voltage[find_index(P, max(P))],
+                    -current_density[find_index(P, max(P))],
+                    facecolor="lightsteelblue",
+                )
+            )
+        textstr = f"Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%"
+        plt.text(
+            0.05,
+            0.80,
+            textstr,
+            transform=ax.transAxes,
+            fontsize=17,
+            verticalalignment="top",
+            bbox=props,
+            )
+        plt.ylabel("Current density [mA/cm²] ")
+        plt.xlabel("Voltage [V]")
+        plt.axhline(0, color="gray", alpha=0.3)
+        plt.axvline(0, color="gray", alpha=0.3)
+        plt.grid()
+        plt.show()
+
+    if regime == 'dark':
+        plt.plot(voltage, current_density, "o-")
+        plt.ylabel("Current density [mA/cm²] ")
+        plt.xlabel("Voltage [V]")
+        plt.axhline(0, color="gray", alpha=0.3)
+        plt.axvline(0, color="gray", alpha=0.3)
+        plt.grid()
+        plt.show()
+    """
+
+    """
+    
+def find_index(wv_list, n):
+    index = [i for i in range(0, len(wv_list)) if wv_list[i] == n]
+    return index[0]
+    """
