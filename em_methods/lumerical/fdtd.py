@@ -152,6 +152,8 @@ def fdtd_run(
     results_keys = list(results.keys())
     if "runtime" not in results_keys:
         raise LumericalError("Simulation Finished Prematurely")
+    autoshutoff = __read_autoshutoff(log_file)
+    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
     if delete:
         logger.debug(f"Deleting unwanted files")
         os.remove(new_filepath)
@@ -165,8 +167,6 @@ def fdtd_run(
     # Check for other possible runtime problems
     if "data" not in results_keys:
        raise LumericalError("No data available from simulation") 
-    autoshutoff = __read_autoshutoff(log_file)
-    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
     data_results = results["data"]
     data_results["autoshutoff"] = autoshutoff
     return data_results, results["runtime"], results["analysis runtime"], results["data_info"]

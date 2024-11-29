@@ -60,7 +60,6 @@ def __save_state(filename: str, *args):
     state = {}
     for arg_name, arg_i in zip(PSO_FUNC_ARGS+PSO_PROGRESS_ARGS, args):
         state[arg_name] = arg_i
-    print(state)
     with open(filename, "wb") as f:
         pickle.dump(state, f)
 
