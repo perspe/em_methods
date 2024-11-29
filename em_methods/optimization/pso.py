@@ -3,6 +3,7 @@ Implementation of the particle swarm optimization algorithm
 Functions:
     - particle_swarm: Implements the algorithm
 """
+
 import glob
 from io import StringIO
 import logging
@@ -13,13 +14,11 @@ import re
 from typing import Callable, Dict, List, Tuple, Union
 
 import matplotlib.pyplot as plt
+from matplotlib.axes import Axes
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-<<<<<<< HEAD
-logger = logging.getLogger("sim")
-=======
 # from em_methods.optimization.ui.pso_gui_main import init_gui
 
 logger = logging.getLogger("sim")
@@ -72,7 +71,6 @@ def __load_state(filename: str) -> dict:
     """Load the data for the most recent state file"""
     with open(filename, "rb") as f:
         return pickle.load(f)
->>>>>>> pso_gui
 
 
 def _update_parameters(
@@ -186,7 +184,9 @@ def particle_swarm(
     basepath: str = "PSO_Results",
     state_file: Union[str, None] = DEFAULT_STATE_FILE,
     **func_kwargs,
-) -> Tuple[float, npt.NDArray[np.floating], npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+) -> Tuple[
+    float, npt.NDArray[np.floating], npt.NDArray[np.floating], npt.NDArray[np.floating]
+]:
     """Implementation of the particle swarm algorithm
     Args:
         - func: optimization function
@@ -277,7 +277,7 @@ def particle_swarm(
         pfitness = state["pfitness"]
         logger.info(f"Loading saved state from iteration {iteration}...")
     # Run the first iteration
-    if iteration==1:
+    if iteration == 1:
         func_input = {
             param_name: param_space[i] for i, param_name in enumerate(param_names)
         }
@@ -485,7 +485,7 @@ def particle_swarm(
 
 
 def pso_resume(
-    state_file: str = DEFAULT_STATE_FILE
+    state_file: str = DEFAULT_STATE_FILE,
 ) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
     """Resumes the Particle Swarm Optimization process from the last checkpoint."""
     if not os.path.exists(state_file):
@@ -536,7 +536,7 @@ def pso_iter_plt(
     group_func: Union[None, Callable] = None,
     savefig_name: Union[None, str] = None,
     colorbar: bool = True,
-    ax: Union[plt.Axes, None] = None,
+    ax: Union[Axes, None] = None,
     scatter_kwargs={},
     savefig_kwargs={},
 ):
@@ -642,7 +642,7 @@ def read_pso_summary(filename: str):
     # Convert DF to Series (easier access)
     best_parameters = best_parameters["Values"]
     best_particles = pd.read_csv(
-        StringIO(split_info[6]), sep=" ", names=best_parameters.index
+        StringIO(split_info[6]), sep=" ", names=[index for index in best_parameters.index]
     )
     fom_iterations = pd.read_csv(StringIO(split_info[8]), names=["FoM"])
     return fom, best_parameters, best_particles, fom_iterations
@@ -659,7 +659,7 @@ if __name__ == "__main__":
     def test_func_3(x, y):
         return np.sin(x * y)
 
-    fit, gbest, pbest, _ = _particle_swarm(
+    fit, gbest, pbest, _ = particle_swarm(
         test_func_3,
         {"x": [0, 3.14], "y": [0, 3.14]},
         maximize=True,
