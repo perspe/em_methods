@@ -1,6 +1,6 @@
 from typing import Dict, List, Union, Tuple
 from scipy.interpolate import interp1d
-from scipy.integrate import trapz, cumulative_trapezoid
+from scipy.integrate import trapezoid, cumulative_trapezoid
 import scipy.constants as scc
 import pandas as pd
 import os
@@ -15,11 +15,11 @@ data_path = os.path.join(parent_path, "data")
 
 
 def jsc_files(
-    filename: Union[List[str], str],
+    input_data: Union[List[Union[str, pd.DataFrame]], str, pd.DataFrame],
     *,
     wvl_units: Units = Units.NM,
     percent: bool = False,
-    **read_csv_args
+    **read_csv_args,
 ) -> Tuple[pd.Series, Dict[str, pd.DataFrame]]:
     """
     Calculate Jsc for a single or multiple files
@@ -30,6 +30,10 @@ def jsc_files(
         **read_csv_args: pass args for read_csv
     """
     # Add extra parameters to read_csv_args
+    if isinstance(input_data, (str, pd.DataFrame)):
+        input_list: List[Union[str, pd.DataFrame]] = [input_data]
+    else:
+        input_list: List[Union[str, pd.DataFrame]] = input_data
     if "keep_default_na" not in read_csv_args.keys():
         read_csv_args.update({"keep_default_na": False})
     # Create the factors for calculation
@@ -44,16 +48,22 @@ def jsc_files(
     # Dictionary for cumulative results
     jsc_sum: Dict = {}
     results: Dict = {}
-    if isinstance(filename, str):
-        filelist: List[str] = [filename]
-    else:
-        filelist: List[str] = filename
-    for file in filelist:
-        data = pd.read_csv(file, **read_csv_args)
+    for item in input_list:
+        if isinstance(item, str):
+            if os.path.isfile(item):
+                data = pd.read_csv(item, **read_csv_args)
+                source_name = os.path.basename(item)
+            else:
+                raise ValueError(f"The string {item} is not a valid path.")
+        elif isinstance(item, pd.DataFrame):
+            data = item
+            source_name = "DataFrame"
+        else:
+            raise ValueError(f"Unsupported type: {type(item)}")
         wvl = data.iloc[:, 0]
         abs = data.iloc[:, 1] / percent_factor
         # Integration
-        results[os.path.basename(file)] = trapz(
+        results[source_name] = trapezoid(
             int_spectrum(wvl) * abs * wvl * wvl_factor / units_factor,
             wvl * wvl_factor,
         )
@@ -69,9 +79,9 @@ def jsc_files(
             * wvl_units.convertTo(Units.M)
             / (scc.h * scc.c)
         )  # units: m-2.nm-1.s-1
-        jsc_sum[os.path.basename(file)] = pd.DataFrame(
+        jsc_sum[source_name] = pd.DataFrame(
             np.c_[wvl, abs, int_spectrum(wvl), int_Abs, cumsum],
-            columns=["WVL", "ABS", "Int_WVL", "Int_Absorption", "Cumsum"],
+            columns=["wvl", "Abs", "Int_wvl", "Int_Abs", "Cumsum"],
         )
     return pd.Series(results), jsc_sum
 
@@ -85,7 +95,7 @@ def bulk_absorption(
     *,
     wav_units: Units = Units.NM,
     thickness_units: Units = Units.NM,
-    pass_type: str = "lambert"
+    pass_type: str = "lambert",
 ):
     """
     Bulk absorption of a Lambertian Scatterer
@@ -127,7 +137,7 @@ def lambertian_thickness(
     *,
     thickness_units: Units = Units.NM,
     wav_units: Units = Units.NM,
-    pass_type: str = "lambert"
+    pass_type: str = "lambert",
 ):
     """
     Calculate the Lambertian limit for a range of thicknesses
@@ -153,7 +163,7 @@ def lambertian_thickness(
     wvl_units = (scc.h * scc.c) / (scc.e * 1e-10)
     return np.array(
         [
-            trapz(
+            trapezoid(
                 bulk_absorption(wavelength, n, k, t_i, pass_type=pass_type)
                 * astm_interp(wavelength)
                 * wavelength
