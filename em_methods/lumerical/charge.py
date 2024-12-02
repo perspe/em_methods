@@ -161,7 +161,7 @@ def charge_run_analysis(basefile: str, names, device_kw={"hide": True}):
 
 
 
-def iv_curve(results, regime, names):
+def extract_iv_data(results, names):
     """
     Obtains the performance metrics of a solar cell
     Args:
@@ -179,29 +179,37 @@ def iv_curve(results, regime, names):
     Lx = results["func_output"][0]
     Ly = results["func_output"][1]
 
-    if ((len(current) == 1 and len(current[0]) != 1) ):  # CHARGE I output is not always consistent
-         current = current[0]
+    return current, voltage, Lx, Ly
+def iv_curve(current, voltage, Lx, Ly, regime, current_density = None):
+
+    if current_density is not None: 
+        current_density = np.array(current_density)
+    else: 
+        Lx = Lx * 100  # from m to cm
+        Ly = Ly * 100  # from m to cm
+        area = Ly * Lx  # area in cm^2
+        current_density = (np.array(current) * 1000) / area
+    
+    
+    if ((len(current_density) == 1 and len(current_density[0]) != 1) ):  # CHARGE I output is not always consistent
+         current_density = current_density[0]
          voltage = [float(arr[0]) for arr in voltage]
     elif (voltage.ndim == 2):
          voltage = [float(arr[0]) for arr in voltage]
-         current = [arr[0] for arr in current]
+         current_density = [arr[0] for arr in current_density]
 
-    Lx = Lx * 100  # from m to cm
-    Ly = Ly * 100  # from m to cm
-    area = Ly * Lx  # area in cm^2
-    current_density = (np.array(current) * 1000) / area
     Ir = 1000  # W/m²
     if regime == "am":
         abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
         if abs_voltage_min in voltage:
             Jsc = current_density[np.where(voltage == abs_voltage_min)[0][0]]
-            Isc = current[np.where(voltage == abs_voltage_min)[0][0]]
+            #Isc = current[np.where(voltage == abs_voltage_min)[0][0]]
             # Jsc = current_density[voltage.index(abs_voltage_min)]
             # Isc = current[voltage.index(abs_voltage_min)]
         elif -abs_voltage_min in voltage:
             # the position in the array of Jsc and Isc should be the same
             Jsc = current_density[np.where(voltage == -abs_voltage_min)[0][0]]
-            Isc = current[np.where(voltage == -abs_voltage_min)[0][0]]
+            #Isc = current[np.where(voltage == -abs_voltage_min)[0][0]]
             # Jsc = current_density[voltage.index(-abs_voltage_min)]
             # Isc = current[voltage.index(-abs_voltage_min)]
         Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
@@ -213,11 +221,11 @@ def iv_curve(results, regime, names):
             Voc = np.nan
         try:
             vals_v = np.linspace(min(voltage), max(voltage), 100)
-            new_j = np.interp(vals_v, voltage, current)
+            new_j = np.interp(vals_v, voltage, current_density)
             P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
             #P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
-            FF = abs(max(P) / (Voc * Isc))
-            PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+            FF = abs(max(P) / (Voc * Jsc))
+            PCE = ((FF * Voc * abs(Jsc)*10**-3) / (Ir * (10**-4))) * 100
         except ValueError:
             P = np.nan
             FF = np.nan
@@ -332,7 +340,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return Jph
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...). 
@@ -350,6 +358,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
                         will be created
             B: (float) Radiative recombination coeficient. By default it is None.
             v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
+            generation: (str) Toogles on or off if the generation is deleted from the CHARGE file when running with a single point - useful for getting 
+                    illuminated and dark band diagrams at a set voltage 
     Returns:
             
             Lx,Ly: (float) dimentions of solar cell surface area normal to the incident light direction in meters
@@ -358,9 +368,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
     charge.switchtolayout()
-    
-
-
     if isinstance(name.GenName, list):
         print("2T") 
         terminal = 2
@@ -439,12 +446,12 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
             charge.set("voltage", v_single_point)
             charge.save()
             print("single")
-            if terminal == 2:
+            if terminal == 2 and generation is not None:
                 for i in range(0, len(name.GenName)):
                     charge.select("CHARGE::"+ str(name.GenName[i][:-4]))
                     charge.delete()
                     charge.save()
-            else:
+            elif terminal == 4 and generation is not None:
                 charge.select("CHARGE::"+ str(name.GenName[:-4])) 
                 charge.delete()   
                 charge.save()
@@ -453,7 +460,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
             charge.save()
             charge.set("range start", 0)
             charge.set("range stop", v_max)
-            charge.set("range num points", 41)
+            charge.set("range num points", 101)
             charge.set("range backtracking", "enabled")
             charge.save()
     #Reverse bias regime
@@ -662,7 +669,8 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 voltage_array.append(voltage)
                 print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
                 continue
-        pce, ff, voc, jsc, current_density, voltage = iv_curve( results[0],"am", names)
+        current, voltage, Lx, Ly = extract_iv_data(results[0], names)
+        pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
         pce_array.append(pce)
         ff_array.append(ff)
         voc_array.append(voc)
@@ -812,7 +820,7 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
 
 
 
-def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_single_point = 0, B = None, method_solver = "NEWTON" ):
+def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_single_point = 0, B = None, method_solver = "NEWTON", generation= None ):
     """ 
     Extracts the band diagram in a simulation region at v_single_point Volts. ATTENTION the monitor has to be placed preemptively in CHARGE with the desired geometry and position
     Args:
@@ -839,7 +847,7 @@ def band_diagram(active_region_list,charge_file, path, properties, def_sim_regio
     for names in active_region_list:
         get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated
         results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": None ,"def_sim_region":def_sim_region, "B":B[active_region_list.index(names)], "method_solver": method_solver,"v_single_point":v_single_point })
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": None ,"def_sim_region":def_sim_region, "B":B[active_region_list.index(names)], "method_solver": method_solver,"v_single_point":v_single_point, "generation": generation})
         bandstructure =results[0]
         ec= bandstructure['results.CHARGE::monitor.bandstructure']["Ec"].flatten()
         thickness = bandstructure['results.CHARGE::monitor.bandstructure']["z"].flatten()
@@ -888,7 +896,7 @@ def abs_extraction(names, path, fdtd_file, properties = {}):
     results_path = os.path.join(path, names.SolarGenName)
     results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False) #saves the results in file in path
     os.remove(new_filepath_fdtd)
-    os.remove(log_file_fdtd)
+    #os.remove(log_file_fdtd)
     
     
 #untested: 
@@ -1096,6 +1104,55 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     PCE = ((FF * Voc * abs(Isc)*10) / (Ir)) * 100
 
     print(f'FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2')
+
+def get_iv_2t(path, active_region_list):
+    '''Extracts the IV curve  of a tandem solar cell, in 2-terminal configuration.
+
+
+    Args:
+        path: (str) directory where the iv curve files exist
+        active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                              SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+    '''
+    #check if the files exist: 
+    current_density_temp, voltage_temp, voltage_aux = [], [], []
+    current_density_min = -float('inf')
+    material = None
+    v_max = 0
+    for names in active_region_list:
+        try:
+            current_density_temp.append(pd.read_csv(os.path.join(path, f"{names.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
+            voltage_temp.append(pd.read_csv(os.path.join(path, f"{names.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"])
+            if -current_density_min > -current_density_temp[-1][0]: #latest current density curve
+                current_density_min = current_density_temp[-1][0]
+                material = names #find the subcell with the smallest current density
+            #print(np.array(voltage_temp[-1]))
+            if np.array(voltage_temp[-1])[-1] > v_max: #Find the max voltage in all the curves
+                v_max = np.array(voltage_temp[-1])[-1]
+            
+        except FileNotFoundError: 
+            print("IV curve file not found. Make sure to toggle on save_csv when running run_fdtd_and_charge")
+            break
+    
+    for  voltage in voltage_temp:
+        voltage_aux.append(np.linspace(0, v_max, 50))
+    current_density = np.array(current_density_temp[active_region_list.index(material)])
+    current_density_aux = np.interp(voltage_aux[0], voltage, current_density)
+    #np.interp(wvl, abs_data['wvl'],abs_data['abs'])
+    net_voltage = np.zeros_like(voltage_aux[0])
+    
+    
+    for voltage in voltage_aux:
+        #voltage_aux = np.array(voltage_temp[active_region_list.index(names)])  
+        net_voltage = np.add(net_voltage,voltage)
+
+    pce, ff, voc, jsc, current_density, voltage = 
+
+    return pce, ff, voc, jsc, current_density, voltage
+
+
+
 
 
 
