@@ -86,8 +86,8 @@ import sys
 
 # User inputs
 
-city = 'Sines'
-year,day,month = 2025, [21,21],[6,6]    # define period of time: 1 to 10 days
+city = 'Crystal Brook'
+year,day,month = 2025, [21,21],[12,12]  # define period of time: 1 to 10 days
 PVutilization = 1                       # 1 = average anual power generated
 file_path = 'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\M-ECO2\\Scripts\\PV'
 
@@ -130,7 +130,6 @@ PV_area = PV_peak_power / (1000 * PV_efficiency/100)    # m2, active area of PV 
    
 EC_production_ph = 1000                                         # Nm3/hour, full power
 EC_consumption = 4300                                           # Wh/Nm3 H2  (energy need for one hour to produce 1 Nm3/h)
-EC_system_losses = 10                                           # %
 EC_water_Nm3 = 0.82                                             # L per Nm3 H2
 H2_heating_value = 119.96                                       # MJ/kg, Energy density of hydrogen gas , LHV 
 
@@ -391,7 +390,7 @@ def hydrogen_volume_to_mass(volume):        # m3, convert volume to mass (PV = n
     return n * molar_mass_h2                # Calculate mass of H2 in kg
 
                     
-def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, EC_system_losses, H2_heating_value, L1T_gen):
+def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen):
     
     '''
     Calculates EC number of units and create new lists per hour for:
@@ -401,14 +400,12 @@ def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water
         EC_production_ph (volume of H2 produced per hour) = Nm3/h
         EC_consumption_ph (energy consumed by the EC per hour) = Wh/h
         EC_water (water consumed per Wh of energy consumed) = L/Wh
-        EC_system_losses (EC ssytem losses in the electronic parts) = %
         H2_heating_value (lower heating value of hydrogen, aka energy denisty) = MJ/kg
         L1T_gen (PV energy yield considering temperature, reflection and system losses per hour) = W/Wpeak or W
     '''
 
-    EC_consumption_losses_ph = EC_consumption_ph * (1+EC_system_losses/100)                      # Wh/h, energy consumption of one EC unit considering system losses
     EC_units = EC_capacity / EC_consumption_ph                                                   # EC units. Can be units/Wpeak (relative) or units (absolute)
-    EC_supply_cons = [V1T_gen / (EC_units * EC_consumption_losses_ph) for V1T_gen in L1T_gen]    # ratio between energy supplied and required
+    EC_supply_cons = [V1T_gen / (EC_units * EC_consumption_ph) for V1T_gen in L1T_gen]    # ratio between energy supplied and required
     L_EC_usage = np.clip(EC_supply_cons, 0, 1)                                                   # sets EC usage between 0 and 1: it means that above 1 there is excess of soalr energy (that will be exported)
     L_EC_supply_ph = EC_units * EC_consumption_ph * L_EC_usage                                   # Wh/Wpeak/h or Wh/h, Energy required by EC units
     L_H2_volume_ph = EC_units * EC_production_ph * L_EC_usage                                    # Nm3/Wpeak/h or Nm3/h H2 production
@@ -420,7 +417,7 @@ def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water
 
     return EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph                       
 
-EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph = EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, EC_system_losses, H2_heating_value, L1T_gen)
+EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph = EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen)
 
 
 
@@ -478,56 +475,52 @@ for h in L_hours:
     L_hours_plot_i = L_hours_plot_i + 1
     
 text_size = 9.5
-text0 = '(Wh/W$_{{peak}}$)' if units == 'relative' else '(Wh)'
-text1 = f'PV  {round(To[13],1)}'
-text2 = f'exp {round(To_H2[0],1)}'
-text3 = f'EC   {round(To_H2[1],1)}'
-text4 = f'H$_2$   {round(To_H2[4],1)} '
+text0 = '(Wh/W$_{{p}}$$^{PV}$)' if units == 'relative' else '(Wh)'
+text1 = f'PV  {round(To[13],2)}'
+text2 = f'exp {round(To_H2[0],2)}'
+text3 = f'H$_2$   {round(To_H2[4],2)} '
 
 
-lines_width = 1.5
-ylabel = 'Energy Flow (W/W$_{{peak}}$)' if units == 'relative' else 'Energy Flow (W)'
+lines_width = 1.2
+ylabel = 'Energy Flow (W/W$_{{p}}$$^{PV}$)' if units == 'relative' else 'Energy Flow (W)'
 plt.ylabel(ylabel)
 L1_gen_nolosses = [val *(100+PV_system_losses+reflection_loss1)/100  for val in L1_gen]
-plt.plot(L_hours_plot, L1_gen_nolosses, label = 'PV energy\nyield (DS1)*',color='goldenrod', linewidth=lines_width, linestyle = '--')
+#plt.plot(L_hours_plot, L1_gen_nolosses, label = 'PV energy\nyield (DS1)*',color='goldenrod', alpha=0.25, linewidth=lines_width)
 plt.plot(L_hours_plot, L1T_gen, label = 'PV energy\nyield (DS1) ',color='goldenrod', linewidth=lines_width)
-plt.plot(L_hours_plot, L_grid_exports_ph,  label = 'Grid export', color='firebrick', linewidth=lines_width)
-plt.plot(L_hours_plot, L_EC_supply_ph, label = 'EC supply', color = 'teal', linewidth=lines_width, linestyle = '--')
-plt.plot(L_hours_plot, L_H2_calorific_power_ph,  label = 'H$_2$ calorific value', color='teal', linewidth=lines_width)
-plt.fill_between(L_hours_plot, L_H2_calorific_power_ph, color='teal', alpha=0.08)
+#plt.plot(L_hours_plot, L_EC_supply_ph, label = 'EC supply', color = 'teal', linewidth=lines_width, linestyle = '--')
+plt.plot(L_hours_plot, L_H2_calorific_power_ph,  label = 'H$_2$ calorific value', color='lightseagreen', linewidth=lines_width)
+plt.fill_between(L_hours_plot, L_H2_calorific_power_ph, color='lightseagreen', alpha=0.12)
+plt.plot(L_hours_plot, L_grid_exports_ph,  label = 'Grid export', color='darkgreen', linewidth=lines_width)
 plt.xlabel('hour')
 
 Vmax = 1 if units == 'relative' else max(L1_gen_nolosses)
 
 if day[1] - day[0] == 0:
     plt.xticks([6, 9, 12, 15, 18, 21])
-    plt.text(18,0.95*Vmax,f'{day[0]}/{month[0]}/{year}', fontsize=text_size)
-    plt.text(17.6,0.72*Vmax,'*no temperature,\nreflection and\nsystem losses',fontsize=7)
+    plt.text(18,0.90*Vmax,f'{day[0]}/{month[0]}/{year}', fontsize=text_size)
+    #plt.text(17.6,0.72*Vmax,'*no temperature,\nreflection and\nsystem losses',fontsize=7)
     plt.xlim(5, 22)
-    plt.axvspan(5, sunrise, color='darkblue', alpha=0.1)
-    plt.axvspan(sunset, 22, color='darkblue', alpha=0.1)
-    y_pos = 0.95*Vmax
+    plt.axvspan(5, sunrise, color='darkblue', alpha=0.08)
+    plt.axvspan(sunset, 22, color='darkblue', alpha=0.08)
+    y_pos = 0.90*Vmax
     plt.text(5.3, y_pos, text0, fontsize=text_size)
     y_pos -= 0.09*Vmax
     plt.text(5.3, y_pos, text1, fontsize=text_size, color='goldenrod')
     y_pos -= 0.09*Vmax
-    plt.text(5.3, y_pos, text2, fontsize=text_size, color='firebrick')
+    plt.text(5.3, y_pos, text2, fontsize=text_size, color='darkgreen')
     y_pos -= 0.09*Vmax
-    plt.text(5.3, y_pos, text3, fontsize=text_size, color='teal')
-    y_pos -= 0.09*Vmax
-    plt.text(5.3, y_pos, text4, fontsize=text_size, color='teal')
+    plt.text(5.3, y_pos, text3, fontsize=text_size, color='lightseagreen')
 
 else:
     plt.text(1,0.97*Vmax,'*no temperature, reflection and system losses',fontsize=8)
     plt.xlim(0, len(L_hours_plot))
 
-plt.ylim(0,1.05*Vmax)
+plt.ylim(0,1*Vmax)
 plt.yticks([0, 0.25*Vmax, 0.50*Vmax,0.75*Vmax, 1*Vmax])
 plt.legend(fontsize=8.5, loc='upper left', bbox_to_anchor=(1, 1)) 
-plt.grid(True, alpha=0.4)
+plt.grid(True, alpha=0.1)
 plt.tight_layout()
-
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\scenario 1\\{city}_{month[0]}.svg')
+plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.2\\{city}_{month[0]}.svg')
 plt.show()
 
 # Print

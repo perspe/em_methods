@@ -87,17 +87,17 @@ import sys
 # User inputs
 
 city = 'Sines'
-year,day,month = 2025, [1,31],[1,12]    # define period of time: some months too entire year
-PVutilization = 1                       # 1 = average anual power generated
+year,day,month = 2025, [1,31],[8,8]    # define period of time: some months too entire year
+PVutilization = 2.587124099                       # 1 = average anual power generated
 file_path = 'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\M-ECO2\\Scripts\\PV'
  
-units = 'relative'                  # chose between 'relative' or 'absolute, and defined the values below:
+units = 'absolute'                 # chose between 'relative' or 'absolute, and defined the values below:
 
 if units == 'relative':
-    EC_capacity = 0.5               # Wh/Wpeak, max EC capacity, corresponds to half of max PV production 
+    EC_capacity = 0.5              # Wh/Wpeak, max EC capacity, corresponds to half of max PV production 
 elif units =='absolute':
-    PV_capacity = 10e6              # Wh
-    EC_capacity = 0.5*PV_capacity   # Wh, max EC capacity, corresponds to half of max PV production 
+    PV_capacity = 1.25e+8             # Wh
+    EC_capacity = 5.4e+7 #0.5*PV_capacity   #  Wh, max EC capacity, corresponds to half of max PV production 
 else:
     print('Units should be "relative" or "absolute"')
     sys.exit()
@@ -130,10 +130,8 @@ PV_area = PV_peak_power / (1000 * PV_efficiency/100)    # m2, active area of PV 
    
 EC_production_ph = 1000                                         # Nm3/hour, full power
 EC_consumption = 4300                                           # Wh/Nm3 H2  (energy need for one hour to produce 1 Nm3/h)
-EC_system_losses = 10                                           # %
 EC_water_Nm3 = 0.82                                             # L per Nm3 H2
 H2_heating_value = 119.96                                       # MJ/kg, Energy density of hydrogen gas , LHV 
-
 EC_consumption_ph = EC_consumption * EC_production_ph           # Wh/h  (energy need for one hour to produce 1000 Nm3 H2)
 EC_water = EC_water_Nm3 * EC_production_ph / EC_consumption_ph  # L water / Wh 
     
@@ -379,7 +377,7 @@ def calculate_statistics(*args):
     '''
     Calculate maximum, average, and minimum values of each list and round values in W/Wpeak (Wh/Wpeak per set period for total value)
     '''
-    To = [round(np.trapz(L, dx=1), 3) for L in args]
+    To = [round(np.trapz(L, dx=1), 8) for L in args]
     Max = [round(max(L), 3) for L in args]
     Min = [round(min(L), 3) for L in args]
     Avr = [round(statistics.mean(L), 3) for L in args]
@@ -394,8 +392,10 @@ L_ranges_pd = [Lt_GHI_pd, Lt_GTI_pd, LtT_gen_pd, L1_GHI_pd, L1_GTI_pd, L1T_gen_p
 To_pd, Max_pd, Min_pd, Avr_pd, Std_pd = calculate_statistics(*L_ranges_pd)
 
 
-temperature_losst, temperature_loss1 = round(100-(To[8]*100/To[7]),2), round(100-(To[13]*100/To[12]),2)  # Temperature losses
-reflection_losst, reflection_loss1 = round(100-(To[5]*100/To[6]),2), round(100-(To[10]*100/To[11]),2)    # Reflection losses
+temperature_losst, temperature_loss1 = 100-(To[8]*100/To[7]), 100-(To[13]*100/To[12])  # Temperature losses
+reflection_losst, reflection_loss1 = 100-(To[5]*100/To[6]), 100-(To[10]*100/To[11])    # Reflection losses
+total_losst = (100-(To[8]*100/To[7]))+(100-(To[5]*100/To[6]))+(PV_system_losses)
+total_loss1 = (100-(To[5]*100/To[6]))+(100-(To[10]*100/To[11]))+(PV_system_losses)
 
 
 
@@ -409,7 +409,7 @@ def hydrogen_volume_to_mass(volume):        # m3, convert volume to mass (PV = n
     return n * molar_mass_h2                # Calculate mass of H2 in kg
 
 
-def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, EC_system_losses, H2_heating_value, L1T_gen):
+def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen):
     
     '''
     Calculates EC number of units and create new lists per hour for:
@@ -419,12 +419,11 @@ def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water
         EC_production_ph (volume of H2 produced per hour) = Nm3/h
         EC_consumption_ph (energy consumed by the EC per hour) = Wh/h
         EC_water (water consumed per Wh of energy consumed) = L/Wh
-        EC_system_losses (EC ssytem losses in the electronic parts) = %
         H2_heating_value (lower heating value of hydrogen, aka energy denisty) = MJ/kg
         L1T_gen (PV energy yield considering temperature, reflection and system losses per hour) = W/Wpeak or W
     '''
 
-    EC_consumption_losses_ph = EC_consumption_ph * (1+EC_system_losses/100)                      # Wh/h, energy consumption of one EC unit considering system losses
+    EC_consumption_losses_ph = EC_consumption_ph                                                 # Wh/h, energy consumption of one EC unit considering system losses
     EC_units = EC_capacity / EC_consumption_ph                                                   # EC units. Can be units/Wpeak (relative) or units (absolute)
     EC_supply_cons = [V1T_gen / (EC_units * EC_consumption_losses_ph) for V1T_gen in L1T_gen]    # ratio between energy supplied and required
     L_EC_usage = np.clip(EC_supply_cons, 0, 1)                                                   # sets EC usage between 0 and 1: it means that above 1 there is excess of soalr energy (that will be exported)
@@ -434,11 +433,12 @@ def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water
     
     L_H2_mass_ph = [hydrogen_volume_to_mass(V_H2_volume_ph)*1000 for V_H2_volume_ph in L_H2_volume_ph]      # g/Wpeak/h or g/h
     L_H2_calorific_power_ph = [H2_mass_ph/1000 * H2_heating_value / 0.0036 for H2_mass_ph in L_H2_mass_ph]  # W/Wpeak/h or W/h, energy of hydrogen, (1 Wh = 0.0036 MJ) 
+    L_H2_volume_ph = L_H2_volume_ph * 1000 # Nm3 to L
     L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_EC_water_ph = L_EC_usage.tolist(), L_EC_supply_ph.tolist(), L_H2_volume_ph.tolist(), L_EC_water_ph.tolist()
 
     return EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph                       
 
-EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph = EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, EC_system_losses, H2_heating_value, L1T_gen)
+EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph = EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen)
 
 
 
@@ -469,6 +469,11 @@ L_grid_exports_pm, L_EC_supply_pm, L_H2_volume_pm, L_H2_mass_pm, L_H2_calorific_
 Lists_H2_pd = [L_grid_exports_pd, L_EC_supply_pd, L_H2_volume_pd, L_H2_mass_pd, L_H2_calorific_power_pd, L_EC_water_pd]
 To_H2_pd, Max_H2_pd, Min_H2_pd, Avr_H2_pd, Std_H2_pd = calculate_statistics(*Lists_H2_pd)
 
+CF_L1T_gen_pd = [L1T/24 for L1T in L1T_gen_pd]    # Capacity factor
+CF_L_EC_supply_pd = [EC/(24*EC_capacity) for EC in L_EC_supply_pd]
+To_CF_pd, Max_CF_pd, Min_CF_pd, Avr_CF_pd, Std_CF_pd = calculate_statistics(*[CF_L1T_gen_pd, CF_L_EC_supply_pd])
+
+
 EC_efficiency = round(To_H2[4]*100/To_H2[1],2)  # %
 
 # Round and convert values 
@@ -488,161 +493,100 @@ net_flow_pm = [round(PV - EC - exp,2) for PV, EC, exp in zip (L1T_gen_pm, L_EC_s
 # Plots 
 
 
-lines_width = 1.2
+lines_width = 1.35
 
-# Temperature and wind speed
-
-plt.figure(figsize=(12,2.3))
-plt.rcParams['figure.dpi']=200
-plt.title(f'{city}',fontsize=11)
-plt.ylabel('Max temperature (°C)',fontsize=12)
-plt.plot(days, Lt_Tpv_pd, color='black', linewidth=lines_width,label='PV panel (T)')
-plt.plot(days, L1_Tpv_pd, color='teal', linewidth=lines_width,label='PV panel (DS1)')
-plt.plot(days, L_Tair_pd, color='grey', linewidth=lines_width,label='On air')
-plt.xlim(0,365)
-x_ticks = np.arange(0, 365, 365/12)
-x_labels_pos = x_ticks + (365/12)/2
-plt.xticks(x_ticks, labels=['' for _ in x_ticks])
-plt.gca().set_xticks(x_labels_pos, minor=True)
-plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], minor=True)
-plt.xlabel('month')
-plt.ylim(-25,75), plt.yticks([-25,0,25,50,75,])
-plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
-plt.grid(True)
-plt.tight_layout()
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot1.svg')
-plt.show()
+# 1. Temperature and wind speed &  2. GHI and GTI & 3. PV energy yield --> In 4.3 script
 
 
-# GHI and GTI 
-
-plt.figure(figsize=(12,2.3))
-plt.rcParams['figure.dpi']=200
-plt.title(f'{city}',fontsize=11)
-plt.ylabel('Irradiation\n(kWh/m$^2$/day)')
-plt.plot(days, Lt_GHI_pd,color='black', linewidth=lines_width,label='GHI (T)')
-plt.plot(days, Lt_GTI_pd, linestyle = '--',color='black', linewidth=lines_width,label='GTI (T)')
-plt.plot(days, L1_GHI_pd, color='teal', linewidth=lines_width,label='GHI (DS1)')
-plt.plot(days, L1_GTI_pd, linestyle = '--',color='teal', linewidth=lines_width, label='GTI (DS1)')
-plt.ylim(0,10), plt.yticks([0,2,4,6,8,10])
-plt.xlim(0,365)
-x_ticks = np.arange(0, 365, 365/12)
-x_labels_pos = x_ticks + (365/12)/2
-plt.xticks(x_ticks, labels=['' for _ in x_ticks])
-plt.gca().set_xticks(x_labels_pos, minor=True)
-plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], minor=True)
-plt.xlabel('month')
-plt.grid(True)
-plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
-plt.tight_layout()
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot2.svg')
-plt.show()
-
-
-
-# PV energy yield
+# 4. Energy flow between PV, EC, battery and grid
 
 plt.figure(figsize=(12,2))
-plt.rcParams['figure.dpi']=200
-plt.title(f'{city}',fontsize=11)
-ylabel = 'PV energy yield\n(Wh/W$_{{peak}}$/day)' if units == 'relative' else 'PV energy yield\n(Wh/day)'
-plt.ylabel(ylabel)
-plt.plot(days, LtT_gen_pd, label = 'Theoretical',color='brown', linewidth=lines_width)
-plt.plot(days, L1T_gen_pd, label = 'DS1',color='goldenrod', linewidth=lines_width)
-plt.plot(days, L1_gen_pd, label = 'DS1 without\nconsidering temperature',color='goldenrod', linewidth=lines_width, linestyle ='--')
-plt.fill_between(days, L1T_gen_pd, color='goldenrod', alpha=0.25)
-Vmax = 8 if units == 'relative' else 1.2*max(LtT_gen_pd)
-plt.ylim(0,Vmax), plt.yticks([0,0.25*Vmax, 0.5*Vmax, 0.75*Vmax, Vmax])
-plt.xlim(0,365)
-x_ticks = np.arange(0, 365, 365/12)
-x_labels_pos = x_ticks + (365/12)/2
-plt.xticks(x_ticks, labels=['' for _ in x_ticks])
-plt.gca().set_xticks(x_labels_pos, minor=True)
-plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], minor=True)
-plt.xlabel('month')
-plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
-plt.grid(True)
-plt.tight_layout()
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot3.svg')
-plt.show()
-
-
-# Energy flow between PV, EC, battery and grid
-
-plt.figure(figsize=(12,2.5))
 plt.rcParams['figure.dpi']=200
 plt.title(f'{city}, discontinuous EC operation, day-night cycles',fontsize=11)
 ylabel = 'Energy Flow (Wh/W$_{{peak}}$/day)' if units == 'relative' else 'Energy Flow (Wh/day)'
 plt.ylabel(ylabel)
-plt.plot(days, LtT_gen_pd, label = 'PV yield (T)',color='black', linewidth=lines_width)
+#plt.plot(days, LtT_gen_pd, label = 'PV yield (T)',color='black', linewidth=lines_width)
 plt.plot(days, L1T_gen_pd, label = 'PV yield (DS1)',color='goldenrod', linewidth=lines_width)
-plt.plot(days, L_grid_exports_pd,  label = 'Grid export', color='firebrick', linewidth=lines_width)
-plt.plot(days, L_EC_supply_pd, label = 'EC supply', color = 'teal', linewidth=lines_width, linestyle = '--')
-plt.plot(days, L_H2_calorific_power_pd, label = ' H$_2$ energy', color='teal', linewidth=lines_width)
-plt.fill_between(days, L_H2_calorific_power_pd, color='black', alpha=0.08)
+plt.plot(days, L_grid_exports_pd,  label = 'Grid export', color='darkgreen', linewidth=lines_width)
+#plt.plot(days, L_EC_supply_pd, label = 'EC supply', color = 'teal', linewidth=lines_width, linestyle = '--')
+plt.plot(days, L_H2_calorific_power_pd, label = ' H$_2$ energy', color='lightseagreen', linewidth=lines_width)
+plt.fill_between(days, L_H2_calorific_power_pd, color='lightseagreen', alpha=0.1)
 Vmax = 8 if units == 'relative' else 1.2*max(LtT_gen_pd)
 plt.ylim(0,Vmax), plt.yticks([0, 0.25*Vmax, 0.5*Vmax, 0.75*Vmax, Vmax])
+plt.xlim(0,365)
+plt.xticks([0,31,59,90,120,151,181,212,243,273,304,334],['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'])
+plt.xlabel('month')
+plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
+plt.grid(True,  alpha=0.1)
+plt.tight_layout()
+plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.3 and 4.4 results\\{city}_S2plot4.svg')
+plt.show()
+
+
+# 5. Energy flow between PV, EC, battery and grid - monthly
+
+L_dayspermonth =[31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+avrtT_gen_pm = [To_pm/days for To_pm, days in zip (LtT_gen_pm, L_dayspermonth)]
+L1_gen_nolosses_pm = [val *(100+total_loss1)/100  for val in L1T_gen_pm]
+avr1T_noloss_gen_pm = [To_pm/days for To_pm, days in zip (L1_gen_nolosses_pm, L_dayspermonth)]
+avr1T_gen_pm = [To_pm/days for To_pm, days in zip (L1T_gen_pm, L_dayspermonth)]
+avr_grid_exports_pm = [To_pm/days for To_pm, days in zip (L_grid_exports_pm, L_dayspermonth)]
+avr_EC_supply_pm = [To_pm/days for To_pm, days in zip (L_EC_supply_pm, L_dayspermonth)]
+avr_H2_calorific_power_pm = [To_pm/days for To_pm, days in zip (L_H2_calorific_power_pm, L_dayspermonth)]
+
+plt.figure(figsize=(6,2.3))
+plt.rcParams['figure.dpi']=200
+plt.title(f'{city}, continuous EC operation, EC supply = average annual PV yield, monthly chart',fontsize=8)
+ylabel = 'Monthly average energy\n(Wh/W$_{{p}}$$^{PV}$/month)' if units == 'relative' else 'Energy Flow (Wh/day)'
+plt.ylabel(ylabel)
+months = months-1
+#plt.plot(months, avrtT_gen_pm, label = 'PV theoretical max',color='goldenrod', alpha=0.5, linewidth=lines_width)
+plt.plot(months, avr1T_noloss_gen_pm, label = 'PV yield (DS1)*',color='goldenrod', alpha=0.5, linewidth=lines_width)
+plt.plot(months, avr1T_gen_pm, label = 'PV yield (DS1)',color='goldenrod', linewidth=lines_width)
+plt.plot(months, avr_grid_exports_pm,  label = 'Grid export', color='darkgreen', linewidth=lines_width)
+#plt.plot(months, avr_EC_supply_pm, label = 'EC supply', color = 'lightseagreen', linewidth=lines_width, linestyle = '--')
+plt.plot(months, avr_H2_calorific_power_pm, label = ' H$_2$ energy', color='lightseagreen', linewidth=lines_width)
+plt.fill_between(months, avr_H2_calorific_power_pm, color='lightseagreen', alpha=0.12)
+Vmax = 7 if units == 'relative' else 1.2*max(LtT_gen_pd)
+plt.ylim(0,Vmax), plt.yticks([0, 2, 4, 6])
+plt.xlim(0,11)
+plt.xticks(np.arange(12), ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'])
+plt.xlabel('month')
+plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
+plt.grid(True, alpha=0.1)
+plt.tight_layout()
+plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.3 and 4.4 results\\{city}_S2plot5.svg')
+plt.show()
+
+
+# 6. Capacity factor of PV, EC and battery
+
+Avr_CF_pd[0], Std_CF_pd[0], Avr_CF_pd[1], Std_CF_pd[1] = [round(val,2) for val in [Avr_CF_pd[0], Std_CF_pd[0], Avr_CF_pd[1], Std_CF_pd[1]]]
+
+plt.figure(figsize=(12,1.8))
+plt.rcParams['figure.dpi']=200
+plt.title(f'{city}, continuous EC operation, EC supply = average annual PV yield',fontsize=11)
+ylabel = 'Capacity factor'
+plt.ylabel(ylabel)
+plt.plot(days, CF_L1T_gen_pd, label = 'PV',color='goldenrod', linewidth=lines_width)
+plt.plot(days, CF_L_EC_supply_pd, label = 'EC', color = 'lightseagreen', linewidth=lines_width)
+Vmax = 1 if units == 'relative' else 1.2*max(LtT_gen_pd)
+plt.ylim(0,Vmax+0.1), plt.yticks([0, 0.5*Vmax, Vmax])
 plt.xlim(0,365)
 x_ticks = np.arange(0, 365, 365/12)
 x_labels_pos = x_ticks + (365/12)/2
 plt.xticks(x_ticks, labels=['' for _ in x_ticks])
-plt.gca().set_xticks(x_labels_pos, minor=True)
-plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'], minor=True)
+plt.text(1,0.75,f'Daily average:   PV = {Avr_CF_pd[0]} +/- {Std_CF_pd[0]}  |  EC = {Avr_CF_pd[1]} +/- {Std_CF_pd[1]}')
+plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'])
 plt.xlabel('month')
 plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1)) 
-plt.grid(True)
+plt.grid(True, alpha=0.1)
 plt.tight_layout()
-
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot4.svg')
+plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.3 and 4.4 results\\{city}_S2plot6.svg')
 plt.show()
 
 
-# Bar chart total
-
-if city == 'Sines':               # Results from Module 4.3, Wh/Wpeak
-    grid_exports_To_2 = 937.545
-    grid_imports_To_2 = 779.524
-    H2_calorific_power_To_2 = 907.273
-if city == 'Edmonton':
-    grid_exports_To_2 = 691.947
-    grid_imports_To_2 = 578.588 
-    H2_calorific_power_To_2 = 650.852
-if city == 'Crystal Brook':
-    grid_exports_To_2 = 837.01
-    grid_imports_To_2 = 691.643
-    H2_calorific_power_To_2 = 834.626
-
-bar_width = 0.9
-alpha = 0.4
-plt.figure(figsize=(6,3))
-plt.rcParams['figure.dpi']=300
-
-plt.ylabel('Total energy (Wh/W$_{{peak}}$/year)')
-bars = [
-    (1, To[13], 'goldenrod', 'PV energy yield',1),
-    (4.1, grid_imports_To_2, 'darkgreen', 'Grid imports (s1)',1),
-    (2.1, grid_exports_To_2, 'firebrick', 'Grid exports (s2)',1),
-    (6.1, H2_calorific_power_To_2, 'teal', 'H2 calorific value (s1)',1),
-    (4.9, 0, 'darkgreen', 'Grid imports (s2)',alpha),
-    (2.9, To_H2[0], 'firebrick', 'Grid exports (s1)',alpha),
-    (6.9, To_H2[4], 'teal', 'H2 calorific value (s2)',alpha)]
-     
-for bar in bars:
-    plt.bar(bar[0], bar[1], label=bar[3], color=bar[2], alpha=bar[4],width=bar_width)
-    plt.text(bar[0], bar[1] + 5, f'{round(bar[1])}', ha='center', va='bottom', fontsize=9)
-
-plt.gca().axes.get_xaxis().set_visible(False)
-plt.legend(fontsize=8, loc='upper left', bbox_to_anchor=(1, 1))
-plt.ylim(0,130+To[13])
-plt.text(4,To[13],f'{city}',fontsize=9)
-plt.tight_layout()
-
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot5.svg')
-plt.show()
-
-
-
-# Monthly bar charts
+# 8. Monthly bar charts
 
 bar_width = 7
 plt.figure(figsize=(11.5,2.3))
@@ -668,20 +612,23 @@ plt.gca().set_xticklabels(['jan','feb','mar','apr','may','jun','jul','aug','sep'
 plt.xlabel('month')
 plt.grid(True)
 plt.tight_layout()
-
-#plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo - GW-scale Solar-to-H2\\Figures\\2nd version\\{city}_plot6.svg')
+plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.3 and 4.4 results\\{city}_S2plot8.svg')
 plt.show()
 
 
+# 7. Bar chart total &  9. GTI validation & 10. PV yield validation --> in 4.3 script
+
 
 # Print
+
+temperature_losst,temperature_loss1,reflection_losst,reflection_loss1,total_losst,total_loss1 = [round(val,2) for val in [temperature_losst,temperature_loss1,reflection_losst,reflection_loss1,total_losst,total_loss1]]
 
 print('')
 print('From day',d_start,'to',d_end,'of',year,f'in {city} (',n_days+1,'days), β =',tilt,'°')
 print('')
 print('Panel efficiency =',round(PV_efficiency,2),'%')
 print('EC efficiency =',EC_efficiency,'%')
-print('EC capacity =',round(EC_capacity,2),'Wh/Wpeak')
+print('EC capacity =',round(EC_capacity,4),'Wh/Wpeak')
 print('average EC usage =',round(statistics.mean(L_EC_usage)*100),'%')
 print('')
 print('Change in output power due to temperature | reflection:')
@@ -729,13 +676,21 @@ print('H2 production at 1 atm, 0ºC and 0% relative humidity (L instead of Wh)')
 print('DS1:',round(To_H2[2],3),'|',Avr_H2_pd[2],'|',Std_H2_pd[2],'|',Max_H2[2])
 print('')
 print('H2 mass (g instead of Wh)')
-print('DS1:',round(To_H2[3],3),'|',Avr_H2_pd[3],'|',Std_H2_pd[3],'|',Max_H2[3])
+print('DS1:',round(To_H2[3],8),'|',Avr_H2_pd[3],'|',Std_H2_pd[3],'|',Max_H2[3])
 print('')
 print('H2 calorific value')
 print('DS1:',round(To_H2[4],3),'|',Avr_H2_pd[4],'|',Std_H2_pd[4],'|',Max_H2[4])
 print('')
 print('Water consumption (mL instead of)')
 print('DS1:',round(To_H2[5],3),'|',Avr_H2_pd[5],'|',Std_H2_pd[5],'|',Max_H2[5])
+print('')
+print('')
+print('CAPACITY FACTOR')
+print('')
+print('- average per day (%) | std deviation per day (%) | maximum (%)')
+print('')
+print('PV:',Avr_CF_pd[0],'|', Std_CF_pd[0],'|', Max_CF_pd[0])
+print('EC:',Avr_CF_pd[1],'|', Std_CF_pd[1],'|', Max_CF_pd[1])
 print('')
 print('')
 print('LISTS PER MONTH DS1')
@@ -765,4 +720,3 @@ print('- H2 mass production (g/Wpeak/month)')
 print(L_H2_mass_pm)
 print('')
 print('- Net flow: PV = EC + exp (should be 0)')
-print(net_flow_pm)
