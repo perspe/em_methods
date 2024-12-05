@@ -8,11 +8,13 @@ import seaborn as sns
 CITY = "Sines"
 SCENARIO = 1
 EC_LIFETIME = 12
+DISCOUNT_RATE = 7.5  # %
+LIFETIME = 25  # years
 
 # Installed PV, prices, energy flows and water consumption to produce 1 kg of H2 (results of module 4.3 and 4.4)
 WATER_CONSUMPTION = 9.95e-3  # m3
 EC_SUPPLY = 52180  # Wh
-OX_PRICE = 0.21  # €/kg
+OX_PRICE = 0.21  # 2024 Q1, €/kg
 OX_MASS = (15.999 * (1000 / 2.01568) / 2) / 1000  # kg
 
 if CITY == "Sines":
@@ -21,13 +23,13 @@ if CITY == "Sines":
     if SCENARIO == 1:
         installed_PV = 30.289  # W
         ec_capacity = 5.458  # W
-        battery_capacity = 9.087  # W
+        battery_capacity = 9.087  # Wh
         grid_imports = 27314  # Wh
         grid_exports = 26310  # Wh
     elif SCENARIO == 2:
         installed_PV = 36.916  # W
         ec_capacity = 18.458  # W
-        battery_capacity = 0  # W
+        battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
         grid_exports = 10462  # Wh
     else:
@@ -38,13 +40,13 @@ elif CITY == "Edmonton":
     if SCENARIO == 1:
         installed_PV = 42.223  # W
         ec_capacity = 5.458  # W
-        battery_capacity = 12.667  # W
+        battery_capacity = 12.667  # Wh
         grid_imports = 28528  # Wh
         grid_exports = 27195  # Wh
     elif SCENARIO == 2:
         installed_PV = 49.1431  # W
         ec_capacity = 24.572  # W
-        battery_capacity = 0  # W
+        battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
         grid_exports = 7837  # Wh
     else:
@@ -55,13 +57,13 @@ elif CITY == "Crystal Brook":
     if SCENARIO == 1:
         installed_PV = 32.928  # W
         ec_capacity = 5.458  # W
-        battery_capacity = 9.878  # W
+        battery_capacity = 9.878  # Wh
         grid_imports = 26583  # Wh
         grid_exports = 25430  # Wh
     elif SCENARIO == 2:
         installed_PV = 39.316  # W
         ec_capacity = 19.658  # W
-        battery_capacity = 0  # W
+        battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
         grid_exports = 9280  # Wh
     else:
@@ -71,8 +73,6 @@ else:
 
 
 # PV, EC and battery CAPEX and OPEX, in €/year for 1 kg of H2 produced
-DISCOUNT_RATE = 7.5  # %
-LIFETIME = 25  # years
 
 pv_capex = 0.9 * installed_PV
 pv_opex = 0.017 * installed_PV
@@ -115,7 +115,6 @@ else:
 
 
 # LCOH calculation (does not consider degradation)
-
 
 def lcoh(
     lifetime: int,
@@ -253,7 +252,10 @@ if __name__ == "__main__":
     print("electricity =", lcoh_electricity)
     print("")
     print("LCOH total =", lcoh_total, " €/kg H2")
+    
+    
 # PLOT
+
     if grid_exports > grid_imports:
         components_pos = ["PV", "EC", "battery", "water"]
         values_pos = [lcoh_pv, lcoh_ec, lcoh_battery, lcoh_water]
@@ -293,6 +295,7 @@ if __name__ == "__main__":
                 fontsize=number_size,
             )
         base_pos += values_pos[i]
+        
     # Plot negative values
     base_neg = base_pos + total_neg
     for i in range(len(values_neg)):
@@ -333,8 +336,7 @@ if __name__ == "__main__":
     ax.set_title(f"{CITY}, scenario {SCENARIO}", fontsize=9)
     ax.set_ylim(0, 16)
     ax.set_yticks([0, 2, 4, 6, 8, 10, 12, 14, 16]),
-    ax.set_xticks([]), ax.set_xticklabels([])
-    # ax.set_yticks([]), ax.set_yticklabels([])
+    ax.set_xticks([])
+    ax.set_xticklabels([])
     ax.legend(fontsize=8, loc="upper left", bbox_to_anchor=(1, 1))
-    # plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\7, 8 and S10 results\\Figure 7_{city}_{scenario}.svg')
     plt.show()
