@@ -7,7 +7,7 @@ import seaborn as sns
 # Default simulation variables
 CITY = "Sines"
 SCENARIO = 1
-EC_LIFETIME = 25
+EC_LIFETIME = 12
 
 # Installed PV, prices, energy flows and water consumption to produce 1 kg of H2 (results of module 4.3 and 4.4)
 WATER_CONSUMPTION = 9.95e-3  # m3
@@ -90,7 +90,6 @@ water = water_price * WATER_CONSUMPTION  # €/m3 * m3/1kg H2
 electricity = np.abs([(grid_exports - grid_imports) * electricity_price])  # Wh*eur/Wh
 oxygen = oxygen_revenue = OX_PRICE * OX_MASS  #  €/kg*kg
 
-
 # Create lists (values per year) for LCOH calculation
 
 capex_list = [capex, pv_capex, ec_capex, battery_capex]
@@ -109,9 +108,9 @@ empty_list = [0] * LIFETIME
 
 if grid_exports > grid_imports:
     expenses = water
-    revenues = oxygen + electricity
+    revenues = [oxy + ele for oxy, ele in zip(oxygen, electricity)]
 else:
-    expenses = water + electricity
+    expenses = [wat + ele for wat, ele in zip(water, electricity)]
     revenues = oxygen
 
 
