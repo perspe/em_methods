@@ -6,19 +6,24 @@ PV energy yield (with and without considering temperature), EC supply, and grid 
 
 Time frame = 1 to 10 days
 
-Considers continuous EC operation: constant EC supply and hydrogen output, and a battery capacity of 0.3 W/Wpeak (30% of PV capacity)
+Considers discontinuous EC operation: EC works only when solar energy is avalaible, in day-night cycles.
+EC power (percentage of utilization) follows PV energy yield. EC capacity = 50% of PV capacity.  There's no batery or grid imports.
 
-Units of energy: can chose between W/Wpeak or W
+Units of energy: can chose between W/Wpeak or W. 
 
 Plot data and obtain max, min, average, standard deviation, and total values. 
 
-
+Only relative units
+    Relative yield lists
+           --> represents the amount of energy produced per unit of installed PV capacity over a relative period (W/Wpeak)
+           --> PV capacity is not set, calculations are relative to the 1 Wpeak of installed PV
+           
 DESCRIPTION
 
 1.	Set PV data (area, efficiency, power, temperature coefficient, mounting type), system losses (14% as default) and EC data (H2 production, power and water consumption, system losses  (14% as default))
     EC supply is the PV average annual yield --> obrained from Module 4.3
         
-2.	Select city (Sines, Edmonton or Crystal Brook), time period, import empiric data from a TMY: and 
+2.	Select city (Sines, Edmonton or Crystal Brook), time period , import empiric data from a TMY: and 
     i.	DNI: Direct Normal Irradiance on a plane always normal to sun rays (W/m2)
     ii. DHI: Diffuse Horizontal Irradiance - on Earth's surface (W/m2)
     ii. GHI: Global Horizontal Irradiance - on Earth's surface (W/m2)
@@ -38,15 +43,15 @@ DESCRIPTION
 5.  Calculate total values per day; max and min temperature and wind speed; and statistics of GHI, GTI and PV yield for theoretical and empiric (DS1) date. Calculate temperature and reflection losses.
         --> def lists_per_day   &   def max_temp_wind   &   def calculate_statistics
     
-6.	EC calculations: EC supply, H2 productions by mass, volume and calorific value, water comsumption (fixed values), EC efficiency
-        --> def EC_calculations_1   &   def hydrogen_volume_to_mass        
+6.	EC calculations: EC supply, H2 productions by mass, volume and calorific value, water comsumption, EC efficiency
+        --> def EC_calculations_2   &   def hydrogen_volume_to_mass        
 
-7.  Determine flow of energy between PV, EC, battery and grid, per hour:
-        --> def calculate_energy_usage_1
+7.  Determine flow of energy between PV, EC and grid, per hour:
+        --> def calculate_energy_usage_2
         
 8.  Determine EC values statistics, create lists per hour and day, and round values  
     
-9.  VERIFICATION : check if the net energy flow is zero: energy in (PV + imports) equals energy out (EC + exports)        
+9.  VERIFICATION : check if the net energy flow is zero: energy in (PV) equals energy out (EC + exports)        
         
 10.  Plots energy flow per hour: PV energy yield, (with and without considering losses: refletcion, tmeperature and PV system), grid imports and exports, battery storage, EC supply and H2 calorific value 
 
@@ -80,37 +85,15 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import statistics
-import sys
 
 
 # User inputs
 
-city = 'Crystal Brook'
-year,day,month = 2025, [21,21],[12,12]    # define period of time: 1 to 10 days
-PVutilization = 1                       # 1 = average anual PV energy yield
-battery_roundtrip = 0.85                # typical value of round-trip efficiency of a large-scale lithium-ion battery 
-file_path = 'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\M-ECO2\\Scripts\\PV'
-
-units = 'relative'                      # chose between 'relative' or 'absolute:
-
-if units == 'relative':
-    battery_capacity = 0.3              # W, max battery capacity, corresponds to a third of max PV production
-elif units =='absolute':
-    PV_capacity = 500                   # Wh, PV capacity (at peak power it produces this ammount of energy per hour, at 1000W/m2 and 25ºC)
-    battery_capacity = 0.3*PV_capacity  # Wh, max battery capacity, corresponds to a third of max PV production  
-else:
-    print('Units should be "relative" or "absolute"')
-    sys.exit()    
-         
-'''
-    Relative yield lists
-           --> represents the amount of energy produced per unit of installed PV capacity over a relative period (W/Wpeak)
-           --> PV capacity is not set, calculations are relative to the 1 Wpeak of installed PV
-
-     Absolute yield lists
-           --> represents the amount of energy produced considering the defined PV capacity over a relative period (W)
-           --> a PV capacity of 10MW produces 10MW at peak power under standard test conditions (STC: 1000 W/m2 irradiance, 25ºC and AM 1.5)
-'''
+city = 'Sines'
+year,day,month = 2025, [21,21],[12,12]  # define period of time: 1 to 10 days
+PVutilization = 1 
+EC_capacity = 0.5                      # 1 = average anual power generated
+file_path = 'C:\\Users\\(...)'  # edit path
 
 
 # PV parameters
@@ -127,17 +110,13 @@ ar = 0.169                     # angular loss coefficient
 PV_area = PV_peak_power / (1000 * PV_efficiency/100)    # m2, active area of PV panel
 
 # EC parameters
-    
+   
 EC_production_ph = 1000                                         # Nm3/hour, full power
-EC_consumption_ph = 4300                                        # Wh/Nm3 H2  (energy need for one hour to produce 1 Nm3/h)
-EC_water_Nm3 = 0.82                                             # L per Nm3 H2
+EC_consumption = 4300                                           # Wh/Nm3 H2  (energy need for one hour to produce 1 Nm3/h)
+EC_water = 0.92                                                 # L/Nm3 H2
 H2_heating_value = 119.96                                       # MJ/kg, Energy density of hydrogen gas , LHV 
-
-EC_production_pd = 24 * EC_production_ph                        # Nm3/day, full power
-EC_consumption_pd = EC_consumption_ph * EC_production_pd        # Wh/day  (energy need for one day to produce 24k Nm3 H2)
-EC_water = EC_water_Nm3 * EC_production_pd / EC_consumption_pd  # L water / Mwh 
-
-    
+EC_consumption_ph = EC_consumption * EC_production_ph           # Wh/h  (energy need for one hour to produce 1000 Nm3 H2)
+EC_units = EC_capacity / EC_consumption_ph                      # units/Wpeak
 
 def import_data_from_excel_1dataset(file_path, city):  # Import data from excel file
     
@@ -179,13 +158,13 @@ def days_since_start_of_year(year, month, day):
 d_start, d_end = days_since_start_of_year(year, month[0], day[0]), days_since_start_of_year(year, month[1], day[1])
 n_days = int(d_end - d_start)
 days = np.linspace(d_start, d_end, n_days+1)
-L_days_hours = [L_days[i] + L_hours[i]/24 for i in range(len(L_days))]     # for ploting GTI and power throughout the set period
-
+months = np.linspace(month[0],month[1],month[1]-month[0]+1)
+L_days_hours = [L_days[i] + L_hours[i]/24 for i in range(len(L_days))]     # for ploting GTI and power throughout the year
 
 # Select values of lists according to the set period
 
 i_start, i_end = L_days_hours.index(d_start), L_days_hours.index(d_end)+24
-L_range = [L_hours, L_days,  L1_GHI, L1_DNI, L1_DHI, L_Tair, L_wind, L_days_hours]
+L_range = [L_hours, L_days, L1_GHI, L1_DNI, L1_DHI, L_Tair, L_wind, L_days_hours]
 L_filtered = [L[i_start:i_end + 1] for L in L_range]
 L_hours, L_days, L1_GHI, L1_DNI, L1_DHI, L_Tair, L_wind, L_days_hours = L_filtered
    
@@ -267,19 +246,20 @@ def solar_parameters_1dataset(L_days_hours, tilt, latitude, longitude, timezone,
         DNI_correction_1 = math.sin(declination_r) * math.sin(latitude_r) * math.cos(tilt_r) - math.sin(declination_r) * math.cos(latitude_r) * math.sin(tilt_r) * math.cos(new_azimuth_panel_r)
         DNI_correction_2 = math.cos(declination_r) * math.cos(latitude_r) * math.cos(tilt_r) * math.cos(HRA_r) + math.cos(declination_r) * math.sin(new_azimuth_panel_r) * math.sin(HRA_r) * math.sin(tilt_r)
         DNI_correction_3 = math.cos(declination_r) * math.sin(latitude_r) * math.sin(tilt_r) * math.cos(new_azimuth_panel_r) * math.cos(HRA_r)
-        DNI_correction = DNI_correction_1 + DNI_correction_2 + DNI_correction_3       # DNI_tilted = DNI from the TMY * DNI_correction
-        DHI_correction = (math.radians(180) - tilt_r) / math.radians(180) 
+        DNI_correction = DNI_correction_1 + DNI_correction_2 + DNI_correction_3  # DNI_tilted = DNI from the TMY * DNI_correction
+        DHI_correction = (math.radians(180) - tilt_r) / math.radians(180)  # DHI_tilted = DHI from the TMY * DHI_correction
         L1_GTI_i = max(0, L1_DNI[i] * DNI_correction + L1_DHI[i] * DHI_correction * (1 - AL_i))  # GTI = DNI_tilted + DHI_tilted
         L1_norefl_GTI_i = max(0, L1_DNI[i] * DNI_correction + L1_DHI[i] * DHI_correction)
         L1_GTI.append(L1_GTI_i)
         L1_norefl_GTI.append(L1_norefl_GTI_i)
         
-        # PV Temperature (ºC)
+        # PV Temperature
         termT = w * 0.32/(8.91+2.0*L_wind[i]/0.67)
         Lt_Tpv_i = L_Tair[i] + termT*Lt_GTI_i
         L1_Tpv_i = L_Tair[i] + termT*L1_GTI_i
         Lt_Tpv.append(Lt_Tpv_i)
         L1_Tpv.append(L1_Tpv_i) 
+        
         
         # Generated power (W/m2) with and without considering temperature losses
         termG = PV_efficiency * (100 - PV_system_losses) / 10000
@@ -298,30 +278,15 @@ def solar_parameters_1dataset(L_days_hours, tilt, latitude, longitude, timezone,
 results = solar_parameters_1dataset(L_days_hours, tilt, latitude, longitude, timezone, height, ar, L1_DNI, L1_DHI, L_Tair, L_wind, PV_efficiency, PV_system_losses, Tcoef_power, Tref)
 Lt_GHI, Lt_GTI, Lt_norefl_GTI, Lt_gen, LtT_gen, L1_GTI, L1_norefl_GTI, L1_gen, L1T_gen, Lt_Tpv, L1_Tpv, sunrise, sunset = results      
 
+PV_peak_power_density = PV_peak_power / PV_area         # Wpeak/m2, this is equal to PV_efficiency * 1000 W/m2
+Lt_gen, LtT_gen, L1_gen, L1T_gen = [[val_PV / PV_peak_power_density for val_PV in lst_PV] for lst_PV in [Lt_gen, LtT_gen, L1_gen, L1T_gen]]  # W/m2 / Wpeak/m2 = W/Wpeak (always <1)
 
 
-#  Select relative or absolute yield:
-
-if units == 'relative':
-    #  relative yield lists --> represents the amount of energy produced per unit of installed PV capacity over a relative period
-    PV_peak_power_density = PV_peak_power / PV_area         # Wpeak/m2, this is equal to PV_efficiency * 1000 W/m2
-    Lt_gen, LtT_gen, L1_gen, L1T_gen = [[val_PV / PV_peak_power_density for val_PV in lst_PV] for lst_PV in [Lt_gen, LtT_gen, L1_gen, L1T_gen]]  # W/m2 / Wpeak/m2 = W/Wpeak (always <1)
-
-elif units == 'absolute':
-    # absolute yield lists --> represents the amount of energy produced considering the defined PV capacity over a relative period
-    PV_area_park = PV_capacity * PV_area / (PV_peak_power)   # m2, active area of PV system
-    Lt_gen, LtT_gen, L1_gen, L1T_gen = [[val_PV * PV_area_park for val_PV in lst_PV] for lst_PV in [Lt_gen, LtT_gen, L1_gen, L1T_gen]]  # W (values below are W instead of W/Wpeak)
-else:
-    print('Units should be "relative" or "absolute"')
-    sys.exit()
-
-
-
-Lists_PV = Lt_GHI, Lt_GTI, Lt_gen, LtT_gen, L1_GHI, L1_GTI, L1_gen, L1T_gen  # irradiance in W/m2, PV yield in W/Wpeak or W
+Lists_PV = Lt_GHI, Lt_GTI, Lt_gen, LtT_gen, L1_GHI, L1_GTI, L1_gen, L1T_gen  # irradiance in W/m2, PV yield in W/Wpeak
 
 def lists_per_day(days, L_days, *args):
     '''
-    Total daily values throughout the set period (Wh/Wpeak per day --> Wh per day = suming the 24 values of W during a day
+    Total daily values throughout the set period (Wh/Wpeak or W per day --> Wh per day = suming the 24 values of W during a day
     '''
     L_lists = list(zip(*args))
     L_lists_pd = [[] for _ in range(len(args))]
@@ -350,7 +315,7 @@ def max_temp_wind(days, L_days, *args):
         for i_row in range(len(L_days)):
             if L_days[i_row] == d:
                 for i_col in range(0, len(V_climate_pd)):
-                    V_climate_pd[i_col] = max(V_climate_pd[i_col], L_climate[i_row][i_col])
+                    V_climate_pd[i_col] = max(V_climate_pd[i_col], L_climate[i_row][i_col]) # selects maximum value 
         for i_col in range(0, len(V_climate_pd)):
             L_climate_pd[i_col].append(V_climate_pd[i_col])
     return L_climate_pd
@@ -383,119 +348,76 @@ reflection_losst, reflection_loss1 = round(100-(To[5]*100/To[6]),2), round(100-(
 # HYDROGEN PRODUCTION
 
 
-def hydrogen_volume_to_mass(volume):        # m3, convert volume to mass (PV = nRT) -> Nm3 is volume at 1 atm and 25ºC
-    R, T, P = 8.314, 298.15, 101325         # J/(mol·K), K, Pa
-    molar_mass_h2 = 0.002016                # kg/mol
-    n = (P * volume) / (R * T)              # Calculate moles (n) and mass for 298 K (25ºC) and 101325 Pa(1 atm)
+def hydrogen_volume_to_mass(volume):        # m3, convert volume to mass (PV = nRT) -> Nm3 is volume at 1 atm and 0ºC
+    R, T, P = 8.314, 273.16, 101325         # J/(mol·K), K, Pa
+    molar_mass_h2 = 0.00201568              # kg/mol
+    n = (P * volume) / (R * T)              # Calculate moles (n) and mass for 273.16 K (0ºC) and 101325 Pa(1 atm)
     return n * molar_mass_h2                # Calculate mass of H2 in kg
 
-
-def EC_calculations_1(EC_production_pd, EC_consumption_pd, EC_water, H2_heating_value, L1T_gen):
+                    
+def EC_calculations_2(EC_units, EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen):
     
     '''
-    Calculates values per hour, day, and total of: EC energy supply; volume, mass and calorific value of H2, and water consumed
+    Calculates EC number of units and create new lists per hour for:
         EC percentage of usage, EC energy supply, H2 volume production and water comsumption 
     Varaibles and units
+        EC_Capacity = W or W/Wpeak
         EC_production_ph (volume of H2 produced per hour) = Nm3/h
         EC_consumption_ph (energy consumed by the EC per hour) = Wh/h
-        EC_water (water consumed per Wh of energy consumed) = L/Wh
+        EC_water (water consumed per Nm3 of hydrogen produced) = L/Nm3
         H2_heating_value (lower heating value of hydrogen, aka energy denisty) = MJ/kg
         L1T_gen (PV energy yield considering temperature, reflection and system losses per hour) = W/Wpeak or W
     '''
+
+    EC_supply_cons = [V1T_gen / (EC_units * EC_consumption_ph) for V1T_gen in L1T_gen]    # ratio between energy supplied and required
+    L_EC_usage = np.clip(EC_supply_cons, 0, 1)                                            # sets EC usage between 0 and 1: it means that above 1 there is excess of soalr energy (that will be exported)
+    L_EC_supply_ph = EC_units * EC_consumption_ph * L_EC_usage                            # Wh/Wpeak/h or Wh/h, Energy required by EC units
+    L_H2_volume_ph = EC_units * EC_production_ph * L_EC_usage                             # Nm3/Wpeak/h or Nm3/h H2 production
+    L_EC_water_ph = L_H2_volume_ph * EC_water * 1000                                      # mL/Wpeak/h or mL/h, water comsumption
     
-    EC_supply_pd = (statistics.mean(L1T_gen)*24* PVutilization)                           # Wh/Wpeak or Wh per day, average annual PV energy minus system losses
-    H2_volume_pd = EC_supply_pd * EC_production_pd /  EC_consumption_pd                   # Nm3/Wpeak or Nm3 per day H2, H2 produced assuming EC is working at full power, and there is no limit of EC units    
-    H2_mass_pd = hydrogen_volume_to_mass(H2_volume_pd)                                    # kg/Wpeak or kg per day
-    H2_calorific_power_pd = H2_mass_pd * H2_heating_value / 0.0036                        # Wh/Wpeak or Wh per day, energy content of hydrogen, (1 Wh = 0.0036 MJ) 
-    EC_efficiency = round(H2_calorific_power_pd * 100 / EC_supply_pd,2)                   # %
+    L_H2_mass_ph = [hydrogen_volume_to_mass(V_H2_volume_ph)*1000 for V_H2_volume_ph in L_H2_volume_ph]      # g/Wpeak/h or g/h
+    L_H2_calorific_power_ph = [H2_mass_ph/1000 * H2_heating_value / 0.0036 for H2_mass_ph in L_H2_mass_ph]  # W/Wpeak/h or W/h, energy of hydrogen, (1 Wh = 0.0036 MJ) 
+    L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_EC_water_ph = L_EC_usage.tolist(), L_EC_supply_ph.tolist(), L_H2_volume_ph.tolist(), L_EC_water_ph.tolist()
 
-    # H2 and EC values per hour and total
-    List_pd = [EC_supply_pd, H2_volume_pd, H2_calorific_power_pd, H2_mass_pd]
-    EC_supply_ph, H2_volume_ph, H2_calorific_power_ph, H2_mass_ph = [pd/24 for pd in List_pd]          # Wh/Wpeak or Wh per day, Nm3/Wpeak per day
-    EC_supply_To, H2_volume_To, H2_calorific_power_To, H2_mass_To = [pd*len(days) for pd in List_pd]   # Wh/Wpeak or Wh per set period, Nm3/Wpeak per set period
+    return EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph                       
 
-    # Water consumption
-    EC_list = [EC_supply_ph, EC_supply_pd, EC_supply_To]     # Wh/Wpeak or Wh, Wh/Wpeak or Wh per day, Wh/Wpeak or Wh per month, Wh/Wpeak per set period
-    water_list = [round(EC_val * EC_water,5) for EC_val in EC_list]
-    EC_water_ph, EC_water_pd, EC_water_To = water_list        # L/Wpeak or L per h, L/Wpeak or L per day, L/Wpeak or L per month, L/Wpeak per set period
-    
-    return EC_efficiency, EC_supply_ph, H2_volume_ph, H2_calorific_power_ph, H2_mass_ph, EC_supply_pd, H2_volume_pd, H2_calorific_power_pd, H2_mass_pd, EC_supply_To, H2_volume_To, H2_calorific_power_To, H2_mass_To, EC_water_ph, EC_water_pd, EC_water_To
-    
-EC_efficiency, EC_supply_ph, H2_volume_ph, H2_calorific_power_ph, H2_mass_ph, EC_supply_pd, H2_volume_pd, H2_calorific_power_pd, H2_mass_pd, EC_supply_To, H2_volume_To, H2_calorific_power_To, H2_mass_To, EC_water_ph, EC_water_pd, EC_water_To = EC_calculations_1(EC_production_pd, EC_consumption_pd, EC_water, H2_heating_value, L1T_gen)
+EC_units, L_EC_usage, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph = EC_calculations_2(EC_units, EC_capacity, EC_production_ph, EC_consumption_ph, EC_water, H2_heating_value, L1T_gen)
 
 
 
-def calculate_energy_usage(supplied_energy, required_energy, battery_capacity, battery_roundtrip):   # Determine flow of energy between PV, EC and grid
-    
+
+def calculate_energy_usage_2(supplied_energy, required_energy):
     '''
-    Determine flow of energy between PV, EC, battery and grid, per hour:
-        •	When PV power generation exceeds the EC energy requirements, excess energy is stored in the battery. Once the battery is fully charged, any additional energy is exported to the grid.
-        •	When PV power generation is below the EC energy requirements, the battery supplies the deficit. If the battery is depleted, energy is imported from the grid to power the EC.
+    Determine flow of energy between PV, EC and grid, per hour:
+        •	When PV power generation exceeds the EC energy requirements, excess energy is exported to the grid.
     '''
- 
     hours = len(supplied_energy)
-    battery_charge = 0
-    grid_imports = np.zeros(hours)
-    energy_stored = np.zeros(hours)
     grid_exports = np.zeros(hours)
-
+    
     for i in range(hours):
-        energy_difference = supplied_energy[i] - required_energy
-        
-        if energy_difference > 0:                                              # There is excess energy
-            effective_energy_to_store = energy_difference * battery_roundtrip  # Account for charging losses
-            if battery_charge < battery_capacity:        
-                battery_charge += effective_energy_to_store      # Store excess energy in the battery if it's not full
-                if battery_charge > battery_capacity:            # Ensure battery does not exceed its capacity
-                    grid_exports[i] = (battery_charge - battery_capacity) / battery_roundtrip
-                    battery_charge = battery_capacity
-            else:
-                grid_exports[i] = energy_difference  # Battery is full, export the excess energy
-        else:
-            energy_needed = -energy_difference       # There is a deficit of energy
-            effective_energy_needed = energy_needed / battery_roundtrip  # Account for discharging losses
-            if battery_charge >= effective_energy_needed:
-                battery_charge -= effective_energy_needed   # Use battery energy first
-            else:
-                grid_imports[i] = (effective_energy_needed - battery_charge) * battery_roundtrip  # Use all battery energy and import the rest from the grid
-                battery_charge = 0
+        energy_difference = supplied_energy[i] - required_energy[i]       
+        grid_exports[i] = energy_difference  if energy_difference > 0 else 0
+    return grid_exports.tolist()
 
-        energy_stored[i] = battery_charge   # Store the battery charge state
-
-    return energy_stored.tolist(), grid_imports.tolist(), grid_exports.tolist()
-
-L_battery_storage_ph, L_grid_imports_ph, L_grid_exports_ph = calculate_energy_usage(L1T_gen, EC_supply_ph, battery_capacity, battery_roundtrip)  # Wh/Wpeak, calculate energy stored in battery, energy imported from the grid, and energy exported to the grid
+L_grid_exports_ph = calculate_energy_usage_2(L1T_gen, L_EC_supply_ph)  # Calculate energy stored in battery, energy imported from the grid, and energy exported to the grid
 
 
 # Create H2 lists
 
-L_EC_supply_ph, L_EC_supply_pd = [EC_supply_ph]*len(L_hours), [EC_supply_pd]*len(days)
-L_H2_calorific_power_ph, L_H2_calorific_power_pd = [H2_calorific_power_ph]*len(L_hours), [H2_calorific_power_pd]*len(days)
-L_H2_mass_ph, L_H2_mass_pd = [H2_mass_ph]*len(L_hours), [H2_mass_ph]*len(days)
-#                     0                 1                    2                3                       4              5
-Lists_H2 = [L_grid_imports_ph, L_grid_exports_ph, L_battery_storage_ph, L_EC_supply_ph, L_H2_calorific_power_ph, L_H2_mass_ph]    
-To_H2, Max_H2, Min_H2, Avr_H2, Std_H2 = calculate_statistics(*Lists_H2)                                                                                  # Total (Wh/Wpeak per set period), max, average and standard deviation (W/Wpeak)
-L_grid_imports_pd, L_grid_exports_pd, L_battery_storage_pd = lists_per_day(days, L_days, *[L_grid_imports_ph, L_grid_exports_ph, L_battery_storage_ph])  # Total daily values per throughout the set period (Wh/Wpeak per day)
-
-
+#                    0               1                2                 3                  4                   5   
+Lists_H2 = [L_grid_exports_ph, L_EC_supply_ph, L_H2_volume_ph, L_H2_mass_ph, L_H2_calorific_power_ph, L_EC_water_ph]
+To_H2, Max_H2, Min_H2, Avr_H2, Std_H2 = calculate_statistics(*Lists_H2)                                                                                 # Total (Wh/Wpeak per set perios), max, average and standard deviation (W/Wpeak)
+L_grid_exports_pd, L_EC_supply_pd, L_H2_volume_pd, L_H2_mass_pd, L_H2_calorific_power_pd, L_EC_water_pd = lists_per_day(days, L_days, *Lists_H2)        # Total daily values throughout the set period (Wh/Wpeak per day)
+EC_efficiency = round(To_H2[4]*100/To_H2[1],2)  # %
 
 # Round and convert values 
 
-L_irr = [Lt_GHI_pd, Lt_GTI_pd ,L1_GHI_pd, L1_GTI_pd]    # W/m2k to kW/m2
-Lt_GHI_pd, Lt_GTI_pd ,L1_GHI_pd, L1_GTI_pd= [[round(value/1000,3) for value in L] for L in L_irr] 
-   
-L_EC_ph = [EC_supply_ph, H2_volume_ph, H2_calorific_power_ph]
-EC_supply_ph, H2_volume_ph, H2_calorific_power_ph = [round(value,3) for value in L_EC_ph] 
-
-L_EC_pd = [EC_supply_pd, H2_volume_pd, H2_calorific_power_pd, EC_supply_To, H2_volume_To, H2_calorific_power_To]
-EC_supply_pd, H2_volume_pd, H2_calorific_power_pd, EC_supply_To, H2_volume_To, H2_calorific_power_To = [round(value,3) for value in L_EC_pd] 
-
-L_H2_mass = [H2_mass_ph, H2_mass_pd, H2_mass_To]
-H2_mass_ph, H2_mass_pd, H2_mass_To = [round(value*1000,3) for value in L_H2_mass]   # kg to g and round 
+L_irr = [Lt_GHI_pd, Lt_GTI_pd ,L1_GHI_pd, L1_GTI_pd]  # W/m2
+Lt_GHI_pd, Lt_GTI_pd ,L1_GHI_pd, L1_GTI_pd= [[round(value/1000,2) for value in L] for L in L_irr] # kW/m2
 
 # Net flow
 
-net_flow_pd = [round(PV + imp - EC - exp,2) for PV, imp, EC, exp in zip (L1T_gen_pd, L_grid_imports_pd, L_EC_supply_pd, L_grid_exports_pd)]    
+net_flow_pd = [round(PV - EC - exp,2) for PV, EC, exp in zip (L1T_gen_pd, L_EC_supply_pd, L_grid_exports_pd)]    
 
 
 
@@ -517,29 +439,25 @@ for h in L_hours:
     L_hours_plot_i = L_hours_plot_i + 1
     
 text_size = 9.5
-text0 = '(Wh/W$_{{p}}$$^{PV}$)' if units == 'relative' else '(Wh)'
-text1 = f'PV  $_ ${round(To[13],2)}'
-text2 = f'exp {round(To_H2[1],2)}'
-text3 = f'imp {round(To_H2[0],2)}'
-text4 = f'H$_2$   {round(H2_calorific_power_To,2)} '
+text0 = '(Wh/W$_{{p}}$$^{PV}$)'
+text1 = f'PV  {round(To[13],2)}'
+text2 = f'exp {round(To_H2[0],2)}'
+text3 = f'H$_2$   {round(To_H2[4],2)} '
 
 
 lines_width = 1.2
-ylabel = 'Energy Flow (W/W$_{{p}}$$^{PV}$)' if units == 'relative' else 'Energy Flow (W)'
+ylabel = 'Energy Flow (W/W$_{{p}}$$^{PV}$)' 
 plt.ylabel(ylabel)
 L1_gen_nolosses = [val *(100+PV_system_losses+reflection_loss1)/100  for val in L1_gen]
 #plt.plot(L_hours_plot, L1_gen_nolosses, label = 'PV energy\nyield (DS1)*',color='goldenrod', alpha=0.25, linewidth=lines_width)
-plt.plot(L_hours_plot, L1T_gen, label = 'PV energy\nyield (DS1) ',color='goldenrod',  linewidth=lines_width)
-plt.plot(L_hours_plot, L_grid_exports_ph,  label = 'Grid export', color='darkgreen', linewidth=lines_width)
-plt.plot(L_hours_plot, L_grid_imports_ph, label = 'Grid import', color='firebrick', linewidth=lines_width)
-plt.plot(L_hours_plot, L_battery_storage_ph,  label = 'Battery storage', color='black', linewidth=lines_width)
+plt.plot(L_hours_plot, L1T_gen, label = 'PV energy\nyield (DS1) ',color='goldenrod', linewidth=lines_width)
 #plt.plot(L_hours_plot, L_EC_supply_ph, label = 'EC supply', color = 'teal', linewidth=lines_width, linestyle = '--')
 plt.plot(L_hours_plot, L_H2_calorific_power_ph,  label = 'H$_2$ calorific value', color='lightseagreen', linewidth=lines_width)
-plt.fill_between(L_hours_plot, len(L_hours_plot)*[H2_calorific_power_ph], color='lightseagreen', alpha=0.12)
+plt.fill_between(L_hours_plot, L_H2_calorific_power_ph, color='lightseagreen', alpha=0.12)
+plt.plot(L_hours_plot, L_grid_exports_ph,  label = 'Grid export', color='darkgreen', linewidth=lines_width)
 plt.xlabel('hour')
 
-Vmax = 1 if units == 'relative' else max(L1_gen_nolosses)
-
+Vmax = 1
 if day[1] - day[0] == 0:
     plt.xticks([6, 9, 12, 15, 18, 21])
     plt.text(18,0.90*Vmax,f'{day[0]}/{month[0]}/{year}', fontsize=text_size)
@@ -554,9 +472,7 @@ if day[1] - day[0] == 0:
     y_pos -= 0.09*Vmax
     plt.text(5.3, y_pos, text2, fontsize=text_size, color='darkgreen')
     y_pos -= 0.09*Vmax
-    plt.text(5.3, y_pos, text3, fontsize=text_size, color='firebrick')
-    y_pos -= 0.09*Vmax
-    plt.text(5.3, y_pos, text4, fontsize=text_size, color='lightseagreen')
+    plt.text(5.3, y_pos, text3, fontsize=text_size, color='lightseagreen')
 
 else:
     plt.text(1,0.97*Vmax,'*no temperature, reflection and system losses',fontsize=8)
@@ -567,10 +483,7 @@ plt.yticks([0, 0.25*Vmax, 0.50*Vmax,0.75*Vmax, 1*Vmax])
 plt.legend(fontsize=8.5, loc='upper left', bbox_to_anchor=(1, 1)) 
 plt.grid(True, alpha=0.1)
 plt.tight_layout()
-
-plt.savefig(f'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\Artigo 1 - GW-scale Solar-to-H2\\Figures\\4th version\\4.1\\{city}_{month[0]}.svg')
 plt.show()
-
 
 # Print
 
@@ -581,7 +494,8 @@ print('(Units are expressed per watt peak of installed PV. If setting a PV capac
 print('')
 print('Panel efficiency =',round(PV_efficiency,2),'%')
 print('EC efficiency =',EC_efficiency,'%')
-print('battery capacity =',round(battery_capacity,3),'Wh/Wpeak')
+print('EC capacity =',round(EC_capacity,3),'Wh/Wpeak')
+print('average EC usage =',round(statistics.mean(L_EC_usage)*100),'%')
 print('')
 print('Change in output power due to temperature | reflection:')
 print('The:',temperature_losst,'% | ',reflection_losst,'%')
@@ -598,8 +512,8 @@ print('')
 print('')
 print('IRRADIATION')
 print('')
-print('-      Total      | average | maximum ')
-print('kWh/m2/set period |  W/m2   |  W/m2')
+print('-      Total     | average | std deviation | maximum ')
+print('kWh/m2/set period|  W/m2   |      W/m2     |  W/m2')
 print('')
 print('Irradiation on horizontal plane')
 print('The:',round(To[4]/1000,3),'|',Avr[4],'|',Std[4],'|',Max[4])
@@ -609,7 +523,7 @@ print('Irradiation on PV panel, β =',tilt,'°')
 print('The:',round(To[5]/1000,3),'|',Avr[5],'|',Std[5],'|',Max[5])
 print('DS1:',round(To[10]/1000,3),'|',Avr[10],'|',Std[10],'|',Max[10])
 print('')
-print('ENERGY EXCHANGES')
+print('ENERGY EXCHANGES and EC OPERATION')
 print('')
 print('-      Total        | average | std deviation | maximum')
 print('Wh/Wpeak/set period | W/Wpeak |    W/Wpeak    | W/Wpeak')
@@ -618,28 +532,17 @@ print('PV energy yield considering T, β =',tilt,'°')
 print('The:',round(To[8],3),'|',Avr[8],'|',Std[8],'|',Max[8])
 print('DS1:',round(To[13],3),'|',Avr[13],'|',Std[13],'|',Max[13])
 print('')
-print('Grid imports')
+print('Grid exports')
 print('DS1:',round(To_H2[0],3),'|',Avr_H2[0],'|',Std_H2[0],'|',Max_H2[0])
 print('')
-print('Grid exports')
-print('DS1:',round(To_H2[1],2),'|',Avr_H2[1],'|',Std_H2[1],'|',Max_H2[1])
-print('')
-print('EC OPERATION')
-print('')
-print('-  Total | Value per hour| value per day')
-print('')
 print('EC supply (Wh/Wpeak)')
-print('DS1:',EC_supply_To,'|',EC_supply_ph,'|',EC_supply_pd)
+print('DS1:',round(To_H2[1],3),'|',Avr_H2[1],'|',Std_H2[1],'|',Max_H2[1])
 print('')
 print('H2 mass (g/Wpeak)')
-print('DS1:',H2_mass_To,'|',H2_mass_ph,'|',H2_mass_pd)
+print('DS1:',round(To_H2[3],3),'|',Avr_H2[3],'|',Std_H2[3],'|',Max_H2[3])
 print('')
 print('H2 calorific value (Wh/Wpeak)')
-print('DS1:',H2_calorific_power_To,'|',H2_calorific_power_ph,'|',H2_calorific_power_pd)
+print('DS1:',round(To_H2[4],3),'|',Avr_H2[4],'|',Std_H2[4],'|',Max_H2[4])
 print('')
-print('Water consumption (L/Wpeak)')
-print('DS1:',EC_water_To,'|',EC_water_ph,'|',EC_water_pd)
-print('')
-print('')
-print('- Net flow per day: PV + imp = EC + exp (should be 0)')
-print(net_flow_pd)
+print('Water consumption (mL/Wpeak)')
+print('DS1:',round(To_H2[5],3),'|',Avr_H2[5],'|',Std_H2[5],'|',Max_H2[5])
