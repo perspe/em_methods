@@ -24,6 +24,13 @@ scientific publications. Considering that, if you used these tools, please
 add a citation to either the repository, or to the relevant publication,
 associated with the tool, as defined below.
 
-- colour_algo and lumerical cite: [Eva Almeida, et. al., ACS Omega, 2024](https://pubs.acs.org/doi/10.1021/acsomega.4c04979)
-- smatrix cite: [M. Alexandre, et. al., Journal of Open Research Software, 2024](https://openresearchsoftware.metajnl.com/articles/10.5334/jors.511)
+- colour_algo and lumerical: [Eva Almeida, et. al., ACS Omega, 2024](https://pubs.acs.org/doi/10.1021/acsomega.4c04979)
+- smatrix: [M. Alexandre, et. al., Journal of Open Research Software, 2024](https://openresearchsoftware.metajnl.com/articles/10.5334/jors.511)
+
+All the relevant citations can be imported (to Mendeley or Zotero) via the
+CITATIONS.ciff file.
+
+**Note:** Opening the CITATIONS.ciff file in GitHub and using the
+Zotero/Mendeley browser addons should work to import all the
+citations.
 
