@@ -15,8 +15,9 @@ PSO_Results
 
 # General Files
 *.log
-*.so
-*.pyd
+# Allow binaries for easier installation
+# *.so
+# *.pyd
 *cpython*
 *.png
 *.pdf
