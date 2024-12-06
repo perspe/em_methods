@@ -1131,6 +1131,8 @@ def get_iv_2t(path, active_region_list):
             if np.array(voltage_temp[-1])[-1] > v_max: #Find the max voltage in all the curves
                 v_max = np.array(voltage_temp[-1])[-1]
             
+
+            
         except FileNotFoundError: 
             print("IV curve file not found. Make sure to toggle on save_csv when running run_fdtd_and_charge")
             break
@@ -1147,7 +1149,7 @@ def get_iv_2t(path, active_region_list):
         #voltage_aux = np.array(voltage_temp[active_region_list.index(names)])  
         net_voltage = np.add(net_voltage,voltage)
 
-    pce, ff, voc, jsc, current_density, voltage = 
+    #pce, ff, voc, jsc, current_density, voltage = 
 
     return pce, ff, voc, jsc, current_density, voltage
 
