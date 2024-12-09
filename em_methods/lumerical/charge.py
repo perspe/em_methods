@@ -6,6 +6,8 @@ import logging
 from uuid import uuid4
 import shutil
 import sys
+import h5py
+from scipy.integrate import trapz
 from dataclasses import dataclass 
 from matplotlib.patches import Rectangle
 from PyAstronomy import pyaC
@@ -237,10 +239,42 @@ def iv_curve(current, voltage, Lx, Ly, regime, current_density = None):
         return current_density, voltage
        
 
+def _import_generation(gen_file):
+    """ Import the necessary data
+    Filter - (z, x, y)
+    Generation - (z, x, y)
+    """
+    with h5py.File(gen_file, 'r') as gen_file:
+        gen_data = np.transpose(
+            np.array(gen_file['G']), (0, 2, 1))
+        x = np.array(gen_file['x']).transpose()
+        y = np.array(gen_file['y']).transpose()
+        z = np.array(gen_file['z']).transpose()
+    
+    return gen_data, x, y, z
 
+def _average_generation(gen, x, y):
+    """ Calculate the y and x/y averages generation profiles"""
+    norm_y = np.max(y) - np.min(y)
+    y_gen = trapz(gen, y, axis=2)/norm_y
+    norm_area = norm_y * (np.max(x) - np.min(x))
+    xy_gen = trapz(
+        trapz(gen, x, axis=1), y, axis=1)/norm_area
 
+    return y_gen, xy_gen
 
-def get_gen(path, fdtd_file, properties, active_region_list):
+def _export_hdf_data(filename, **kwargs):
+    """Export data to an hdf5 file"""
+    # Check for existing file and override
+    if os.path.isfile(filename):
+        os.remove(filename)
+
+    # Add data do hdf datastructure
+    with h5py.File(filename, 'x') as file:
+        for key, value in kwargs.items():
+            file.create_dataset(key, data=value, dtype='double')
+
+def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = False):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -251,6 +285,7 @@ def get_gen(path, fdtd_file, properties, active_region_list):
             active_region_list: list with SimInfo dataclassses with the details of the simulation 
                                 (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
                                         SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+            avg_mode: bool that determines whether or not the generation rate is averaged in y (necessary for light-trapping)
     """
     fdtd_path = os.path.join(path, fdtd_file)
     override_prefix: str = str(uuid4())[0:5]
@@ -266,7 +301,6 @@ def get_gen(path, fdtd_file, properties, active_region_list):
             for parameter_key, parameter_value in structure_value.items():
                 fdtd.set(parameter_key, parameter_value)
         fdtd.save()
-
 
         # EXPORT GENERATION FILES
         for names in active_region_list:
@@ -290,6 +324,37 @@ def get_gen(path, fdtd_file, properties, active_region_list):
         os.remove(new_filepath)
         #os.remove(log_file)
 
+        # AVERAGE GENERATION IN Y AXIS
+        if avg_mode == True:
+            for names in active_region_list:
+                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
+                file = names.GenName
+                generation_name = os.path.join(path, file)
+
+                # Import generation data
+                gen_data, x, y, z = _import_generation(generation_name)
+                # Determine the average results
+                y_gen, xy_gen = _average_generation(gen_data, x.flatten(), y.flatten())
+
+                # export_y_averaged_data = {
+                #     "G": y_gen,
+                #     "x": x,
+                #     "z": z[:, np.newaxis]
+                # }
+
+                # _export_hdf_data("y_average_" + file.split(".")[0] + ".hdf5",
+                #                 **export_y_averaged_data)
+
+                shape_3d = np.zeros((len(x), len(z), len(y)))
+                y_gen_3d = y_gen + shape_3d
+
+                export_3d_averaged_data = {
+                    "G": np.transpose(y_gen_3d, (1, 0, 2)),
+                    "x": x,
+                    "y": y,
+                    "z": z}
+
+                _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
 
 def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
     """
@@ -610,7 +675,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None ):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -644,7 +709,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
     charge_path = os.path.join(path, charge_file)
     if run_FDTD:
-        get_gen(path, fdtd_file, properties, active_region_list)
+        get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode)
     if B == None:
         B = [None for _ in range(0, len(active_region_list))]
     results = None
