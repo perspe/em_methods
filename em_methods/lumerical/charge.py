@@ -405,7 +405,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return Jph
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None, terminal_adjustment = 0):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...). 
@@ -429,6 +429,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
             
             Lx,Ly: (float) dimentions of solar cell surface area normal to the incident light direction in meters
     """
+    
+
     valid_dimensions = {"2d", "3d"}
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError("def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input")
@@ -504,6 +506,8 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
         #charge.set("init step size",1) #unsure if it works properly
         charge.save()
         # Setting sweep parameters
+        if terminal_adjustment == 1:
+            name.Cathode = name.Anode
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         if v_single_point is not None:
             charge.set("sweep type", "single")
@@ -675,7 +679,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False, terminal_adjustment = None):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -705,6 +709,8 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
 
     pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = [], [], [], [], [], []
     valid_solver = {"GUMMEL", "NEWTON"}
+    if terminal_adjustment == None:
+        terminal_adjustment = np.zeros(len(active_region_list))
     if method_solver.upper() not in valid_solver:
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
     charge_path = os.path.join(path, charge_file)
@@ -714,7 +720,8 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
-        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver.upper(), "v_single_point": v_single_point }
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
+                          "method_solver": method_solver.upper(), "v_single_point": v_single_point, "terminal_adjustment": terminal_adjustment[active_region_list.index(names)] }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
