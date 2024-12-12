@@ -12,6 +12,10 @@ import matplotlib as mpl
 import matplotlib.colors as mcolors
 from PyAstronomy import pyaC
 from itertools import product
+import shutil
+from em_methods.optimization.pso import particle_swarm
+from em_methods.lumerical.charge import  iv_curve
+from em_methods.pv.diode import luqing_liu_diode
 
 # Get some module paths
 file_path = Path(os.path.abspath(__file__))
@@ -577,3 +581,123 @@ def iv_parameters(voltage, current_density, area, current=[]):
     PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
     Jsc = -current_density[0]
     return abs(FF), abs(PCE), abs(Jsc), abs(Voc)
+
+#2Terminal IV curve
+
+def fom_func(voltage, charge_current, diode_func_current):
+    voltage_linspace = np.linspace(0, max(voltage), 500)
+    charge_current_interp = np.interp(voltage_linspace,voltage, charge_current)
+    diode_func_current_interp = np.interp(voltage_linspace, voltage, diode_func_current)
+    dif  = sum(abs(charge_current_interp - diode_func_current_interp)) 
+    return dif
+
+def calc_jmpp(voltage_charge,current_density_charge): 
+    vals_v = np.linspace(min(voltage_charge), max(voltage_charge), 100)
+    new_j = np.interp(vals_v, voltage_charge, current_density_charge)
+    P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
+    jmpp = current_density_charge[P.index(max(P))]
+    return jmpp
+
+def calc_Rsh(voc_temp,voltage_charge,current_density_charge):
+    closest_index = (np.abs(voltage_charge - voc_temp)).argmin()
+    voltage_charge = voltage_charge[:closest_index+5]
+    current_density_charge = current_density_charge[:closest_index+5]
+    dV_dJ = np.gradient(voltage_charge) / np.gradient(current_density_charge)
+    near_sc_index = (np.abs(voltage_charge - 0)).argmin()  # Closest index to V = 0
+    rsh_derivative = abs(dV_dJ[near_sc_index])
+    near_voc_index = (np.abs(voltage_charge - voc_temp)).argmin()  # Closest index to Voc
+    rs_derivative = abs(dV_dJ[near_voc_index])
+    return rsh_derivative, rs_derivative
+
+def fdtd_func( eta_pso, path, active_region_list, voltage_charge, current_density_charge):
+    FoM_matrix = []
+    generator = list(enumerate(zip(eta_pso)))
+    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage_charge, 1, 1, "am", current_density = current_density_charge)
+    jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
+    rsh_derivative, rs_derivative =  calc_Rsh(voc_temp,voltage_charge,current_density_charge)
+
+    for index, (eta_pso) in generator:
+        diode_func_current = luqing_liu_diode(
+            voltage = voltage_charge,
+            jsc = -jsc_temp,
+            jmpp =  -jmpp_temp,
+            voc = voc_temp,
+            rs = rs_derivative,
+            rsh = rsh_derivative,
+            eta = eta_pso[0],
+            temp = 300,
+            n_cells =1,
+            )
+        FoM_matrix.append(fom_func(voltage_charge, -current_density_charge, diode_func_current))
+    return FoM_matrix
+
+def run_pso(folder, active_region_list, param_dict, voltage, current):
+    best_FoM, best_param,best_param_particle, best_FoM_iter  =[], [], [], [] 
+    for i, arl in enumerate(active_region_list):
+        voltage_charge = voltage[i]
+        current_density_charge = current[i]
+        newpath = os.path.join(folder,arl.SCName)
+        if not os.path.exists(newpath):
+            os.makedirs(newpath)
+
+        best_FoM_temp, best_param_temp, best_param_particle_temp, best_FoM_iter_temp = particle_swarm(fdtd_func, param_dict[i],  particles = 25, iterations = (30, 30, True), export = True, maximize = False, basepath = newpath, **{"path":folder, "active_region_list": arl, "voltage_charge": voltage_charge, "current_density_charge": current_density_charge})
+        
+        src_path = os.path.join(folder, "pso_update_res.png" )
+        dst_path = os.path.join(newpath, "pso_update_res.png" )
+        shutil.move(src_path, dst_path)
+
+        best_FoM.append(best_FoM_temp)
+        best_param.append(best_param_temp)
+        best_param_particle.append(best_param_particle_temp)
+        best_FoM_iter.append(best_FoM_iter_temp)
+    return best_FoM, best_param,best_param_particle, best_FoM_iter
+
+def plot_2T(folder, active_region_list,  param_dict):
+    pce, ff, voc, jsc, jmpp, rsh_derivative, rs_derivative  = [],[],[],[],[],[],[]
+    voltage_charge_iv_curve = [0]
+    voltage = []
+    current = []
+    for _, arl in enumerate(active_region_list): 
+        
+        voltage_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"]
+        if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
+            voltage_charge_iv_curve = voltage_charge
+
+        current_density_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"]
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage_charge, 1, 1, "am", current_density = current_density_charge)
+        jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
+    
+        rsh_derivative_temp, rs_derivative_temp =  calc_Rsh(voc_temp,voltage_charge,current_density_charge)    
+        pce.append(pce_temp)
+        ff.append(ff_temp)
+        voc.append(voc_temp)
+        jsc.append(jsc_temp)
+        jmpp.append(jmpp_temp)
+        rsh_derivative.append(rsh_derivative_temp)
+        rs_derivative.append(rs_derivative_temp)
+        voltage.append(voltage_charge)
+        current.append(current_density_charge)
+
+    best_FoM, best_param, best_param_particle, best_FoM_iter = run_pso(folder, active_region_list, param_dict, voltage, current)
+
+    
+
+    diode_func_current = luqing_liu_diode(
+            voltage = np.array(voltage_charge_iv_curve)*2,
+            jsc = min(abs(np.array(jsc))),
+            jmpp =  min(jmpp),
+            voc = sum(voc),
+            rs = sum(rs_derivative),
+            rsh = min(rsh_derivative),
+            eta = max(best_param),
+            temp = 300,
+            n_cells =1,
+            )
+    
+    voltage = np.array(voltage_charge_iv_curve)*2
+    current_density = diode_func_current
+
+    df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
+    csv_path = os.path.join(folder, "2T_IV_curve.csv")
+    df.to_csv(csv_path, sep = '\t', index = False)
+    return voltage, current_density 
