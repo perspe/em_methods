@@ -47,7 +47,7 @@ import pandas as pd
 from scipy.constants import h, c, k, e
 
 
-@dataclass
+@dataclass(frozen = False)
 class SimInfo:
     SolarGenName: str
     GenName: str
@@ -507,8 +507,9 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
         charge.save()
         # Setting sweep parameters
         if terminal_adjustment == 1:
-            name.Cathode = name.Anode
-        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
+            charge.select("CHARGE::boundary conditions::" + str(name.Anode))
+        else:
+            charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         if v_single_point is not None:
             charge.set("sweep type", "single")
             charge.save()
@@ -725,12 +726,13 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
+                                func= __set_iv_parameters, delete = False, device_kw={"hide": True},**conditions_dic)
         except LumericalError:
-            try:            
+            try: 
+                          
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
+                               func= __set_iv_parameters, delete = False,  device_kw={"hide": True} ,**conditions_dic)
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
                 pce_array.append(pce)
@@ -741,7 +743,12 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 voltage_array.append(voltage)
                 print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
                 continue
-        current, voltage, Lx, Ly = extract_iv_data(results[0], names)
+        
+        if terminal_adjustment[active_region_list.index(names)] == 1:
+            names.Cathode = names.Anode
+            print(names)
+        else:                   
+            current, voltage, Lx, Ly = extract_iv_data(results[0], names)
         pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
         pce_array.append(pce)
         ff_array.append(ff)
