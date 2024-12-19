@@ -714,7 +714,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                         (e.g. if the active_region_list has 2 materials: PCE = [pce1, pce2], ... Voltage = [[...],[...]] )
             
     """ 
-
+    
     pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = [], [], [], [], [], []
     valid_solver = {"GUMMEL", "NEWTON"}
     if method_solver.upper() not in valid_solver:
@@ -726,6 +726,9 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
+        if B[active_region_list.index(names)] == True:
+            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False) #B value is calculated based on last FDTD for that index
+            print(B)
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
