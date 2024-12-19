@@ -72,7 +72,7 @@ import matplotlib.pyplot as plt
 
 city = 'Sines'
 year,day,month = 2025, [18,24],[7,7] # define period of time
-file_path = 'C:\\Users\\Cristina\\OneDrive - FCT NOVA\\M-ECO2\\Scripts\\PV'
+file_path = 'C:\\Users\\(...)'  # edit path
 
 # PV parameters
 
