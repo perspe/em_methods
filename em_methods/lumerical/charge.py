@@ -727,7 +727,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     results = None
     for names in active_region_list:
         if B[active_region_list.index(names)] == True:
-            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False) #B value is calculated based on last FDTD for that index
+            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
             print(B)
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point }
