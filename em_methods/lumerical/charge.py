@@ -319,10 +319,18 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                 fdtd.set("export filename", str(g_name))
         fdtd.run()
         fdtd.runanalysis()
+        for names in active_region_list:
+            abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
+            results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
+            results_path = os.path.join(path, names.SolarGenName)
+            results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
+        fdtd.switchtolayout()
         fdtd.save()
         fdtd.close()
         os.remove(new_filepath)
         #os.remove(log_file)
+
+        
 
         # AVERAGE GENERATION IN Y AXIS
         if avg_mode == True:
@@ -1177,54 +1185,6 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     PCE = ((FF * Voc * abs(Isc)*10) / (Ir)) * 100
 
     print(f'FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2')
-
-def get_iv_2t(path, active_region_list):
-    '''Extracts the IV curve  of a tandem solar cell, in 2-terminal configuration.
-
-
-    Args:
-        path: (str) directory where the iv curve files exist
-        active_region_list: list with SimInfo dataclassses with the details of the simulation 
-                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                              SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-    '''
-    #check if the files exist: 
-    current_density_temp, voltage_temp, voltage_aux = [], [], []
-    current_density_min = -float('inf')
-    material = None
-    v_max = 0
-    for names in active_region_list:
-        try:
-            current_density_temp.append(pd.read_csv(os.path.join(path, f"{names.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
-            voltage_temp.append(pd.read_csv(os.path.join(path, f"{names.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"])
-            if -current_density_min > -current_density_temp[-1][0]: #latest current density curve
-                current_density_min = current_density_temp[-1][0]
-                material = names #find the subcell with the smallest current density
-            #print(np.array(voltage_temp[-1]))
-            if np.array(voltage_temp[-1])[-1] > v_max: #Find the max voltage in all the curves
-                v_max = np.array(voltage_temp[-1])[-1]
-            
-
-            
-        except FileNotFoundError: 
-            print("IV curve file not found. Make sure to toggle on save_csv when running run_fdtd_and_charge")
-            break
-    
-    for  voltage in voltage_temp:
-        voltage_aux.append(np.linspace(0, v_max, 50))
-    current_density = np.array(current_density_temp[active_region_list.index(material)])
-    current_density_aux = np.interp(voltage_aux[0], voltage, current_density)
-    #np.interp(wvl, abs_data['wvl'],abs_data['abs'])
-    net_voltage = np.zeros_like(voltage_aux[0])
-    
-    
-    for voltage in voltage_aux:
-        #voltage_aux = np.array(voltage_temp[active_region_list.index(names)])  
-        net_voltage = np.add(net_voltage,voltage)
-
-    #pce, ff, voc, jsc, current_density, voltage = 
-
-    return pce, ff, voc, jsc, current_density, voltage
 
 
 
