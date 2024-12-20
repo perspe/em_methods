@@ -705,7 +705,10 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                         A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
                         will be created
             save_csv: (bool) determines wether or not the Current Density and Voltage (simulation outputs) are saved in csv file with name: "{names.SCName}_IV_curve.csv" 
-            B: (float) Radiative recombination coeficient. By default it is None.
+            B: (float) Radiative recombination coeficient. By default it is None. Input options: 
+                        -None: Simulation will use values in the charge files.
+                        -[value1, value2, ...]: Simulation will use the values in the B array. Note that value1 will correspond to the 1st object in the active_region_list array
+                        -[value1, True, ...]: Simulation will calculate the B value based on the current FTDT file for the second object in the active_region_list array
             method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON" 
             v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
     Returns:
@@ -726,7 +729,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         B = [None for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
-        if B[active_region_list.index(names)] == True:
+        if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
             B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
             print(B)
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
@@ -1075,13 +1078,12 @@ def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, proper
     B_list = []
     for names in active_region_list:
         results_path = os.path.join(path, names.SolarGenName)
-        if run_abs == True:
+        if run_abs:
             abs_extraction(names, path, fdtd_file, properties)
-        else: 
-            try:
-                abs_data = pd.read_csv(results_path +'.csv')
-            except FileNotFoundError: 
-                abs_extraction(names, path, fdtd_file, properties)
+        elif not os.path.isfile(results_path +'.csv'):
+            abs_extraction(names, path, fdtd_file, properties)
+        else:
+            abs_data = pd.read_csv(results_path +'.csv')
         abs_data = pd.read_csv(results_path +'.csv')   
         wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
         abs_data = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
