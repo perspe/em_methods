@@ -737,13 +737,13 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = False, device_kw={"hide": True},**conditions_dic)
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
         except LumericalError:
             try: 
                           
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = False,  device_kw={"hide": True} ,**conditions_dic)
+                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
                 pce_array.append(pce)
