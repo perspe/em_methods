@@ -701,7 +701,9 @@ def run_pso(folder, active_region_list, param_dict, voltage, current):
         best_FoM_temp, best_param_temp, best_param_particle_temp, best_FoM_iter_temp = particle_swarm(pso_func, param_dict[i],  
             particles = 25, iterations = (30, 30, True), export = True, maximize = False, basepath = newpath,
            **{"path":folder, "active_region_list": arl, "voltage_charge": voltage_charge, "current_density_charge": current_density_charge})
-        src_path = os.path.join(folder, "pso_update_res.png" )
+        code_direct = os.getcwd()
+        src_folder = code_direct if os.path.samefile(code_direct, folder) else folder
+        src_path = os.path.join(code_direct, "pso_update_res.png" )
         dst_path = os.path.join(newpath, "pso_update_res.png" )
         shutil.move(src_path, dst_path)
         best_FoM.append(best_FoM_temp)
@@ -765,7 +767,7 @@ def plot_2T(folder, active_region_list,  param_dict):
             voc = sum(voc),
             rs = sum(rs_derivative),
             rsh = min(rsh_derivative),
-            eta = max(best_param),
+            eta = min(best_param),
             temp = 300,
             n_cells =1,
             )
@@ -833,16 +835,16 @@ def plot_4T(folder, active_region_list,  param_dict):
             jsc = sum(abs(np.array(jsc))),
             jmpp =  sum(jmpp),
             voc = min(voc),
-            rs = sum(rs_derivative),
+            rs = sum(rs_derivative), #sum matches LT-spice calc and makes logical sence
             rsh = min(rsh_derivative),
-            eta = max(best_param),
+            eta = min(best_param), #min matches LT-spice calc
             temp = 300,
             n_cells =1,
             )
     voltage = np.array(voltage_charge_iv_curve)
     current_density = diode_func_current
     df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
-    csv_path = os.path.join(folder, "2T_IV_curve.csv")
+    csv_path = os.path.join(folder, "4T_IV_curve.csv")
     df.to_csv(csv_path, sep = '\t', index = False)
     print("RS",rs_derivative)
     print("RSH",rsh_derivative)
