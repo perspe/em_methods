@@ -1,3 +1,39 @@
 [build-system]
-requires=["setuptools", "cython", "numpy", "scipy"]
+requires=["setuptools", "cython>=3.0.9"]
 build-backend="setuptools.build_meta"
+
+[project]
+name="em_methods"
+version="0.05"
+description="Library with useful tools for modelling of solar cells"
+keywords=["EM","PWEM","SMM","TMM","RCWA"]
+license={text="GPL3"}
+requires-python = ">=3.9"
+
+dependencies=[
+    "numpy>=1.2",
+    "cython>=3.0.9",
+    "scipy",
+    "PyAstronomy",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+exclude=["test", "em_methods.fuels"]
+
+[tool.setuptools]
+package-dir={"" = "."}
+
+[tool.setuptools.package-data]
+"em_methods"=["data/*","*.ini"]
+
+# [tool.setuptools.exclude-package-data]
+# "em_methods"=["*test*", "fuels/*"]
+
+[tool.cython]
+language_level="3"
+
+[tool.cibuildwheel]
+skip = ["pp*_*", "*musllinux*", "*i686"]
+# output-dir = "dist"
+

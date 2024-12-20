@@ -2,7 +2,6 @@ from distutils.core import Extension
 import os
 
 from Cython.Build import cythonize
-import Cython
 from setuptools import setup
 import subprocess
 
