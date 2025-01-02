@@ -413,7 +413,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
         os.remove(new_filepath)
         return Jph
 
-def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None, min_edge = None):
+def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None, min_edge = None, range_num_points = 101 ):
     """ 
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate, 
     sets the iv curve parameters and ensure correct solver is selected (e.g. start range, stop range...). 
@@ -516,8 +516,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
         #charge.set("init step size",1) #unsure if it works properly
         charge.save()
         # Setting sweep parameters
-        
-        
         charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
         if v_single_point is not None:
             charge.set("sweep type", "single")
@@ -539,7 +537,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
             charge.save()
             charge.set("range start", 0)
             charge.set("range stop", v_max)
-            charge.set("range num points", 101)
+            charge.set("range num points", range_num_points)
             charge.set("range backtracking", "enabled")
             charge.save()
     #Reverse bias regime
@@ -689,7 +687,7 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
     return Lx, Ly
     
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False, min_edge= None):
+def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False, min_edge= None, range_num_points = 101):
     """ 
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
     It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
@@ -732,14 +730,16 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     if min_edge == None:
         min_edge = [None for _ in range(0, len(active_region_list))]
     if not isinstance(v_max, (list, np.ndarray)):
-        v_max = [v_max for _ in range(0, len(active_region_list))] #if the v_ax is just a float then it assumes that scalar for all the active regions
+        v_max = [v_max for _ in range(0, len(active_region_list))] #if the v_max is just a float then it assumes that scalar for all the active regions
+    if not isinstance(range_num_points, (list, np.ndarray)):
+        range_num_points = [int(range_num_points) for _ in range(0, len(active_region_list))]
     results = None
     for names in active_region_list:
         if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
             B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
             print(B)
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
-                          "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)] }
+                          "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "range_num_points" : range_num_points[active_region_list.index(names)]  }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
