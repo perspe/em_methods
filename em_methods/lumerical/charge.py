@@ -7,6 +7,7 @@ from uuid import uuid4
 import shutil
 import sys
 import h5py
+import time
 from scipy.integrate import trapz
 from dataclasses import dataclass 
 from matplotlib.patches import Rectangle
@@ -18,6 +19,7 @@ from em_methods.lumerical.lum_helper import (
     LumericalError,
     LumMethod,
 )
+
 
 # Get module logger
 logger = logging.getLogger("sim")
@@ -742,14 +744,17 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "range_num_points" : range_num_points[active_region_list.index(names)]  }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
+            start_time = time.time()
             results = charge_run(charge_path, properties, get_results, 
                                 func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
+            run_time = time.time() - start_time
         except LumericalError:
             try: 
-                          
+                start_time = time.time()          
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
                                func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
+                run_time = time.time() - start_time
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
                 pce_array.append(pce)
@@ -764,13 +769,41 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                          
         current, voltage, Lx, Ly = extract_iv_data(results[0], names)
         pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
+
+        if np.isnan(voc) and not np.isnan(jsc):
+            print(f"V_max = {v_max[active_region_list.index(names)]} V, which might be too small. Trying {v_max[active_region_list.index(names)]+0.2} V")
+            v_max[active_region_list.index(names)] = v_max[active_region_list.index(names)]+0.2
+            
+            conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
+                          "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "range_num_points" : range_num_points[active_region_list.index(names)]  }
+            get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
+            try:
+                start_time = time.time()
+                results = charge_run(charge_path, properties, get_results, 
+                                    func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
+                run_time = time.time() - start_time
+            except LumericalError:
+                pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
+                pce_array.append(pce)
+                ff_array.append(ff)
+                voc_array.append(voc)
+                jsc_array.append(jsc)
+                current_density_array.append(current_density)
+                voltage_array.append(voltage)
+                print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
+                continue
+            
+            current, voltage, Lx, Ly = extract_iv_data(results[0], names)
+            pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
+        
+        
         pce_array.append(pce)
         ff_array.append(ff)
         voc_array.append(voc)
         jsc_array.append(jsc)
         current_density_array.append(current_density)
         voltage_array.append(voltage)
-        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
+        print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}% \n Run time = {run_time/60} mins ")
         if save_csv:
             df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
             csv_path = os.path.join(path, f"{names.SCName}_IV_curve.csv")
