@@ -9,7 +9,7 @@ import time
 from enum import Enum
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical

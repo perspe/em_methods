@@ -18,7 +18,7 @@ from em_methods.lumerical.lum_helper import (
 )
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
