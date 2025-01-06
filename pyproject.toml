@@ -23,6 +23,13 @@ exclude=["test", "em_methods.fuels"]
 
 [tool.setuptools]
 package-dir={"" = "."}
+ext-modules=[
+    {name="em_methods.smm_core.py_smm_base", sources=["em_methods/smm_core/py_smm_base.pyx","em_methods/smm_core/smm_base.cpp"]}
+]
+
+[tool.Extension]
+include-dirs=["em_methods/smm_core"]
+undef-macros=["NDEBUG"]
 
 [tool.setuptools.package-data]
 "em_methods"=["data/*","*.ini"]
