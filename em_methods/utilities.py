@@ -741,7 +741,7 @@ def plot_2T(folder, active_region_list,  param_dict):
     pce, ff, voc, jsc, jmpp, rsh_derivative, rs_derivative  = [],[],[],[],[],[],[]
     voltage_charge_iv_curve = [0]
     voltage = []
-    current = []
+    current_density = []
     for _, arl in enumerate(active_region_list): 
         voltage_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"]
         if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
@@ -758,8 +758,8 @@ def plot_2T(folder, active_region_list,  param_dict):
         rsh_derivative.append(rsh_derivative_temp)
         rs_derivative.append(rs_derivative_temp)
         voltage.append(voltage_charge)
-        current.append(current_density_charge)
-    best_FoM, best_param, best_param_particle, best_FoM_iter = run_pso(folder, active_region_list, param_dict, voltage, current)
+        current_density.append(current_density_charge)
+    best_FoM, best_param, best_param_particle, best_FoM_iter = run_pso(folder, active_region_list, param_dict, voltage, current_density)
     diode_func_current = luqing_liu_diode(
             voltage = np.array(voltage_charge_iv_curve)*2,
             jsc = min(abs(np.array(jsc))),
@@ -767,23 +767,44 @@ def plot_2T(folder, active_region_list,  param_dict):
             voc = sum(voc),
             rs = sum(rs_derivative),
             rsh = min(rsh_derivative),
-            eta = min(best_param),
+            eta = sum(best_param),
             temp = 300,
             n_cells =1,
             )
-    voltage = np.array(voltage_charge_iv_curve)*2
-    current_density = diode_func_current
+    v_tandem = np.array(voltage_charge_iv_curve)*2
+    j_tandem = diode_func_current
     df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
     csv_path = os.path.join(folder, "2T_IV_curve.csv")
     df.to_csv(csv_path, sep = '\t', index = False)
-    return voltage, current_density 
+    return v_tandem, j_tandem, voltage, current_density
+
+def plot_4T(folder,active_region_list):
+    voltage_charge_iv_curve = 0
+    voltage = []
+    current_density = []    
+    voc=  []
+    for i, arl in enumerate(active_region_list): 
+        voltage.append(pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"])
+        if np.array(voltage[i])[-1] > np.array(voltage_charge_iv_curve):
+            voltage_charge_iv_curve = np.array(voltage[i])[-1]
+        current_density.append(pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage[i], 1, 1, "am", current_density = current_density[i])
+        voc.append(voc_temp)
+    for i, _ in enumerate(active_region_list):     
+        new_voltage = np.linspace(min(voltage[i]), voltage_charge_iv_curve, 2001)
+        current_density[i] = np.interp(new_voltage, voltage[i], current_density[i])
+        voltage[i] = new_voltage
+    smallest_voc_material = voc.index(min(voc)) 
+    j_tandem =  sum(np.array(current_density))
+    v_tandem = voltage[smallest_voc_material]
+    #pce_tandem, ff_tandem, voc_tandem, jsc_tandem, _, _ = iv_curve([], voltage[smallest_voc_material], 1, 1, "am", current_density = j_tandem)
+    return v_tandem, j_tandem, voltage, current_density
 
 
 
-
-
+"""
 def plot_4T(folder, active_region_list,  param_dict):
-    """
+    
     Generates a 4-terminal IV curve by combining data from individual subcell simulations and running optimization routines.
 
     Args:
@@ -806,7 +827,7 @@ def plot_4T(folder, active_region_list,  param_dict):
         Si = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "interlayer")
         region= [Perovskite, Si]
         voltage, current_density = plot_2T("C:\Downloads\simulation_results", region, param_dict)
-    """    
+       
     
     pce, ff, voc, jsc, jmpp, rsh_derivative, rs_derivative  = [],[],[],[],[],[],[]
     voltage_charge_iv_curve = [0]
@@ -850,3 +871,100 @@ def plot_4T(folder, active_region_list,  param_dict):
     print("RSH",rsh_derivative)
     print("eta",best_param)
     return voltage, current_density, rs_derivative, rsh_derivative, best_param
+
+
+def plot_IV_curve(folder, active_region_list, param_dict, terminal_type="2T"):
+    Generates a 2-terminal or 4-terminal IV curve by combining data from individual subcell simulations and running optimization routines.
+
+    Args:
+        folder: (str) Path to the directory containing subcell IV curve CSV files.
+        active_region_list: (list) List of `SimInfo` objects representing the active regions in the photovoltaic device.
+        param_dict: (list of dict) List of parameter dictionaries for each active region to guide the PSO optimization process.
+        terminal_type: (str) Type of IV curve to generate ("2T" or "4T").
+
+    Returns:
+        voltage: (array) Voltage values of the combined IV curve.
+        current_density: (array) Current density values of the combined IV curve (mA/cm²).
+
+    Notes:
+        - Results are saved in a CSV file named "2T_IV_curve.csv" or "4T_IV_curve.csv" in the provided folder.
+    
+    # Initialize variables
+    pce, ff, voc, jsc, jmpp, rsh_derivative, rs_derivative = [], [], [], [], [], [], []
+    voltage_charge_iv_curve = [0]
+    voltage = []
+    current = []
+
+    # Process each active region
+    for _, arl in enumerate(active_region_list):
+        # Read voltage and current density data
+        voltage_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Voltage"]
+        if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
+            voltage_charge_iv_curve = voltage_charge
+        current_density_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"]
+
+        # Calculate performance metrics
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ = iv_curve([], voltage_charge, 1, 1, "am", current_density=current_density_charge)
+        jmpp_temp = calc_jmpp(voltage_charge, current_density_charge)
+        rsh_derivative_temp, rs_derivative_temp = calc_R(voc_temp, voltage_charge, current_density_charge)
+
+        # Append metrics to lists
+        pce.append(pce_temp)
+        ff.append(ff_temp)
+        voc.append(voc_temp)
+        jsc.append(jsc_temp)
+        jmpp.append(jmpp_temp)
+        rsh_derivative.append(rsh_derivative_temp)
+        rs_derivative.append(rs_derivative_temp)
+        voltage.append(voltage_charge)
+        current.append(current_density_charge)
+
+    # Run optimization
+    best_FoM, best_param, best_param_particle, best_FoM_iter = run_pso(folder, active_region_list, param_dict, voltage, current)
+
+    # Generate IV curve based on terminal type
+    if terminal_type == "2T":
+        diode_func_current = luqing_liu_diode(
+            voltage=np.array(voltage_charge_iv_curve) * 2,
+            jsc=min(abs(np.array(jsc))),
+            jmpp=min(jmpp),
+            voc=sum(voc),
+            rs=sum(rs_derivative),
+            rsh=min(rsh_derivative),
+            eta=min(best_param),
+            temp=300,
+            n_cells=1,
+        )
+        voltage = np.array(voltage_charge_iv_curve) * 2
+        output_file = "2T_IV_curve.csv"
+
+    elif terminal_type == "4T":
+        diode_func_current = luqing_liu_diode(
+            voltage=np.array(voltage_charge_iv_curve),
+            jsc=sum(abs(np.array(jsc))),
+            jmpp=sum(jmpp),
+            voc=min(voc),
+            rs=sum(rs_derivative),
+            rsh=min(rsh_derivative),
+            eta=min(best_param),
+            temp=300,
+            n_cells=1,
+        )
+        voltage = np.array(voltage_charge_iv_curve)
+        output_file = "4T_IV_curve.csv"
+
+    else:
+        raise ValueError("Invalid terminal_type. Must be '2T' or '4T'.")
+
+    # Save results to CSV
+    current_density = diode_func_current
+    df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
+    csv_path = os.path.join(folder, output_file)
+    df.to_csv(csv_path, sep='\t', index=False)
+
+    print("RS", rs_derivative)
+    print("RSH", rsh_derivative)
+    print("eta", best_param)
+
+    return voltage, current_density
+    """
