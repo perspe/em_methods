@@ -191,7 +191,7 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
         raise ValueError("Either current or current_density must be provided.")
 
     if current_density is not None: 
-        if current_density[0] < 0:
+        if current_density[0] > 0:
             current_density = np.array(current_density)*-1 
         current_density = np.array(current_density)
     
