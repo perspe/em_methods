@@ -769,7 +769,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         
                          
         current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-        pce, ff, voc, jsc, current_density, voltage = iv_curve( voltage, current,  Lx, Ly)
+        pce, ff, voc, jsc, current_density, voltage = iv_curve( voltage, current = current,  Lx = Lx, Ly = Ly)
 
         if np.isnan(voc) and not np.isnan(jsc):
             print(f"V_max = {v_max[active_region_list.index(names)]} V, which might be too small. Trying {v_max[active_region_list.index(names)]+0.2} V")
@@ -795,7 +795,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 continue
             
             current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-            pce, ff, voc, jsc, current_density, voltage = iv_curve(voltage, current,  Lx, Ly)
+            pce, ff, voc, jsc, current_density, voltage = iv_curve( voltage, current = current, Lx = Lx, Ly = Ly)
         
         
         pce_array.append(pce)
