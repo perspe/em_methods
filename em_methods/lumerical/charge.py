@@ -218,7 +218,20 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
             Jsc = current_density[np.where(voltage == abs_voltage_min)[0][0]]
         elif -abs_voltage_min in voltage:
             Jsc = current_density[np.where(voltage == -abs_voltage_min)[0][0]]
-        Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
+        
+        voltage = np.array(voltage)
+        current_density = np.array(current_density)
+        is_unordered = not np.all(voltage[:-1] <= voltage[1:])
+        
+        if is_unordered:  #if it is unordered, then it will be ordered  
+            sorted_indices_voltage = np.argsort(voltage)
+            voltage = voltage[sorted_indices_voltage]
+            current_density = current_density[sorted_indices_voltage]
+            _, unique_indices = np.unique(voltage, return_index=True)
+            voltage = voltage[unique_indices]
+            current_density = current_density[unique_indices]
+        Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)
+        
         try:
             stop = stop[0]
             Voc = Voc[0]
