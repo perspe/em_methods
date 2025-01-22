@@ -293,10 +293,6 @@ def plot_IV(
     if show_plot:
         plt.show()
 
-"""
-add section that calculates values from the JV curve  (no voc , no jsc no nothing)
-add section that makes the legends optional (no label)
-"""
 def plot_IV_curves(
     v,
     j,
@@ -944,7 +940,7 @@ def plot_2T(folder, active_region_list,  param_dict):
             voc = sum(voc),
             rs = sum(rs_derivative),
             rsh = min(rsh_derivative),
-            eta =max(best_param),
+            eta = sum(best_param)/len(best_param),
             temp = 300,
             n_cells =1,
             )
