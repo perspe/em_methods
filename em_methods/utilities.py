@@ -293,7 +293,10 @@ def plot_IV(
     if show_plot:
         plt.show()
 
-
+"""
+add section that calculates values from the JV curve  (no voc , no jsc no nothing)
+add section that makes the legends optional (no label)
+"""
 def plot_IV_curves(
     v,
     j,
@@ -404,6 +407,180 @@ def plot_IV_curves(
             verticalalignment="top",
             color=color[color_key],
         )
+    x_position = x_position + 0.20
+    plt.text(
+        1.05,
+        0.80,
+        textstr_name,
+        transform=ax.transAxes,
+        fontsize=17,
+        verticalalignment="top",
+        color="black",
+    )
+    plt.text(
+        x_position,
+        0.80,
+        textstr_units,
+        transform=ax.transAxes,
+        fontsize=17,
+        verticalalignment="top",
+        color="black",
+    )
+    if legend is None:
+        plt.legend()
+    elif legend == "out":
+        plt.legend(bbox_to_anchor=(1.05, 0.4), loc="upper left")
+    elif legend == "no":
+        print("no legend")
+    plt.ylabel("Current density [mA/cm²] ")
+    plt.xlabel("Voltage [V]")
+    plt.grid(True, linestyle="--")
+    ax.set_ylim(y_min, y_max)
+    ax.set_xlim(0, x_max)
+    if save_path is not None:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    plt.show()
+
+
+def plot_IV_curves_v2(
+    v,
+    j,
+    color = {},
+    labels = {},
+    voc = {},
+    pce = {},
+    ff = {},
+    jsc = {},
+    y_max = 15,
+    x_max = 2,
+    y_min=-1,
+    label_vary=[],
+    unit="",
+    parameters=None,
+    legend=None,
+    save_path=None,
+):
+    """
+    Plots the IV curve(s) provided in the inputs. Has the capacity to plot several curves with the same color range
+    (useful when plotting several IV curves and changing only one variable)
+    Args:
+            v: dictionary with the voltage arrays
+            j: dictionary with the current density arrays in mA/cm2
+            color: dictionary with the colors for each IV curve
+            labels: dictionary with the labels for each IV curve
+            voc, pce, ff, jsc: dictionaries with the IV curve metrics for each curve
+            j_max: scalar which determines the maximum heigth of the plot in the y scale
+            v_max: scalar which determines the maximum heigth of the plot in the x scale
+            label_vary: array with the names/values of a variable that might be changing in the same IV curve set, empty by default
+            unit: string with the unit of the variable that might be changing in the same IV curve set, empty by default
+            parameters: array with the parameters that might be changing in the same IV curve set, empty by default
+            y_lim: scalar which determines the maximum heigth of the plot in the y scale
+            legend: 'out' or 'no' or None. By default 'out' When 'out' the legend is displayed outside the plot. When 'no' the legend is not displayed.
+                    When None the legend is displayed inside the plot at random position.
+            save_path: string with the path where the plot should be saved. If None, the plot is not saved.
+
+            input format example (any number of curves is allowed):
+                labels = {"label_1":label_1, "label_2":label_2, "label_3":label_3 }
+                color = {"color_1":color_1, "color_2":color_2, "color_3":color_3 }
+                voc = {"voc_1":voc_1, "voc_2" : voc_2, "voc_3": voc_3}
+                v = {"v_1":v_1, "v_2":v_2, "v_3":v_3}
+                j = {"j_1":j_1, "j_2":j_2, "j_3":j_3}
+                pce = {"pce_1":pce_1, "pce_2": pce_2, "pce_3": pce_3}
+                ff = {"ff_1":ff_1, "ff_2":ff_2, "ff_3": ff_3}
+                jsc = {"jsc_1":jsc_1, "jsc_2":jsc_2, "jsc_3":jsc_3}
+    """
+    colors_matplotlib = plt.rcParams['axes.prop_cycle'].by_key()['color']
+    def colorFader(c1, c2="#FFFFFF", mix=0):
+        c1 = np.array(mpl.colors.to_rgb(c1))
+        c2 = np.array(mpl.colors.to_rgb(c2))
+        return mpl.colors.to_hex((1 - mix) * c1 + mix * c2)
+
+        
+    fig, ax = plt.subplots()
+    textstr_name = "$V_{oc}$ =\n$J_{sc}$ =\nFF  =\nPCE ="
+    textstr_units = f"  V \n  mA/cm² \n  %\n  %"
+    vary_true = 0
+
+    for i in range(1, len(v.keys()) + 1):
+        v_key = f"v_{i}"
+        j_key = f"j_{i}"
+        color_key = f"color_{i}"
+        label_key = f"label_{i}"
+        voc_key = f"voc_{i}"
+        jsc_key = f"jsc_{i}"
+        pce_key = f"pce_{i}"
+        ff_key = f"ff_{i}"
+        if color == {}: 
+            color[color_key] = colors_matplotlib[(i - 1) % len(colors_matplotlib)]
+            print("Hey",color[color_key])
+            erase_color = True
+        else: 
+            erase_color = False
+        if voc == {} or ff == {} or pce == {} or jsc == {}:
+            print('heyyyy', type(v[v_key]))
+            print(v[v_key])
+            print(j[j_key])
+            pce[pce_key], ff[ff_key], voc[voc_key], jsc[jsc_key], _, _ = iv_curve( np.array(v[v_key]), current_density = np.array(j[j_key]))
+            erase_iv = True
+        else: 
+            erase_iv = False
+        if labels == {}:
+            labels[label_key] = ""
+            legend = 'no'
+            erase_label = True
+        else:
+            erase_label = False 
+
+
+        if isinstance(voc[voc_key], (list, tuple, np.ndarray)):
+            vary_true = vary_true + 1
+            for z in range(0, len(voc[voc_key])):
+                plt.plot(
+                    v[v_key][z],
+                    j[j_key][z],
+                    "-",
+                    color=colorFader(color[color_key], mix=(z) / len(voc[voc_key])),
+                    label=f"{labels[label_key]} {label_vary[z]} {unit}",
+                )
+                plt.plot(
+                    voc[voc_key][z],
+                    0,
+                    "o",
+                    color=colorFader(color[color_key], mix=(z) / len(voc[voc_key])),
+                )
+            if parameters is not None:
+                vary_true = vary_true - 1
+                textstr = f"     {voc[voc_key][parameters]:05.2f}\n     {abs(jsc[jsc_key][parameters]):05.2f}\n     {ff[ff_key][parameters]:05.2f} \n     {pce[pce_key][parameters]:05.2f}"
+                color[color_key] = colorFader(
+                    color[color_key],
+                    mix=(voc[voc_key].index(voc[voc_key][parameters]))
+                    / len(voc[voc_key]),
+                )
+            else:
+                textstr = ""
+
+        else:
+            plt.plot(
+                v[v_key], j[j_key], "-", color=color[color_key], label=labels[label_key]
+            )
+            plt.plot(voc[voc_key], 0, "o", color=color[color_key])
+            textstr = f"     {voc[voc_key]:05.2f}\n     {abs(jsc[jsc_key]):05.2f}\n     {ff[ff_key]:05.2f} \n     {pce[pce_key]:05.2f}"
+        x_position = 1.00 + (0.20 * (i)) - (0.20 * vary_true)
+        plt.text(
+            x_position,
+            0.80,
+            textstr,
+            transform=ax.transAxes,
+            fontsize=17,
+            verticalalignment="top",
+            color=color[color_key],
+        )
+        if erase_color:
+            color = {} 
+        if erase_iv: 
+            voc, jsc, pce, ff = {}, {}, {}, {}
+        if erase_label: 
+            labels = {}
     x_position = x_position + 0.20
     plt.text(
         1.05,
@@ -611,7 +788,7 @@ def calc_jmpp(voltage_charge,current_density_charge):
     vals_v = np.linspace(min(voltage_charge), max(voltage_charge), 100)
     new_j = np.interp(vals_v, voltage_charge, current_density_charge)
     P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
-    jmpp = current_density_charge[P.index(max(P))]
+    jmpp = new_j[P.index(max(P))]
     return jmpp
 
 def calc_R(voc_temp,voltage_charge,current_density_charge):
@@ -651,7 +828,7 @@ def pso_func( eta_pso, path, active_region_list, voltage_charge, current_density
     """
     FoM_matrix = []
     generator = list(enumerate(zip(eta_pso)))
-    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage_charge, 1, 1, "am", current_density = current_density_charge)
+    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage_charge, current_density = current_density_charge)
     jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
     rsh_derivative, rs_derivative =  calc_R(voc_temp,voltage_charge,current_density_charge)
 
@@ -747,7 +924,7 @@ def plot_2T(folder, active_region_list,  param_dict):
         if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
             voltage_charge_iv_curve = voltage_charge
         current_density_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"]
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage_charge, 1, 1, "am", current_density = current_density_charge)
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage_charge, current_density = current_density_charge)
         jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
         rsh_derivative_temp, rs_derivative_temp =  calc_R(voc_temp,voltage_charge,current_density_charge)    
         pce.append(pce_temp)
@@ -767,7 +944,7 @@ def plot_2T(folder, active_region_list,  param_dict):
             voc = sum(voc),
             rs = sum(rs_derivative),
             rsh = min(rsh_derivative),
-            eta = sum(best_param),
+            eta =max(best_param),
             temp = 300,
             n_cells =1,
             )
@@ -788,7 +965,7 @@ def plot_4T(folder,active_region_list):
         if np.array(voltage[i])[-1] > np.array(voltage_charge_iv_curve):
             voltage_charge_iv_curve = np.array(voltage[i])[-1]
         current_density.append(pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve([], voltage[i], 1, 1, "am", current_density = current_density[i])
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage[i], current_density = current_density[i])
         voc.append(voc_temp)
     for i, _ in enumerate(active_region_list):     
         new_voltage = np.linspace(min(voltage[i]), voltage_charge_iv_curve, 2001)
