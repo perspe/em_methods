@@ -184,11 +184,17 @@ def extract_iv_data(results, names):
     Ly = results["func_output"][1]
 
     return current, voltage, Lx, Ly
-def iv_curve(current, voltage, Lx, Ly, regime, current_density = None):
+
+def iv_curve(current, voltage, Lx = None, Ly = None, regime = "am", current_density = None):
 
     if current_density is not None: 
+        if current_density[0] < 0:
+            current_density = np.array(current_density)*-1 
         current_density = np.array(current_density)
+
     else: 
+        if Lx is None or Ly is None:
+            raise ValueError("Lx and Ly must be provided when current_density is not given.")
         Lx = Lx * 100  # from m to cm
         Ly = Ly * 100  # from m to cm
         area = Ly * Lx  # area in cm^2
@@ -207,15 +213,8 @@ def iv_curve(current, voltage, Lx, Ly, regime, current_density = None):
         abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
         if abs_voltage_min in voltage:
             Jsc = current_density[np.where(voltage == abs_voltage_min)[0][0]]
-            #Isc = current[np.where(voltage == abs_voltage_min)[0][0]]
-            # Jsc = current_density[voltage.index(abs_voltage_min)]
-            # Isc = current[voltage.index(abs_voltage_min)]
         elif -abs_voltage_min in voltage:
-            # the position in the array of Jsc and Isc should be the same
             Jsc = current_density[np.where(voltage == -abs_voltage_min)[0][0]]
-            #Isc = current[np.where(voltage == -abs_voltage_min)[0][0]]
-            # Jsc = current_density[voltage.index(-abs_voltage_min)]
-            # Isc = current[voltage.index(-abs_voltage_min)]
         Voc, stop = pyaC.zerocross1d(np.array(voltage), np.array(current_density), getIndices=True)
         try:
             stop = stop[0]
@@ -227,7 +226,6 @@ def iv_curve(current, voltage, Lx, Ly, regime, current_density = None):
             vals_v = np.linspace(min(voltage), max(voltage), 100)
             new_j = np.interp(vals_v, voltage, current_density)
             P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0 ]
-            #P = [voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0 ]  # calculate the power for all points [W]
             FF = abs(max(P) / (Voc * Jsc))
             PCE = ((FF * Voc * abs(Jsc)*10**-3) / (Ir * (10**-4))) * 100
         except ValueError:
@@ -768,7 +766,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         
                          
         current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-        pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
+        pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly)
 
         if np.isnan(voc) and not np.isnan(jsc):
             print(f"V_max = {v_max[active_region_list.index(names)]} V, which might be too small. Trying {v_max[active_region_list.index(names)]+0.2} V")
@@ -794,7 +792,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 continue
             
             current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-            pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly,"am")
+            pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly)
         
         
         pce_array.append(pce)
