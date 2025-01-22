@@ -185,13 +185,16 @@ def extract_iv_data(results, names):
 
     return current, voltage, Lx, Ly
 
-def iv_curve(current, voltage, Lx = None, Ly = None, regime = "am", current_density = None):
+def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", current_density = None):
+
+    if current is None and current_density is None:
+        raise ValueError("Either current or current_density must be provided.")
 
     if current_density is not None: 
         if current_density[0] < 0:
             current_density = np.array(current_density)*-1 
         current_density = np.array(current_density)
-
+    
     else: 
         if Lx is None or Ly is None:
             raise ValueError("Lx and Ly must be provided when current_density is not given.")
@@ -766,7 +769,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         
                          
         current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-        pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly)
+        pce, ff, voc, jsc, current_density, voltage = iv_curve( voltage, current,  Lx, Ly)
 
         if np.isnan(voc) and not np.isnan(jsc):
             print(f"V_max = {v_max[active_region_list.index(names)]} V, which might be too small. Trying {v_max[active_region_list.index(names)]+0.2} V")
@@ -792,7 +795,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 continue
             
             current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-            pce, ff, voc, jsc, current_density, voltage = iv_curve( current, voltage, Lx, Ly)
+            pce, ff, voc, jsc, current_density, voltage = iv_curve(voltage, current,  Lx, Ly)
         
         
         pce_array.append(pce)
