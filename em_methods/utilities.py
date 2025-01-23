@@ -528,7 +528,7 @@ def plot_IV_curves_v2(
             erase_label = False 
 
 
-        if isinstance(voc[voc_key], (list, tuple, np.ndarray)):
+        if isinstance(voc[voc_key], (list, tuple, np.ndarray)): #UNTESTED
             vary_true = vary_true + 1
             for z in range(0, len(voc[voc_key])):
                 plt.plot(
