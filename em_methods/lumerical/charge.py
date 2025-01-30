@@ -209,7 +209,9 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
          voltage = [float(arr[0]) for arr in voltage]
     elif (voltage.ndim == 2):
          voltage = [float(arr[0]) for arr in voltage]
+    if (current_density.ndim == 2):
          current_density = [arr[0] for arr in current_density]
+         
 
     Ir = 1000  # W/m²
     if regime == "am":
