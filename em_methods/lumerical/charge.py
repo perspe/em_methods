@@ -781,8 +781,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
                 voltage_array.append(voltage)
                 print(f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%")
                 continue
-        
-                         
+
         current, voltage, Lx, Ly = extract_iv_data(results[0], names)
         pce, ff, voc, jsc, current_density, voltage = iv_curve( voltage, current = current,  Lx = Lx, Ly = Ly)
 
@@ -829,7 +828,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     
 
 
-def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None, B = None, method_solver = "NEWTON", v_single_point = 0):
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None, B = None, method_solver = "GUMMEL", v_single_point = 0, v_max = 0):
     """ 
     UNTESTED
 
@@ -857,20 +856,37 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
             Jph: array with the dimention of the active_region_list, containing the FDTD output for a freq in A/m2
            
     """ 
+    valid_solver = {"GUMMEL", "NEWTON"}
+    if method_solver.upper() not in valid_solver:
+        raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
+    charge_path = os.path.join(path, charge_file)
+    if B == None:
+        B = [None for _ in range(0, len(active_region_list))]
+    if min_edge == None:
+        min_edge = [None for _ in range(0, len(active_region_list))]
+    if not isinstance(v_single_point, (list, np.ndarray)):
+        v_single_point = [v_single_point for _ in range(0, len(active_region_list))]
+    if not isinstance(v_max, (list, np.ndarray)):
+        v_max = [v_max for _ in range(0, len(active_region_list))]
     Jsc = []
     charge_path = os.path.join(path, charge_file)
     Jph = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
     results = None
     for names in active_region_list:
-        get_results = {"results": {"CHARGE": str(names.Cathode)}}
+        if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
+            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
+            print(B)
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
+                          "method_solver": method_solver.upper(), "v_single_point": v_single_point[active_region_list.index(names)], "min_edge": min_edge[active_region_list.index(names)]}
+        get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
             results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
+                                    func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
         except LumericalError:
             try:            
                 logger.warning("Retrying simulation")
                 results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": 0,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], "method_solver": method_solver, "v_single_point": v_single_point })
+                                    func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
             except LumericalError:
                 current_density = np.nan
                 Jsc.append(current_density)
@@ -884,9 +900,11 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         area = Ly * Lx  # area in cm^2
         current_density = (np.array(current) * 1000) / area #mA/cm2
         print(current_density)
-        jsc = current_density*10 #A/m2
-        Jsc.append(jsc)
+        Jsc.append( current_density*10) #A/m2
     return Jsc, Jph
+
+
+
 
 def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path, fdtd_file, times_to_run = 3, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None): #needs to be updated
     """
