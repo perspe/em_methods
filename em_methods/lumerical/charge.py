@@ -201,7 +201,7 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
         Lx = Lx * 100  # from m to cm
         Ly = Ly * 100  # from m to cm
         area = Ly * Lx  # area in cm^2
-        current_density = (np.array(current) * 1000) / area
+        current_density = (np.array(current) * 1000) / area #mA/cm2
     
     
     if ((len(current_density) == 1 and len(current_density[0]) != 1) ):  # CHARGE I output is not always consistent
@@ -348,7 +348,102 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
         os.remove(new_filepath)
         #os.remove(log_file)
 
+        # AVERAGE GENERATION IN Y AXIS
+        if avg_mode == True:
+            for names in active_region_list:
+                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
+                file = names.GenName
+                generation_name = os.path.join(path, file)
+
+                # Import generation data
+                gen_data, x, y, z = _import_generation(generation_name)
+                # Determine the average results
+                y_gen, xy_gen = _average_generation(gen_data, x.flatten(), y.flatten())
+
+                # export_y_averaged_data = {
+                #     "G": y_gen,
+                #     "x": x,
+                #     "z": z[:, np.newaxis]
+                # }
+
+                # _export_hdf_data("y_average_" + file.split(".")[0] + ".hdf5",
+                #                 **export_y_averaged_data)
+
+                shape_3d = np.zeros((len(x), len(z), len(y)))
+                y_gen_3d = y_gen + shape_3d
+
+                export_3d_averaged_data = {
+                    "G": np.transpose(y_gen_3d, (1, 0, 2)),
+                    "x": x,
+                    "y": y,
+                    "z": z}
+
+                _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
+
+def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode: bool = False):
+    """
+    Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
+    (in same directory as FDTD file)
+    Args:
+            path: directory where the FDTD and CHARGE files exist
+            fdtd_file: String FDTD file name
+            properties: Dictionary with the property object and property names and values
+            active_region_list: list with SimInfo dataclassses with the details of the simulation 
+                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
+            freq: (float) incident photon frequency in Hz at which the generation will be calculated 
+    Returns: 
+            Jph: array with active_region_list length with the FDTD generation at frequency freq 
+                (e.g. for a 2 material simualtion at frequency freq Jph = [jph1(freq), jph2(freq)])
+    """
+    fdtd_path = os.path.join(path, fdtd_file)
+    override_prefix: str = str(uuid4())[0:5]
+    new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
+    shutil.copyfile(fdtd_path, new_filepath)
+    Jph = []
+    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
+        # CHANGE CELL GEOMETRY
+        for structure_key, structure_value in properties.items():
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                fdtd.set(parameter_key, parameter_value)
+        fdtd.save()
+        # EXPORT GENERATION FILES
+        for names in active_region_list:    
+            fdtd.setglobalsource('wavelength start', freq)
+            fdtd.setglobalsource('wavelength stop', freq)
+            fdtd.save()
+            fdtd.run()
+            fdtd.runanalysis(names.SolarGenName)
+            jph = fdtd.getdata(active_region_list[0].SolarGenName, "Jsc")
+            Jph.append(jph)
+
+            if isinstance(names.GenName, list): #if it is 2T:
+                for i in range(0, len(names.GenName)):
+                    gen_obj = names.SolarGenName[i] 
+                    file = names.GenName[i]
+                    g_name = file.replace(".mat", "")
+                    fdtd.select(str(gen_obj))
+                    fdtd.set("export filename", str(g_name))
+            else: #if it is 4T:
+                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
+                file = names.GenName # generation file name
+                g_name = file.replace(".mat", "")
+                fdtd.select(str(gen_obj))
+                fdtd.set("export filename", str(g_name))
+        fdtd.close()
+        os.remove(new_filepath)
+
         
+        # # EXPORT GENERATION FILES
+        # for names in active_region_list:
+        #     gen_obj = names.SolarGenName  # Solar Generation analysis object name
+        #     file = names.GenName # generation file name
+        #     g_name = file.replace(".mat", "")
+        #     fdtd.select(str(gen_obj))
+        #     fdtd.set("export filename", str(g_name))
+        # fdtd.close()
+        # os.remove(new_filepath)
 
         # AVERAGE GENERATION IN Y AXIS
         if avg_mode == True:
@@ -382,53 +477,6 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
 
                 _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
 
-def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq):
-    """
-    Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
-    (in same directory as FDTD file)
-    Args:
-            path: directory where the FDTD and CHARGE files exist
-            fdtd_file: String FDTD file name
-            properties: Dictionary with the property object and property names and values
-            active_region_list: list with SimInfo dataclassses with the details of the simulation 
-                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            freq: (float) incident photon frequency in Hz at which the generation will be calculated 
-    Returns: 
-            Jph: array with active_region_list length with the FDTD generation at frequency freq 
-                (e.g. for a 2 material simualtion at frequency freq Jph = [jph1(freq), jph2(freq)])
-    """
-    fdtd_path = os.path.join(path, fdtd_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
-    shutil.copyfile(fdtd_path, new_filepath)
-    Jph = []
-    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
-        # CHANGE CELL GEOMETRY
-        for structure_key, structure_value in properties.items():
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                fdtd.set(parameter_key, parameter_value)
-        for names in active_region_list:    
-            fdtd.setglobalsource('wavelength start', freq)
-            fdtd.setglobalsource('wavelength stop', freq)
-            fdtd.run()
-            fdtd.runanalysis(names.SolarGenName)
-            jph = fdtd.getdata(active_region_list[0].SolarGenName, "Jsc")
-            Jph.append(jph)
-
-        # EXPORT GENERATION FILES
-        for names in active_region_list:
-            gen_obj = names.SolarGenName  # Solar Generation analysis object name
-            file = names.GenName # generation file name
-            g_name = file.replace(".mat", "")
-            fdtd.select(str(gen_obj))
-            fdtd.set("export filename", str(g_name))
-        fdtd.run()
-        fdtd.runanalysis()
-        fdtd.save()
-        fdtd.close()
-        os.remove(new_filepath)
         return Jph
 
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None, min_edge = None, range_num_points = 101 ):
@@ -828,7 +876,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     
 
 
-def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region=None, B = None, method_solver = "GUMMEL", v_single_point = 0, v_max = 0):
+def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, fdtd_file, freq, def_sim_region='2d', B = None, method_solver = "GUMMEL", v_single_point = 0, v_max = 0, min_edge = None, avg_mode: bool = False):
     """ 
     UNTESTED
 
@@ -870,7 +918,11 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         v_max = [v_max for _ in range(0, len(active_region_list))]
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    Jph = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq)
+    if avg_mode: 
+        print("Generation averaged, used for Voids")
+    else: 
+        print("Non void generation -> not averaged")
+    Jph = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode = avg_mode) #A/m2
     results = None
     for names in active_region_list:
         if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
@@ -891,8 +943,7 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
                 current_density = np.nan
                 Jsc.append(current_density)
                 continue
-
-        current = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0]
+        current = results[0]["results.CHARGE." + str(names.Cathode)]["I"][0] #A
         Lx = results[0]["func_output"][0]
         Ly = results[0]["func_output"][1]
         Lx = Lx * 100  # from m to cm
@@ -900,8 +951,8 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         area = Ly * Lx  # area in cm^2
         current_density = (np.array(current) * 1000) / area #mA/cm2
         print(current_density)
-        Jsc.append( current_density*10) #A/m2
-    return Jsc, Jph
+        Jsc.append(current_density*10) #A/m2
+    return Jsc, Jph #arrays with information about all active materials
 
 
 
