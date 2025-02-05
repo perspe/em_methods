@@ -261,7 +261,7 @@ def IQE(active_region_list, properties, charge_file, path, fdtd_file,
     
     Jsc_g = [[] for _ in range(len(active_region_list))]
     Jph_g = [[] for _ in range(len(active_region_list))]
-    results_dir = os.path.join(path, 'IQE_results_' + str(os.path.splitext(fdtd_file)[0])[:-3] + '.fsp') #remove the sufix _qe from the file's name
+    results_dir = os.path.join(path, 'IQE_results_' + str(os.path.splitext(fdtd_file)[0])[:-3]) #remove the sufix _qe from the file's name
     os.makedirs(results_dir, exist_ok=True)
 
     for wvl in wl:  
@@ -331,7 +331,7 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
         all_wvl_new.append(np.linspace(min(all_wvl[i])*10**9, min_max_wvl*10**9, 70700))
         all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i]*10**9, all_abs[i])
     total_abs = sum(all_abs)
-    iqe_path = os.path.join(path, 'IQE_results_' + str(fdtd_file))
+    iqe_path = os.path.join(path, 'IQE_results_' + str(os.path.splitext(fdtd_file)[0]))
     for names in active_region_list: 
         results_path = os.path.join(iqe_path, 'IQE_' + names.SCName )
         iqe_data = pd.read_csv(results_path +'.csv')
