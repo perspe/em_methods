@@ -261,7 +261,7 @@ def IQE(active_region_list, properties, charge_file, path, fdtd_file,
     
     Jsc_g = [[] for _ in range(len(active_region_list))]
     Jph_g = [[] for _ in range(len(active_region_list))]
-    results_dir = os.path.join(path, "IQE_results")
+    results_dir = os.path.join(path, "IQE_results" + str(fdtd_file))
     os.makedirs(results_dir, exist_ok=True)
 
     for wvl in wl:  
@@ -297,7 +297,7 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
     """
     Calculates the total internal quantum efficiency (IQE) and total absorption for a tandem solar cell configuration. 
     The function extracts absorption data, interpolates it to a common wavelength grid, and then processes IQE data 
-    from previously computed results in imbedded folder called "IQE_results.
+    from previously computed results in imbedded folder called "IQE_results + fdtd_file name".
     
     Args:
             path: directory where the FDTD and CHARGE files exist.
@@ -331,7 +331,7 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
         all_wvl_new.append(np.linspace(min(all_wvl[i])*10**9, min_max_wvl*10**9, 70700))
         all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i]*10**9, all_abs[i])
     total_abs = sum(all_abs)
-    iqe_path = os.path.join(path, 'IQE_results')
+    iqe_path = os.path.join(path, 'IQE_results' + str(fdtd_file))
     for names in active_region_list: 
         results_path = os.path.join(iqe_path, 'IQE_' + names.SCName )
         iqe_data = pd.read_csv(results_path +'.csv')
