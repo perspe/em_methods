@@ -255,7 +255,95 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
 
     elif regime == "dark":
         return current_density, voltage
-       
+
+def IQE(active_region_list, properties, charge_file, path, fdtd_file, 
+        wl=[i for i in range(300, 1001, 50)], min_edge=None, avg_mode=False):
+    
+    Jsc_g = [[] for _ in range(len(active_region_list))]
+    Jph_g = [[] for _ in range(len(active_region_list))]
+    results_dir = os.path.join(path, "IQE_results")
+    os.makedirs(results_dir, exist_ok=True)
+
+    for wvl in wl:  
+        current_Jsc, current_Jph = run_fdtd_and_charge_EQE(
+            active_region_list, properties, charge_file, path, fdtd_file, 
+            wvl * 10**-9, min_edge=min_edge, avg_mode=avg_mode
+        )
+        for i in range(len(active_region_list)):
+            Jsc_g[i].append(current_Jsc[i])
+            Jph_g[i].append(current_Jph[i])
+            if np.isnan(current_Jph[i]) or current_Jph[i] == 0:
+                print(f"Warning: Jph[{i}] is NaN or 0 at wavelength {wvl}, setting IQE to NaN")
+                iqe_value = np.nan
+            else:
+                iqe_value = -current_Jsc[i] / current_Jph[i]
+                print(f"Computed IQE[{i}] at {wvl} nm: {iqe_value}")
+
+            # Ensure IQE is saved as a scalar
+            iqe_scalar = iqe_value[0] if isinstance(iqe_value, (list, np.ndarray)) else iqe_value
+
+            #Save IQE
+            result_file = os.path.join(results_dir, f"IQE_{active_region_list[i].SCName}.csv")
+            data = pd.DataFrame({"wavelength": [wvl], "IQE": [iqe_scalar]})
+            if os.path.exists(result_file):
+                data.to_csv(result_file, mode='a', header=False, index=False)
+            else:
+                data.to_csv(result_file, index=False, header=True)
+    
+    IQE_values = [[-Jsc_g[i][j] / Jph_g[i][j] for j in range(len(wl))] for i in range(len(active_region_list))]
+    return IQE_values, Jsc_g, Jph_g, wl       
+
+def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = True): 
+    """
+    Calculates the total internal quantum efficiency (IQE) and total absorption for a tandem solar cell configuration. 
+    The function extracts absorption data, interpolates it to a common wavelength grid, and then processes IQE data 
+    from previously computed results in imbedded folder called "IQE_results.
+    
+    Args:
+            path: directory where the FDTD and CHARGE files exist.
+            fdtd_file: String FDTD file name.
+            active_region_list: list with SimInfo dataclasses containing the details of each active region in the simulation 
+                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+                                      SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")]).
+            properties: Dictionary with the property object and property names and values.
+            run_abs: Boolean flag indicating whether to recompute absorption before processing IQE data.
+    
+    Returns:
+            total_iqe: 1D numpy array containing the minimum IQE values across all active regions at each wavelength.
+            total_abs: 1D numpy array containing the total absorption across all active regions.
+            all_wvl_new[0]: 1D numpy array representing the common wavelength grid used for interpolation.
+    """
+    all_abs, all_wvl = [], []
+    all_iqe, all_iqe_wvl = [],[]
+    all_wvl_new = []
+    min_max_wvl = float('inf')
+    for names in active_region_list: 
+        if run_abs:
+            abs_extraction(names, path, fdtd_file, properties = properties) # will calc the abs
+        results_path = os.path.join(path, names.SolarGenName)
+        abs_data = pd.read_csv(results_path +'.csv')
+        all_abs.append(abs_data['abs'])
+        all_wvl.append(abs_data['wvl'])
+    for i, _ in enumerate(active_region_list):
+        if max(all_wvl[i])<min_max_wvl: 
+            min_max_wvl = max(all_wvl[i])
+    for i, _ in enumerate(active_region_list): #all abs should have the same size
+        all_wvl_new.append(np.linspace(min(all_wvl[i])*10**9, min_max_wvl*10**9, 70700))
+        all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i]*10**9, all_abs[i])
+    total_abs = sum(all_abs)
+    iqe_path = os.path.join(path, 'IQE_results')
+    for names in active_region_list: 
+        results_path = os.path.join(iqe_path, 'IQE_' + names.SCName )
+        iqe_data = pd.read_csv(results_path +'.csv')
+        all_iqe.append(iqe_data['IQE'])
+        all_iqe_wvl.append(iqe_data['wavelength'])
+    for i, _ in enumerate(active_region_list):
+        all_iqe[i] = np.interp(all_wvl_new[i], all_iqe_wvl[i], all_iqe[i])
+    all_iqe = np.array(all_iqe)  # Convert list of arrays to 2D NumPy array
+    total_iqe = np.min(all_iqe, axis = 0) #min IQE at each wavlength
+    return total_iqe, total_abs, all_wvl_new[0]
+
+
 
 def _import_generation(gen_file):
     """ Import the necessary data
@@ -292,7 +380,8 @@ def _export_hdf_data(filename, **kwargs):
         for key, value in kwargs.items():
             file.create_dataset(key, data=value, dtype='double')
 
-def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = False):
+
+def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = False, freq = None, quantum_efficiency = False):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -312,8 +401,10 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
     log_file: str = os.path.join(
         path, f"{override_prefix}_{os.path.splitext(fdtd_file)[0]}_p0.log"
     )
+    Jph = []
     with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
         # CHANGE CELL GEOMETRY
+        fdtd.switchtolayout()
         for structure_key, structure_value in properties.items():
             fdtd.select(structure_key)
             for parameter_key, parameter_value in structure_value.items():
@@ -335,21 +426,39 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                 g_name = file.replace(".mat", "")
                 fdtd.select(str(gen_obj))
                 fdtd.set("export filename", str(g_name))
-        fdtd.run()
-        fdtd.runanalysis()
-        for names in active_region_list:
-            abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
-            results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
-            results_path = os.path.join(path, names.SolarGenName)
-            results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
-        fdtd.switchtolayout()
+            if quantum_efficiency:
+                if freq is None:
+                    raise ValueError("Frequency must be provided for quantum efficiecny calculation.")
+                fdtd.setglobalsource('wavelength start', freq)
+                fdtd.setglobalsource('wavelength stop', freq)
+                fdtd.save()
+                fdtd.run()
+                fdtd.runanalysis(names.SolarGenName)
+                #fdtd.runanalysis()
+                jph = fdtd.getdata(names.SolarGenName, "Jsc")
+                Jph.append(jph)
+                abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
+                results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
+                results_path = os.path.join(path, names.SolarGenName)
+                results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
+                fdtd.switchtolayout() #needed, do not comment out                
+        if not quantum_efficiency: 
+            fdtd.run()
+            fdtd.runanalysis()
+            for names in active_region_list: 
+                abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
+                results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
+                results_path = os.path.join(path, names.SolarGenName)
+                results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
+            
         fdtd.save()
         fdtd.close()
         os.remove(new_filepath)
         #os.remove(log_file)
 
         # AVERAGE GENERATION IN Y AXIS
-        if avg_mode == True:
+        if avg_mode:
+            print("Averaged Genration -> 3d to 2d")
             for names in active_region_list:
                 gen_obj = names.SolarGenName  # Solar Generation analysis object name 
                 file = names.GenName
@@ -359,7 +468,6 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                 gen_data, x, y, z = _import_generation(generation_name)
                 # Determine the average results
                 y_gen, xy_gen = _average_generation(gen_data, x.flatten(), y.flatten())
-
                 # export_y_averaged_data = {
                 #     "G": y_gen,
                 #     "x": x,
@@ -377,10 +485,12 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                     "x": x,
                     "y": y,
                     "z": z}
+                #print(generation_name.split(".")[0])
+                _export_hdf_data(generation_name.split(".")[0] + ".mat", **export_3d_averaged_data)
+                print("Averaged")
+    return Jph
 
-                _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
-
-def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode: bool = False):
+def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode: bool = False): #obsolete?
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
@@ -446,7 +556,12 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode:
         # os.remove(new_filepath)
 
         # AVERAGE GENERATION IN Y AXIS
-        if avg_mode == True:
+        
+        if avg_mode: 
+            print("Generation averaged, used for Voids")
+        else: 
+            print("Non void generation -> not averaged")
+        if avg_mode:
             for names in active_region_list:
                 gen_obj = names.SolarGenName  # Solar Generation analysis object name 
                 file = names.GenName
@@ -476,6 +591,7 @@ def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode:
                     "z": z}
 
                 _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
+                print("Averaged")
 
         return Jph
 
@@ -790,7 +906,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
         raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
     charge_path = os.path.join(path, charge_file)
     if run_FDTD:
-        get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode)
+        _ = get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode)
     if B == None:
         B = [None for _ in range(0, len(active_region_list))]
     if min_edge == None:
@@ -803,7 +919,7 @@ def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_
     for names in active_region_list:
         if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
             B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
-            print(B)
+            print(f'The B values: {B}')
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "range_num_points" : range_num_points[active_region_list.index(names)]  }
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
@@ -918,16 +1034,12 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         v_max = [v_max for _ in range(0, len(active_region_list))]
     Jsc = []
     charge_path = os.path.join(path, charge_file)
-    if avg_mode: 
-        print("Generation averaged, used for Voids")
-    else: 
-        print("Non void generation -> not averaged")
-    Jph = get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode = avg_mode) #A/m2
+    Jph = get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode, freq = freq, quantum_efficiency= True) #A/m2
     results = None
     for names in active_region_list:
         if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
             B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
-            print(B)
+            print(f'The B values: {B}')
         conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point[active_region_list.index(names)], "min_edge": min_edge[active_region_list.index(names)]}
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
