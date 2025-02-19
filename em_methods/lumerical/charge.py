@@ -257,8 +257,8 @@ def iv_curve(voltage, current = None , Lx = None, Ly = None, regime = "am", curr
         return current_density, voltage
 
 def IQE(active_region_list, properties, charge_file, path, fdtd_file, 
-        wl=[i for i in range(300, 1001, 50)], min_edge=None, avg_mode=False):
-    
+        wl=[i for i in range(300, 1001, 50)], min_edge=None, avg_mode=False, B = None):
+    current_jsc =  [[] for _ in range(len(active_region_list))]
     Jsc_g = [[] for _ in range(len(active_region_list))]
     Jph_g = [[] for _ in range(len(active_region_list))]
     results_dir = os.path.join(path, 'IQE_results_' + str(os.path.splitext(fdtd_file)[0])[:-3]) #remove the sufix _qe from the file's name
@@ -267,7 +267,7 @@ def IQE(active_region_list, properties, charge_file, path, fdtd_file,
     for wvl in wl:  
         current_Jsc, current_Jph = run_fdtd_and_charge_EQE(
             active_region_list, properties, charge_file, path, fdtd_file, 
-            wvl * 10**-9, min_edge=min_edge, avg_mode=avg_mode
+            wvl * 10**-9, min_edge=min_edge, avg_mode=avg_mode, B = B
         )
         for i in range(len(active_region_list)):
             Jsc_g[i].append(current_Jsc[i])
@@ -278,13 +278,13 @@ def IQE(active_region_list, properties, charge_file, path, fdtd_file,
             else:
                 iqe_value = -current_Jsc[i] / current_Jph[i]
                 print(f"Computed IQE[{i}] at {wvl} nm: {iqe_value}")
-
+                
             # Ensure IQE is saved as a scalar
             iqe_scalar = iqe_value[0] if isinstance(iqe_value, (list, np.ndarray)) else iqe_value
-
+            current_jsc[i] = current_Jsc[i][0] if isinstance(current_Jsc[i], (list, np.ndarray)) else current_Jsc[i]
             #Save IQE
             result_file = os.path.join(results_dir, f"IQE_{active_region_list[i].SCName}.csv")
-            data = pd.DataFrame({"wavelength": [wvl], "IQE": [iqe_scalar]})
+            data = pd.DataFrame({"wavelength": [wvl], "IQE": [iqe_scalar], "Jsc": [-current_jsc[i][0]], "Jph": [current_Jph[i]]})
             if os.path.exists(result_file):
                 data.to_csv(result_file, mode='a', header=False, index=False)
             else:
@@ -328,7 +328,7 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
         if max(all_wvl[i])<min_max_wvl: 
             min_max_wvl = max(all_wvl[i])
     for i, _ in enumerate(active_region_list): #all abs should have the same size
-        all_wvl_new.append(np.linspace(min(all_wvl[i])*10**9, min_max_wvl*10**9, 70700))
+        all_wvl_new.append(np.linspace(min(all_wvl[i])*10**9, min_max_wvl*10**9, 1001))
         all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i]*10**9, all_abs[i])
     total_abs = sum(all_abs)
     iqe_path = os.path.join(path, 'IQE_results_' + str(os.path.splitext(fdtd_file)[0]))
@@ -341,7 +341,7 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
         all_iqe[i] = np.interp(all_wvl_new[i], all_iqe_wvl[i], all_iqe[i])
     all_iqe = np.array(all_iqe)  # Convert list of arrays to 2D NumPy array
     total_iqe = np.min(all_iqe, axis = 0) #min IQE at each wavlength
-    return total_iqe, total_abs, all_wvl_new[0]
+    return total_iqe, total_abs, all_wvl_new[0], all_iqe, all_abs
 
 
 
@@ -487,7 +487,7 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                     "z": z}
                 #print(generation_name.split(".")[0])
                 _export_hdf_data(generation_name.split(".")[0] + ".mat", **export_3d_averaged_data)
-                print("Averaged")
+                
     return Jph
 
 def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode: bool = False): #obsolete?
@@ -754,118 +754,6 @@ def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_s
         charge.select("materials::"+ name.SCName + "::" + name.SCName)
         charge.set("recombination.radiative.copt.constant", B)
         charge.save()
-    
-    """
-    if isinstance(name.GenName, list): 
-        #2T cell
-        sim_name = "2Terminal" 
-    else: 
-        #4T cell
-        sim_name=name.SCName
-        name.GenName = [name.GenName]
-        name.SCName = [name.SCName]
-        
-    for i in range(0, len(name.GenName)): #ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
-        charge.addimportgen()
-        charge.set("name", str(name.GenName[i][:-4]))
-        #Import generation file path
-        charge.set("volume type", "solid")
-        charge.set("volume solid", str(name.SCName[i]))
-        charge.importdataset(name.GenName[i])
-        charge.save()
-
-    if def_sim_region is not None: 
-        # Defines boundaries for simulation region
-        charge.select("geometry::" + name.Anode)
-        z_max = charge.get("z max")
-        charge.select("geometry::" + name.Cathode)
-        z_min = charge.get("z min")
-        charge.select("CHARGE::" + str(name.GenName[0][:-4])) #ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANY OTHER
-        x_span = charge.get("x span")
-        x = charge.get("x")
-        y_span = charge.get("y span")
-        y = charge.get("y")
-
-        # Creates the simulation region (2D or 3D)
-        charge.addsimulationregion()
-        charge.set("name", sim_name) 
-        if "2" in def_sim_region: 
-            charge.set("dimension", "2D Y-Normal")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-        elif "3" in def_sim_region:
-            charge.set("dimension", "3D")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-            charge.set("y span", y_span)
-        charge.select(str(sim_name))
-        charge.set("z max", z_max)
-        charge.set("z min", z_min)
-        charge.select("CHARGE")
-        charge.set("simulation region", sim_name)
-        charge.save()
-    # Defining solver parameters
-    if bias_regime == "forward":
-        charge.select("CHARGE")
-        charge.set("solver type", method_solver)
-        charge.set("enable initialization", True)
-        #charge.set("init step size",1) #unsure if it works properly
-        charge.save()
-        # Setting sweep parameters
-        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        if v_single_point is not None:
-            charge.set("sweep type", "single")
-            charge.save()
-            charge.set("voltage", v_single_point)
-            charge.save()
-            print("single")
-            for i in range(0, len(name.GenName)):
-                charge.select("CHARGE::"+ str(name.GenName[i][:-4]))
-                charge.delete()
-                charge.save()
-        else:
-            charge.set("sweep type", "range")
-            charge.save()
-            charge.set("range start", 0)
-            charge.set("range stop", v_max)
-            charge.set("range num points", 41)
-            charge.set("range backtracking", "enabled")
-            charge.save()
-    #Reverse bias regime
-    elif bias_regime == "reverse":
-        charge.select("CHARGE")
-        charge.set("solver type", "GUMMEL")
-        charge.set("enable initialization", False)
-        charge.save()
-        #Setting sweep parameters
-        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        charge.set("sweep type", "range")
-        charge.save()
-        charge.set("range start", 0)
-        charge.set("range stop", -1)
-        charge.set("range num points", 21)
-        charge.set("range backtracking", "enabled")
-        charge.save()
-    #Determining simulation region dimentions
-    if def_sim_region is not None:
-        sim_region = sim_name
-    else:
-        sim_region = charge.getnamed("CHARGE","simulation region")
-    charge.select(sim_region)
-    Lx = charge.get("x span")
-    if "3D" not in charge.get("dimension"):
-        charge.select("CHARGE")
-        Ly = charge.get("norm length")
-    else:
-        charge.select(str(sim_region))
-        Ly = charge.get("y span")
-    if B is not None:
-        charge.select("materials::"+ name.SCName + "::" + name.SCName)
-        charge.set("recombination.radiative.copt.constant", B)
-        charge.save()
-    """
     return Lx, Ly
     
 
@@ -1037,10 +925,11 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
     Jph = get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode, freq = freq, quantum_efficiency= True) #A/m2
     results = None
     for names in active_region_list:
-        if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
-            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
-            print(f'The B values: {B}')
-        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
+        B_temp = [B[i] for i in range(0, len(B))]
+        if B_temp[active_region_list.index(names)] == True: #checks if it will calculate B for that object
+            B_temp[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
+            print(f'The B values: {B_temp}')
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B_temp[active_region_list.index(names)], 
                           "method_solver": method_solver.upper(), "v_single_point": v_single_point[active_region_list.index(names)], "min_edge": min_edge[active_region_list.index(names)]}
         get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
         try:
@@ -1062,7 +951,7 @@ def run_fdtd_and_charge_EQE(active_region_list, properties, charge_file, path, f
         Ly = Ly * 100  # from m to cm
         area = Ly * Lx  # area in cm^2
         current_density = (np.array(current) * 1000) / area #mA/cm2
-        print(current_density)
+        #print(current_density)
         Jsc.append(current_density*10) #A/m2
     return Jsc, Jph #arrays with information about all active materials
 
@@ -1320,14 +1209,22 @@ def extract_B_radiative(active_region_list, path, fdtd_file, charge_file, proper
             abs_extraction(names, path, fdtd_file, properties)
         else:
             abs_data = pd.read_csv(results_path +'.csv')
-        abs_data = pd.read_csv(results_path +'.csv')   
-        wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
-        abs_data = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
-        energy = 1240/(wvl*1e9)
+        abs_data = pd.read_csv(results_path +'.csv')
         Eg, L, ni = charge_extract( names, path, charge_file, properties)
-        abs_data = adjust_abs(energy, abs_data, Eg) #new absorption with cut off below Eg
-        bb_spectrum = phi_bb(energy)
-        Jo  = e * np.trapz(-bb_spectrum*abs_data, energy) #A/m2
+        if  len(abs_data['wvl']) == 1: #for when only one wvl is concidered such as the IQE and EQE measurements
+            energy = 1240/(np.array(abs_data['wvl'])[0]*1e9)
+            #print('energy',energy)
+            bb_spectrum = phi_bb(energy)
+            #print('bb',bb_spectrum)
+            #print('abs',np.array(abs_data['abs'])[0])
+            Jo = e *(-bb_spectrum*np.array(abs_data['abs'])[0])
+        else:    
+            wvl = np.linspace(min(abs_data['wvl']), max(abs_data['wvl']), 70000) #wvl in m
+            abs_data = np.interp(wvl, abs_data['wvl'],abs_data['abs'])
+            energy = 1240/(wvl*1e9)
+            abs_data = adjust_abs(energy, abs_data, Eg) #new absorption with cut off below Eg
+            bb_spectrum = phi_bb(energy)
+            Jo  = e * np.trapz(-bb_spectrum*abs_data, energy) #A/m2
         Jo = Jo* 0.1 #mA/cm2
         B = Jo*10**-5/(e*(ni**2)*(L))
         B_list.append(B)
@@ -1354,18 +1251,18 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     # PEROVSKITE______________________
     pvk_iv = _get_replacement(np.array(pvk_iv).flatten())
 
-    plt.figure(figsize=(5.5,5))
-    plt.plot(pvk_v, pvk_iv, label = 'PVK subcell', c = 'steelblue')
+    #plt.figure(figsize=(5.5,5))
+    #plt.plot(pvk_v, pvk_iv, label = 'PVK subcell', c = 'steelblue')
 
     # Determine Voc,pvk
     Voc_pvk = pvk_v[np.where(pvk_iv == 0)[0]][0]
 
     # SILICON__________________________
-    plt.plot(si_v, _get_replacement(si_iv), label = 'Si subcell', c = 'yellowgreen', linestyle = '--')
+    #plt.plot(si_v, _get_replacement(si_iv), label = 'Si subcell', c = 'yellowgreen', linestyle = '--')
 
     si_v = si_v*2
     si_iv = _get_replacement(si_iv/2)
-    plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')
+    #plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')
 
     # Determine Voc,Si
     Voc_si = si_v[np.where(si_iv == 0)[0]][0]
@@ -1392,15 +1289,15 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     leng = min(len(tan_v), len(tan_i))
 
     # PLOT Tandem IV curve
-    plt.plot(tan_v[:leng], tan_i[:leng], label = 'PSTSC', c = 'crimson', linestyle='--')
-    plt.legend()
-    plt.ylabel('Current Density [mA/cm2]')
-    plt.xlabel('Voltage [V]')
-    plt.ylim(0,30)
-    plt.xlim(-0.1,2)
-    plt.grid(linestyle=':')
+    #plt.plot(tan_v[:leng], tan_i[:leng], label = 'PSTSC', c = 'crimson', linestyle='--')
+    #plt.legend()
+    #plt.ylabel('Current Density [mA/cm2]')
+    #plt.xlabel('Voltage [V]')
+    #plt.ylim(0,30)
+    #plt.xlim(-0.1,2)
+    #plt.grid(linestyle=':')
 
-    plt.savefig(os.path.join(folder, "iv_curve_4t.svg"), dpi = 300, bbox_inches = 'tight')
+    #plt.savefig(os.path.join(folder, "iv_curve_4t.svg"), dpi = 300, bbox_inches = 'tight')
 
     # Get IV curve variables
     voltage = si_v[:len(tandem_iv)].flatten()
@@ -1426,6 +1323,7 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
     PCE = ((FF * Voc * abs(Isc)*10) / (Ir)) * 100
 
     print(f'FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2')
+    return vals_v, new_j
 
 
 
