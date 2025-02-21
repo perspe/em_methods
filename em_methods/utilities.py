@@ -17,6 +17,11 @@ from em_methods.optimization.pso import particle_swarm
 from em_methods.lumerical.charge import  iv_curve, _import_generation
 from em_methods.pv.diode import luqing_liu_diode
 
+#dont know if necessary yet
+import h5py
+from mpl_toolkits.mplot3d import Axes3D
+
+
 # Get some module paths
 file_path = Path(os.path.abspath(__file__))
 parent_path = file_path.parent
