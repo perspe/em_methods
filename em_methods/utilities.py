@@ -14,7 +14,7 @@ from PyAstronomy import pyaC
 from itertools import product
 import shutil
 from em_methods.optimization.pso import particle_swarm
-from em_methods.lumerical.charge import  iv_curve
+from em_methods.lumerical.charge import  iv_curve, _import_generation
 from em_methods.pv.diode import luqing_liu_diode
 
 # Get some module paths
@@ -715,6 +715,65 @@ def band_plotting(
     if save_path is not None:
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.show()
+
+
+def plot_generation_3d(
+        path: str,
+        gen_file: str,
+        save_fig: bool = False,
+        figsize: Tuple[float, float] = (7, 7),
+        transparent: bool = True,
+        fontsize:int = 18,
+        ):
+    
+    """
+    Plots a 3D visualization of the generation rate data from a given file.
+
+    Args:
+
+        path : str - Directory path where the generation data file is located.
+        gen_file : str - Name of the generation data file to be loaded and visualized.
+        save_fig : bool, optional - Whether to save the generated figure as an image file. Default is False.
+        figsize : tuple of (float, float), optional - Size of the figure in inches (width, height). Default is (7, 7).
+        transparent : bool, optional - Whether the figure background should be transparent. Default is True.
+        fontsize : int, optional - Font size for axis labels and title. Default is 18.
+
+    """
+    
+    # Load generation data
+    generation_name = os.path.join(path, gen_file)
+    gen_data, x, y, z = _import_generation(generation_name)
+    
+    # Create 3D meshgrid for plotting
+    X, Y, Z = np.meshgrid(x, y, z, indexing='ij')
+    
+    # Flatten arrays for scatter plotting
+    X_flat = X.flatten()
+    Y_flat = Y.flatten()
+    Z_flat = Z.flatten()
+    G_flat = gen_data.flatten()
+    
+    # Create figure
+    fig = plt.figure(figsize=figsize)
+    ax = fig.add_subplot(111, projection='3d')
+    if transparent:
+        fig.patch.set_alpha(0)  # transparent background
+        ax.set_facecolor((1, 1, 1, 0))  #subplot background is also transparent
+     
+    plt.rcParams["svg.fonttype"] = "none"
+    plt.rcParams['figure.autolayout'] = True
+    plt.rcParams.update({'font.size': fontsize})
+    plt.rcParams["font.family"] = "Arial"
+
+    scatter = ax.scatter(X_flat*1e9, Y_flat*1e9, Z_flat*1e9, c=G_flat, cmap='viridis', marker='o')
+    ax.set_xlabel('X Coordinate [nm]')
+    ax.set_ylabel('Y Coordinate [nm]')
+    ax.set_zlabel('Z Coordinate [nm]')
+    ax.set_title('3D Generation Rate Visualization')
+    cbar = plt.colorbar(scatter, ax=ax, shrink=0.5, aspect=5)
+    cbar.set_label('Generation Rate')
+    if save_fig:
+        plt.savefig(os.path.join(path, str(gen_file) + "plot.png"))
 
 
 def iv_parameters(voltage, current_density, area, current=[]):
