@@ -733,16 +733,13 @@ def plot_generation_3d(
     
     """
     Plots a 3D visualization of the generation rate data from a given file.
-
     Args:
-
         path : str - Directory path where the generation data file is located.
         gen_file : str - Name of the generation data file to be loaded and visualized.
         save_fig : bool, optional - Whether to save the generated figure as an image file. Default is False.
         figsize : tuple of (float, float), optional - Size of the figure in inches (width, height). Default is (7, 7).
         transparent : bool, optional - Whether the figure background should be transparent. Default is True.
         fontsize : int, optional - Font size for axis labels and title. Default is 18.
-
     """
     
     # Load generation data
