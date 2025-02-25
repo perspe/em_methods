@@ -490,110 +490,6 @@ def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = Fa
                 
     return Jph
 
-def get_gen_eqe(path, fdtd_file, properties, active_region_list, freq, avg_mode: bool = False): #obsolete?
-    """
-    Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
-    (in same directory as FDTD file)
-    Args:
-            path: directory where the FDTD and CHARGE files exist
-            fdtd_file: String FDTD file name
-            properties: Dictionary with the property object and property names and values
-            active_region_list: list with SimInfo dataclassses with the details of the simulation 
-                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            freq: (float) incident photon frequency in Hz at which the generation will be calculated 
-    Returns: 
-            Jph: array with active_region_list length with the FDTD generation at frequency freq 
-                (e.g. for a 2 material simualtion at frequency freq Jph = [jph1(freq), jph2(freq)])
-    """
-    fdtd_path = os.path.join(path, fdtd_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
-    shutil.copyfile(fdtd_path, new_filepath)
-    Jph = []
-    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
-        # CHANGE CELL GEOMETRY
-        for structure_key, structure_value in properties.items():
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                fdtd.set(parameter_key, parameter_value)
-        fdtd.save()
-        # EXPORT GENERATION FILES
-        for names in active_region_list:    
-            fdtd.setglobalsource('wavelength start', freq)
-            fdtd.setglobalsource('wavelength stop', freq)
-            fdtd.save()
-            fdtd.run()
-            fdtd.runanalysis(names.SolarGenName)
-            jph = fdtd.getdata(active_region_list[0].SolarGenName, "Jsc")
-            Jph.append(jph)
-
-            if isinstance(names.GenName, list): #if it is 2T:
-                for i in range(0, len(names.GenName)):
-                    gen_obj = names.SolarGenName[i] 
-                    file = names.GenName[i]
-                    g_name = file.replace(".mat", "")
-                    fdtd.select(str(gen_obj))
-                    fdtd.set("export filename", str(g_name))
-            else: #if it is 4T:
-                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
-                file = names.GenName # generation file name
-                g_name = file.replace(".mat", "")
-                fdtd.select(str(gen_obj))
-                fdtd.set("export filename", str(g_name))
-        fdtd.close()
-        os.remove(new_filepath)
-
-        
-        # # EXPORT GENERATION FILES
-        # for names in active_region_list:
-        #     gen_obj = names.SolarGenName  # Solar Generation analysis object name
-        #     file = names.GenName # generation file name
-        #     g_name = file.replace(".mat", "")
-        #     fdtd.select(str(gen_obj))
-        #     fdtd.set("export filename", str(g_name))
-        # fdtd.close()
-        # os.remove(new_filepath)
-
-        # AVERAGE GENERATION IN Y AXIS
-        
-        if avg_mode: 
-            print("Generation averaged, used for Voids")
-        else: 
-            print("Non void generation -> not averaged")
-        if avg_mode:
-            for names in active_region_list:
-                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
-                file = names.GenName
-                generation_name = os.path.join(path, file)
-
-                # Import generation data
-                gen_data, x, y, z = _import_generation(generation_name)
-                # Determine the average results
-                y_gen, xy_gen = _average_generation(gen_data, x.flatten(), y.flatten())
-
-                # export_y_averaged_data = {
-                #     "G": y_gen,
-                #     "x": x,
-                #     "z": z[:, np.newaxis]
-                # }
-
-                # _export_hdf_data("y_average_" + file.split(".")[0] + ".hdf5",
-                #                 **export_y_averaged_data)
-
-                shape_3d = np.zeros((len(x), len(z), len(y)))
-                y_gen_3d = y_gen + shape_3d
-
-                export_3d_averaged_data = {
-                    "G": np.transpose(y_gen_3d, (1, 0, 2)),
-                    "x": x,
-                    "y": y,
-                    "z": z}
-
-                _export_hdf_data(file.split(".")[0] + ".mat", **export_3d_averaged_data)
-                print("Averaged")
-
-        return Jph
 
 def __set_iv_parameters(charge, bias_regime: str, name: SimInfo, v_max, method_solver, def_sim_region=None, B = None, v_single_point = None, generation: str = None, min_edge = None, range_num_points = 101 ):
     """ 
@@ -1031,8 +927,7 @@ def run_fdtd_and_charge_multi(active_region_list, properties, charge_file, path,
     return PCE, FF, Voc, Jsc
 
 
-
-def band_diagram(active_region_list,charge_file, path, properties, def_sim_region = None, v_single_point = 0, B = None, method_solver = "NEWTON", generation= None ):
+def band_diagram(active_region_list, properties, charge_file, path, fdtd_file, def_sim_region = None, v_single_point:int = 0, B = None, method_solver = "GUMMEL", min_edge= None, generation= None ):
     """ 
     Extracts the band diagram in a simulation region at v_single_point Volts. ATTENTION the monitor has to be placed preemptively in CHARGE with the desired geometry and position
     Args:
@@ -1052,14 +947,26 @@ def band_diagram(active_region_list,charge_file, path, properties, def_sim_regio
             Thickness, Ec, Ev, Efn, Efp: array of np.arrays with active_region_list size  
                         (e.g. if the active_region_list has 2 materials: Ec = [[...]], [...]] )
     """ 
+    valid_solver = {"GUMMEL", "NEWTON"}
+    if method_solver.upper() not in valid_solver:
+        raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
+    if min_edge == None:
+        min_edge = [None for _ in range(0, len(active_region_list))]
     if B == None:
         B = [None for _ in range(0, len(active_region_list))]
+    
     charge_path = os.path.join(path, charge_file)
     Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
     for names in active_region_list:
+        if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
+            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
+            print(f'The B values: {B}')
+        conditions_dic = {"bias_regime":"forward","name": names, "v_max": None,"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
+                        "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "generation": generation}
         get_results = {"results": {"CHARGE::monitor": "bandstructure"}}  # get_results: Dictionary with the properties to be calculated
+        
         results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**{"bias_regime":"forward","name": names, "v_max": None ,"def_sim_region":def_sim_region, "B":B[active_region_list.index(names)], "method_solver": method_solver,"v_single_point":v_single_point, "generation": generation})
+                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
         bandstructure =results[0]
         ec= bandstructure['results.CHARGE::monitor.bandstructure']["Ec"].flatten()
         thickness = bandstructure['results.CHARGE::monitor.bandstructure']["z"].flatten()
