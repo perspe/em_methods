@@ -1,52 +1,32 @@
-import numpy as np
-import os
-import matplotlib.pyplot as plt
-from typing import Union, Dict, List
+from dataclasses import dataclass
 import logging
-from uuid import uuid4
+from multiprocessing import Manager, Queue
+import os
 import shutil
 import sys
-import h5py
 import time
+from typing import Dict, List, Union
+from uuid import uuid4
+
+import h5py
+import numpy as np
+import pandas as pd
+from scipy.constants import c, e, h, k
 from scipy.integrate import trapz
-from dataclasses import dataclass 
-from matplotlib.patches import Rectangle
+
 from PyAstronomy import pyaC
-from multiprocessing import Queue, Manager
 from em_methods.lumerical.lum_helper import (
+    LumMethod,
+    LumericalError,
     RunLumerical,
     _get_lumerical_results,
-    LumericalError,
-    LumMethod,
 )
+import lumapi
 
 
 # Get module logger
 logger = logging.getLogger("sim")
 
-# Connect to Lumerical
-# Determine the base path for lumerical
-if os.name == "nt":
-    LM_BASE: str = os.path.join("C:\\", "Program Files", "Lumerical")
-elif os.name == "posix":
-    LM_BASE: str = os.path.join("/opt", "lumerical")
-else:
-    raise Exception("Operating system not supported...")
-# Determine the newest version
-LM_API: str = os.path.join("api", "python")
-lm_dir_list: List[str] = os.listdir(LM_BASE)
-if len(lm_dir_list) == 1:
-    LUMAPI_PATH: str = os.path.join(LM_BASE, lm_dir_list[0], LM_API)
-else:
-    v_num: List[int] = [int(v_i[1:]) for v_i in lm_dir_list if v_i[0] == "v"]
-    LUMAPI_PATH: str = os.path.join(LM_BASE, f"v{max(v_num)}", LM_API)
-logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
-sys.path.append(LUMAPI_PATH)
-if os.name == "nt":
-    os.add_dll_directory(LUMAPI_PATH)
-import lumapi
-import pandas as pd
-from scipy.constants import h, c, k, e
 
 
 @dataclass(frozen = False)
