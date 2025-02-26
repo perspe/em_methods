@@ -424,114 +424,80 @@ def _export_hdf_data(filename, **kwargs):
             file.create_dataset(key, data=value, dtype="double")
 
 
-def get_gen(path, fdtd_file, properties, active_region_list, avg_mode: bool = False, freq = None, quantum_efficiency = False):
+def __prepare_gen(fdtd_handler, active_regions, override_freq):
+    """Function to preprocess the files necessary in get_gen function"""
+    for names in active_regions:
+        for gen_obj, file in zip(names.SolarGenName_List, names.GenName_List):
+            g_name = file.replace(".mat", "")
+            fdtd_handler.select(gen_obj)
+            fdtd_handler.set("export filename", g_name)
+        if override_freq is not None:
+            fdtd_handler.setglobalsource("wavelength start", override_freq)
+            fdtd_handler.setglobalsource("wavelength stop", override_freq)
+
+
+def get_gen(
+    fdtd_file: str,
+    properties,
+    active_regions: List[SimInfo],
+    avg_mode: bool = False,
+    override_freq: Union[None, float] = None,
+):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
     (in same directory as FDTD file)
     Args:
-            path: directory where the FDTD and CHARGE files exist
-            fdtd_file: String FDTD file name
-            properties: Dictionary with the property object and property names and values
-            active_region_list: list with SimInfo dataclassses with the details of the simulation 
-                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                        SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            avg_mode: bool that determines whether or not the generation rate is averaged in y (necessary for light-trapping)
+        fdtd_file: String FDTD file name
+        properties: Dictionary with the property object and property names and values
+        active_regions: list with SimInfo dataclassses with the details of the simulations
+            [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom")]
+        avg_mode: bool that determines whether or not the generation rate is averaged in y (necessary for light-trapping)
+        override_freq: Override frequencies in the file (necessary for QE calculations)
     """
-    fdtd_path = os.path.join(path, fdtd_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_filepath: str = os.path.join(path, override_prefix + "_" + fdtd_file)
-    shutil.copyfile(fdtd_path, new_filepath)
-    log_file: str = os.path.join(
-        path, f"{override_prefix}_{os.path.splitext(fdtd_file)[0]}_p0.log"
+    basepath, basename = os.path.split(fdtd_file)
+    results = {"data": {}, "results": {}}
+    for active_region in active_regions:
+        results["data"].update(
+            {
+                active_subregion: "Jsc"
+                for active_subregion in active_region.SolarGenName_List
+            }
+        )
+        results["results"].update(
+            {
+                active_subregion: "Pabs_total"
+                for active_subregion in active_region.SolarGenName_List
+            }
+        )
+    logger.debug(f"Results to obtain in get_gen: {results}")
+    res, *_ = fdtd_run(
+        fdtd_file,
+        properties,
+        results,
+        func=__prepare_gen,
+        delete=True,
+        **{"active_regions": active_regions, "override_freq": override_freq},
     )
-    Jph = []
-    with lumapi.FDTD(filename=new_filepath, hide=True) as fdtd:
-        # CHANGE CELL GEOMETRY
-        fdtd.switchtolayout()
-        for structure_key, structure_value in properties.items():
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                fdtd.set(parameter_key, parameter_value)
-        fdtd.save()
-
-        # EXPORT GENERATION FILES
-        for names in active_region_list:
-            if isinstance(names.GenName, list): #if it is 2T:
-                for i in range(0, len(names.GenName)):
-                    gen_obj = names.SolarGenName[i] 
-                    file = names.GenName[i]
-                    g_name = file.replace(".mat", "")
-                    fdtd.select(str(gen_obj))
-                    fdtd.set("export filename", str(g_name))
-            else: #if it is 4T:
-                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
-                file = names.GenName # generation file name
-                g_name = file.replace(".mat", "")
-                fdtd.select(str(gen_obj))
-                fdtd.set("export filename", str(g_name))
-            if quantum_efficiency:
-                if freq is None:
-                    raise ValueError("Frequency must be provided for quantum efficiecny calculation.")
-                fdtd.setglobalsource('wavelength start', freq)
-                fdtd.setglobalsource('wavelength stop', freq)
-                fdtd.save()
-                fdtd.run()
-                fdtd.runanalysis(names.SolarGenName)
-                #fdtd.runanalysis()
-                jph = fdtd.getdata(names.SolarGenName, "Jsc")
-                Jph.append(jph)
-                abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
-                results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
-                results_path = os.path.join(path, names.SolarGenName)
-                results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
-                fdtd.switchtolayout() #needed, do not comment out                
-        if not quantum_efficiency: 
-            fdtd.run()
-            fdtd.runanalysis()
-            for names in active_region_list: 
-                abs = fdtd.getresult(names.SolarGenName, "Pabs_total") # will do for all materials
-                results = pd.DataFrame({'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']})
-                results_path = os.path.join(path, names.SolarGenName)
-                results.to_csv(results_path +'.csv', header = ('wvl', 'abs'), index = False)
-            
-        fdtd.save()
-        fdtd.close()
-        os.remove(new_filepath)
-        #os.remove(log_file)
-
-        # AVERAGE GENERATION IN Y AXIS
-        if avg_mode:
-            print("Averaged Genration -> 3d to 2d")
-            for names in active_region_list:
-                gen_obj = names.SolarGenName  # Solar Generation analysis object name 
-                file = names.GenName
-                generation_name = os.path.join(path, file)
-
-                # Import generation data
+    logger.debug(f"Get Gen run_fdtd results: {res}")
+    if avg_mode:
+        logger.debug("Averaged Genration -> 3d to 2d")
+        for active_region in active_regions:
+            for genregion in active_region.GenName_List:
+                generation_name = os.path.join(basepath, genregion)
+                logger.debug(f"New Generation Name: {generation_name}")
                 gen_data, x, y, z = _import_generation(generation_name)
-                # Determine the average results
-                y_gen, xy_gen = _average_generation(gen_data, x.flatten(), y.flatten())
-                # export_y_averaged_data = {
-                #     "G": y_gen,
-                #     "x": x,
-                #     "z": z[:, np.newaxis]
-                # }
-
-                # _export_hdf_data("y_average_" + file.split(".")[0] + ".hdf5",
-                #                 **export_y_averaged_data)
-
-                shape_3d = np.zeros((len(x), len(z), len(y)))
-                y_gen_3d = y_gen + shape_3d
-
+                y_gen, _ = _average_generation(gen_data, x.flatten(), y.flatten())
+                y_gen_3d = y_gen + np.zeros((len(x), len(z), len(y))
                 export_3d_averaged_data = {
                     "G": np.transpose(y_gen_3d, (1, 0, 2)),
                     "x": x,
                     "y": y,
-                    "z": z}
-                #print(generation_name.split(".")[0])
-                _export_hdf_data(generation_name.split(".")[0] + ".mat", **export_3d_averaged_data)
-                
-    return Jph
+                    "z": z,
+                }
+                _export_hdf_data(
+                    generation_name, **export_3d_averaged_data
+                )
+    return res
 
 
 def __set_iv_parameters(

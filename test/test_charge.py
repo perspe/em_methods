@@ -136,3 +136,21 @@ class TestCHARGE(unittest.TestCase):
                 active_region_list, properties, charge_file, path, fdtd_file,"2d")
             PCE.append(pce)
         print(PCE)
+    
+    def test_get_gen(self):
+        """ Test function to extract generation profiles """
+        test_file_fdtd = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp")
+        pvk_siminfo = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
+        si_siminfo = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
+        active_regions = [si_siminfo, pvk_siminfo]
+        jsc = get_gen(test_file_fdtd, {}, active_regions, avg_mode=True)
+
+
+    def test_run_fdtd_and_charge_4t(self):
+        """ Run single instance of run_fdtd_and_charge function """
+        test_file_fdtd = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp")
+        test_file_charge = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev")
+        pvk_siminfo = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
+        si_siminfo = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
+        active_regions = [si_siminfo, pvk_siminfo]
+        run_fdtd_and_charge(active_regions, {}, test_file_charge, test_file_fdtd)
