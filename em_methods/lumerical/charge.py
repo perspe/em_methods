@@ -11,7 +11,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from scipy.constants import c, e, h, k
-from scipy.integrate import trapz
+from scipy.integrate import trapezoid
 from scipy.interpolate import interp1d
 import time
 
@@ -1352,59 +1352,28 @@ def phi_bb(energy: Union[float, npt.NDArray], temperature: Union[float, npt.NDAr
     )
 
 
-def extract_B_radiative(
-    active_region_list, path, fdtd_file, charge_file, properties={}, run_abs=True
-):
+def rad_recombination_coeff(
+    wavelength: Union[float, npt.NDArray],
+    absorption: Union[float, npt.NDArray],
+    bandgap: float,
+    z_span: float,
+    edensity: float,
+) -> float:
     """
-    Function that extracts the radiative constant (B) for each material in the active_region_list according to the SQ but with an FDTD derived absorption
-
-    Args:
-        active_region_list: list with SimInfo dataclassses with the details of the simulation
-                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-        properties: (Dictionary) with the property object and property names and values
-        charge_file: (str) name of CHARGE file
-        path: (str) directory where the FDTD and CHARGE files exist
-        fdtd_file: (str) name of FDTD file
-        run_abs: (bool) determines whether or not absorption need to be recalculated. For most cases it is necessary
-    Returns:
-        B_list: (array) with the B constant [cm3/s] for all the mateials in the active_region_list
+    Calculate the radiative constant (B) based on the SQ limit,
+    but considering the FDTD-derived absorption
     """
-    B_list = []
-    for names in active_region_list:
-        results_path = os.path.join(path, names.SolarGenName)
-        if run_abs:
-            abs_extraction(names, path, fdtd_file, properties)
-        elif not os.path.isfile(results_path + ".csv"):
-            abs_extraction(names, path, fdtd_file, properties)
-        else:
-            abs_data = pd.read_csv(results_path + ".csv")
-        abs_data = pd.read_csv(results_path + ".csv")
-        Eg, L, ni = charge_extract(names, path, charge_file, properties)
-        if (
-            len(abs_data["wvl"]) == 1
-        ):  # for when only one wvl is concidered such as the IQE and EQE measurements
-            energy = 1240 / (np.array(abs_data["wvl"])[0] * 1e9)
-            # print('energy',energy)
-            bb_spectrum = phi_bb(energy)
-            # print('bb',bb_spectrum)
-            # print('abs',np.array(abs_data['abs'])[0])
-            Jo = e * (-bb_spectrum * np.array(abs_data["abs"])[0])
-        else:
-            wvl = np.linspace(
-                min(abs_data["wvl"]), max(abs_data["wvl"]), 70000
-            )  # wvl in m
-            abs_data = np.interp(wvl, abs_data["wvl"], abs_data["abs"])
-            energy = 1240 / (wvl * 1e9)
-            abs_data = adjust_abs(
-                energy, abs_data, Eg
-            )  # new absorption with cut off below Eg
-            bb_spectrum = phi_bb(energy)
-            Jo = e * np.trapz(-bb_spectrum * abs_data, energy)  # A/m2
-        Jo = Jo * 0.1  # mA/cm2
-        B = Jo * 10**-5 / (e * (ni**2) * (L))
-        B_list.append(B)
-    return B_list
+    energy = 1240.0 / (wavelength * 1e9)
+    bb_spectrum = phi_bb(energy)
+    if not isinstance(energy, (int, float)) and not isinstance(
+        absorption, (int, float)
+    ):
+        absorption = adjust_abs(energy, absorption, bandgap)
+        dark_current: float = e * trapezoid(-bb_spectrum * absorption, energy)
+    else:
+        dark_current = e * (-bb_spectrum * absorption)
+    dark_current *= 0.1  # mA/cm2
+    return dark_current * 10**-5 / (e * (edensity**2) * (z_span))
 
 
 def _get_replacement(lst):
