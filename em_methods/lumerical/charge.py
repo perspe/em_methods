@@ -3,7 +3,7 @@ import logging
 from multiprocessing import Manager, Queue
 import os
 import shutil
-from typing import Dict, Union, List, overload
+from typing import Dict, Union, List, overload, Tuple
 import numpy.typing as npt
 from uuid import uuid4
 
@@ -12,6 +12,8 @@ import numpy as np
 import pandas as pd
 from scipy.constants import c, e, h, k
 from scipy.integrate import trapz
+from scipy.interpolate import interp1d
+import time
 
 from PyAstronomy import pyaC
 from em_methods.lumerical.lum_helper import (
@@ -1300,17 +1302,28 @@ def charge_extract(names, path, charge_file, properties={}):
     return Eg, L, ni
 
 
-def adjust_abs(energy, abs_data, Eg):
+def adjust_abs(
+    energy: npt.NDArray,
+    absorption: npt.NDArray,
+    bandgap: float,
+    interp_points: int = 1000,
+) -> Tuple[npt.NDArray, npt.NDArray]:
     """
-    Function that cutsoff absorption data below bandgap. Useful when there is poor FDTD fitting to calculate the absorption.
+    Function that cuts absorption data below bandgap.
+    Useful when there is poor FDTD fitting to calculate the absorption.
     Args:
-        energy: (array) energy values in eV
-        abs_data: (array) absorption data [0-1]
-        Eg: band gap [eV]
+        energy: energy values in eV
+        abs_data: absorption data [0-1]
+        bandgap (in eV)
     Returns:
-            array with absorption cutoff below bandgap
+        array with absorption cutoff below bandgap
     """
-    return [0 if e < Eg else abs_data[i] for i, e in enumerate(energy)]
+    interp_abs = interp1d(energy, absorption)
+    new_energy = np.linspace(np.min(energy), np.max(energy), interp_points)
+    new_abs = interp_abs(new_energy)
+    cutoff_mask = new_energy < bandgap
+    return new_energy[cutoff_mask], new_abs[cutoff_mask]
+
 
 @overload
 def phi_bb(energy: float, temperature: float = 300.0) -> float: ...
