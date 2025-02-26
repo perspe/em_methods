@@ -3,7 +3,8 @@ import logging
 from multiprocessing import Manager, Queue
 import os
 import shutil
-from typing import Dict, Union, List
+from typing import Dict, Union, List, overload
+import numpy.typing as npt
 from uuid import uuid4
 
 import h5py
@@ -1311,22 +1312,31 @@ def adjust_abs(energy, abs_data, Eg):
     """
     return [0 if e < Eg else abs_data[i] for i, e in enumerate(energy)]
 
+@overload
+def phi_bb(energy: float, temperature: float = 300.0) -> float: ...
 
-def phi_bb(E):
+@overload
+def phi_bb(energy: npt.NDArray, temperature: Union[float, npt.NDArray] = 300.0) -> npt.NDArray: ...
+
+@overload
+def phi_bb(energy: Union[float, npt.NDArray], temperature: npt.NDArray = 300.0) -> npt.NDArray: ...
+
+
+def phi_bb(energy: Union[float, npt.NDArray], temperature: Union[float, npt.NDArray]=300.0) -> Union[float, npt.NDArray]:
     """
     Function that derives the blackbody spectrum at 300K in a given energy range defined by E[eV]
     Args:
-        E: (array) energy in ev
+        energy: (array) energy in ev
     Returns:
-        array with balck body spectrum at 300K
+        Black Body Spectrum (eV.s.m2)-1
     """
     h_ev = h / e
     k_b = k / e
     return (
-        (2 * np.pi * E**2)
+        (2 * np.pi * energy**2)
         / (h_ev**3 * c**2)
-        * (np.exp(E / (k_b * 300)) - 1) ** -1
-    )  # (eV.s.m2)-1
+        * (np.exp(energy / (k_b * temperature)) - 1) ** -1
+    )
 
 
 def extract_B_radiative(
