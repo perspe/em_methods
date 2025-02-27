@@ -32,11 +32,17 @@ logger = logging.getLogger("dev")
 
 @dataclass(frozen=False)
 class SimInfo:
+    """
+    Structure with the connection properties between FDTD and CHARGE
+    """
+
     SolarGenName: Union[str, List[str]]
     GenName: Union[str, List[str]]
     SCName: Union[str, List[str]]
     Cathode: str
     Anode: str
+    RadCoeff: Union[float, None, List[Union[float, None]]] = None
+    """ Extract properties always as list """
 
     @property
     def SolarGenName_List(self) -> List[str]:
@@ -53,6 +59,21 @@ class SimInfo:
     @property
     def SCName_List(self) -> List[str]:
         return self.SCName if isinstance(self.SCName, list) else [self.SCName]
+
+    @property
+    def RadCoeff_List(self) -> List[Union[float, None]]:
+        if isinstance(self.RadCoeff, (float, int)) or self.RadCoeff is None:
+            return [self.RadCoeff]
+        else:
+            return self.RadCoeff
+
+    @property
+    def simObjects(self):
+        return len(self.SolarGenName_List)
+
+    def getNamedGeneration(self, genname):
+        """This extracts the extension from the generation filename"""
+        return genname[:-4]
 
 
 """ Main functions """
