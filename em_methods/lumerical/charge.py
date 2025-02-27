@@ -183,7 +183,7 @@ def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
     return results
 
 
-def extract_iv_data(results, names):
+def __charge_extract_iv_data(results, active_region):
     """
     Obtains the performance metrics of a solar cell
     Args:
@@ -196,14 +196,13 @@ def extract_iv_data(results, names):
             If the curve is dark: current_density, voltage
     """
 
-    current = np.array(results["results.CHARGE." + str(names.Cathode)]["I"])
+    current = np.array(results["results.CHARGE." + active_region.Cathode]["I"])
     voltage = np.array(
-        results["results.CHARGE." + str(names.Cathode)]["V_" + str(names.Cathode)]
+        results["results.CHARGE." + active_region.Cathode]["V_" + active_region.Cathode]
     )
-    Lx = results["func_output"][0]
-    Ly = results["func_output"][1]
-
-    return current, voltage, Lx, Ly
+    x_span = results["func_output"][0]
+    y_span = results["func_output"][1]
+    return current, voltage, x_span, y_span
 
 
 def iv_curve(
@@ -511,16 +510,14 @@ def get_gen(
                 logger.debug(f"New Generation Name: {generation_name}")
                 gen_data, x, y, z = _import_generation(generation_name)
                 y_gen, _ = _average_generation(gen_data, x.flatten(), y.flatten())
-                y_gen_3d = y_gen + np.zeros((len(x), len(z), len(y))
+                y_gen_3d = y_gen + np.zeros((len(x), len(z), len(y)))
                 export_3d_averaged_data = {
                     "G": np.transpose(y_gen_3d, (1, 0, 2)),
                     "x": x,
                     "y": y,
                     "z": z,
                 }
-                _export_hdf_data(
-                    generation_name, **export_3d_averaged_data
-                )
+                _export_hdf_data(generation_name, **export_3d_averaged_data)
     return res
 
 
@@ -1278,57 +1275,7 @@ def abs_extraction(names, path, fdtd_file, properties={}):
     # os.remove(log_file_fdtd)
 
 
-# untested:
-def charge_extract(names, path, charge_file, properties={}):
-    """
-    Extracts the Band gap, lenght and intrinsic carrier density of material in "names"
-    Args:
-            names: SimInfo.SCname from SimInfo dataclassses with the details of the simulation
-            properties: (Dictionary) with the property object and property names and values
-            path: (str) directory where the FDTD and CHARGE files exist
-            charge_file: (str) name of CHARGE file
-            properties: (Dictionary) with the property object and property names and values
-
-    Returns:
-            Eg:(float) Band gap  [eV]
-            L:(float) [m]
-            ni:(float) [1/cm3]
-
-    """
-    charge_path = os.path.join(path, charge_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_charge_file = override_prefix + "_" + charge_file
-    new_filepath_charge: str = os.path.join(path, new_charge_file)
-    shutil.copyfile(charge_path, new_filepath_charge)
-    log_file_charge: str = os.path.join(
-        path, f"{override_prefix}_{os.path.splitext(charge_file)[0]}_p0.log"
-    )
-    with lumapi.DEVICE(filename=new_filepath_charge, hide=True) as charge:
-        charge.switchtolayout()
-        for structure_key, structure_value in properties.items():
-            charge.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                charge.set(parameter_key, parameter_value)
-        charge.save()
-        charge.select("materials::" + names.SCName + "::" + names.SCName)
-        T = 300
-        Eg = charge.get("electronic.gamma.Eg.constant")
-        mn = charge.get("electronic.gamma.mn.constant")
-        mp = charge.get("electronic.gamma.mp.constant")
-        mn = mn * 9.11 * 10**-31
-        mp = mp * 9.11 * 10**-31
-        Nc = 2 * ((2 * np.pi * mn * k * T / (h**2)) ** 1.5) * 10**-6
-        Nv = 2 * ((2 * np.pi * mp * k * T / (h**2)) ** 1.5) * 10**-6
-        ni = ((Nv * Nc) ** 0.5) * (np.exp(-Eg * e / (2 * k * T)))
-        charge.select("geometry::" + names.SCName)
-        L = charge.get("z span")  # in m
-        charge.close()
-    os.remove(new_filepath_charge)
-    # os.remove(log_file_charge)
-    return Eg, L, ni
-
-
-def adjust_abs(
+def _adjust_abs(
     energy: npt.NDArray,
     absorption: npt.NDArray,
     bandgap: float,
@@ -1351,17 +1298,54 @@ def adjust_abs(
     return new_energy[cutoff_mask], new_abs[cutoff_mask]
 
 
-@overload
-def phi_bb(energy: float, temperature: float = 300.0) -> float: ...
+def intrinsic_carrier_density(
+    mn: float, mp: float, bandgap: float, temperature: float = 300
+):
+    """
+    Extracts the Bandgap, z_span and intrinsic carrier density of material in "names"
+    Args:
+            names: SimInfo.SCname from SimInfo dataclassses with the details of the simulation
+            properties: (Dictionary) with the property object and property names and values
+            path: (str) directory where the FDTD and CHARGE files exist
+            charge_file: (str) name of CHARGE file
+            properties: (Dictionary) with the property object and property names and values
+
+    Returns:
+            Eg:(float) Band gap  [eV]
+            L:(float) [m]
+            ni:(float) [1/cm3]
+
+    """
+    mn = mn * 9.11 * 10**-31
+    mp = mp * 9.11 * 10**-31
+    Nc = 2 * ((2 * np.pi * mn * k * temperature / (h**2)) ** 1.5) * 10**-6
+    Nv = 2 * ((2 * np.pi * mp * k * temperature / (h**2)) ** 1.5) * 10**-6
+    ni = ((Nv * Nc) ** 0.5) * (np.exp(-bandgap * e / (2 * k * bandgap)))
+    return ni
+
 
 @overload
-def phi_bb(energy: npt.NDArray, temperature: Union[float, npt.NDArray] = 300.0) -> npt.NDArray: ...
+def blackbody_spectrum(energy: float, temperature: float = 300.0) -> float:
+    ...
+
 
 @overload
-def phi_bb(energy: Union[float, npt.NDArray], temperature: npt.NDArray = 300.0) -> npt.NDArray: ...
+def blackbody_spectrum(
+    energy: npt.NDArray, temperature: Union[float, npt.NDArray] = 300.0
+) -> npt.NDArray:
+    ...
 
 
-def phi_bb(energy: Union[float, npt.NDArray], temperature: Union[float, npt.NDArray]=300.0) -> Union[float, npt.NDArray]:
+@overload
+def blackbody_spectrum(
+    energy: Union[float, npt.NDArray], temperature: npt.NDArray
+) -> npt.NDArray:
+    ...
+
+
+def blackbody_spectrum(
+    energy: Union[float, npt.NDArray], temperature: Union[float, npt.NDArray] = 300.0
+) -> Union[float, npt.NDArray]:
     """
     Function that derives the blackbody spectrum at 300K in a given energy range defined by E[eV]
     Args:
@@ -1390,11 +1374,11 @@ def rad_recombination_coeff(
     but considering the FDTD-derived absorption
     """
     energy = 1240.0 / (wavelength * 1e9)
-    bb_spectrum = phi_bb(energy)
+    bb_spectrum = blackbody_spectrum(energy)
     if not isinstance(energy, (int, float)) and not isinstance(
         absorption, (int, float)
     ):
-        absorption = adjust_abs(energy, absorption, bandgap)
+        absorption = _adjust_abs(energy, absorption, bandgap)
         dark_current: float = e * trapezoid(-bb_spectrum * absorption, energy)
     else:
         dark_current = e * (-bb_spectrum * absorption)
@@ -1499,65 +1483,3 @@ def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
         f"FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2"
     )
     return vals_v, new_j
-
-    # OLD CODE
-    """
-    def plot(PCE, FF, Voc, Jsc, current_density, voltage, stop, regime:str, P): #NOT FINISHED -> regime should not be an input, the performance metrics should be enough
-  
-    Plots the IV curve
-    Args:
-            PCE, FF, Voc, Jsc: Perfomance metrics obtained from the iv_curve funtion.  
-            current_density, voltage: Arrays obtained from the iv_curve funtion
-            P: Array obtained from the iv_curve funtion with the Power values through out the iv curve.
-            stop: Voc position in voltage array 
-            regime: "am" or "dark" for illuminated IV or dark IV
-    
-    fig, ax = plt.subplots()
-    if regime == 'am' and stop is not np.nan and Voc is not np.nan:
-        plt.plot(voltage[: stop + 2], current_density[: stop + 2], "o-")
-        plt.plot(Voc, 0, "o", color="red")
-        props = dict(boxstyle="round", facecolor="white", alpha=0.5)
-        ax.add_patch(
-                Rectangle(
-                    (
-                        voltage[find_index(P, max(P))],
-                        current_density[find_index(P, max(P))],
-                    ),
-                    -voltage[find_index(P, max(P))],
-                    -current_density[find_index(P, max(P))],
-                    facecolor="lightsteelblue",
-                )
-            )
-        textstr = f"Voc = {Voc:.3f}V \n Jsc =  {Jsc:.4f} mA/cm² \n FF = {FF:.3f} \n PCE = {PCE:.3f}%"
-        plt.text(
-            0.05,
-            0.80,
-            textstr,
-            transform=ax.transAxes,
-            fontsize=17,
-            verticalalignment="top",
-            bbox=props,
-            )
-        plt.ylabel("Current density [mA/cm²] ")
-        plt.xlabel("Voltage [V]")
-        plt.axhline(0, color="gray", alpha=0.3)
-        plt.axvline(0, color="gray", alpha=0.3)
-        plt.grid()
-        plt.show()
-
-    if regime == 'dark':
-        plt.plot(voltage, current_density, "o-")
-        plt.ylabel("Current density [mA/cm²] ")
-        plt.xlabel("Voltage [V]")
-        plt.axhline(0, color="gray", alpha=0.3)
-        plt.axvline(0, color="gray", alpha=0.3)
-        plt.grid()
-        plt.show()
-    """
-
-    """
-    
-def find_index(wv_list, n):
-    index = [i for i in range(0, len(wv_list)) if wv_list[i] == n]
-    return index[0]
-    """
