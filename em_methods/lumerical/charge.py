@@ -524,18 +524,106 @@ def get_gen(
     return res
 
 
+def __def_sim_region(charge_handler, active_region, def_sim_region):
+    if def_sim_region is None:
+        return charge_handler.getnamed("CHARGE", "simulation region")
+    charge_handler.select("geometry::" + active_region.Anode)
+    z_max = charge_handler.get("z max")
+    charge_handler.select("geometry::" + active_region.Cathode)
+    z_min = charge_handler.get("z min")
+    if active_region.simObjects == 2:
+        # All simulation regions should have the same thickness,
+        # selecting [0] is the same as any other
+        charge_handler.select("CHARGE::" + active_region.GenName_List[0][:-4])
+        sim_name = "2Terminal"
+    elif active_region.simObjects == 1:
+        charge_handler.select("CHARGE::" + active_region.GenName[:-4])
+        sim_name = active_region.SCName
+    else:
+        logger.warning(f"Current Simulation Region: {active_region}")
+        logger.warning(f"Active Simulation Objects: {active_region.simObjects}")
+        raise LumericalError("Non-Expected Number of Simulation Regions")
+    x_span = charge_handler.get("x span")
+    x = charge_handler.get("x")
+    y_span = charge_handler.get("y span")
+    y = charge_handler.get("y")
+    charge_handler.addsimulationregion()
+    charge_handler.set("name", sim_name)
+    # Define simulation region as 2D or 3D
+    if "2" in def_sim_region:
+        charge_handler.set("dimension", "2D Y-Normal")
+        charge_handler.set("x", x)
+        charge_handler.set("x span", x_span)
+        charge_handler.set("y", y)
+    elif "3" in def_sim_region:
+        charge_handler.set("dimension", "3D")
+        charge_handler.set("x", x)
+        charge_handler.set("x span", x_span)
+        charge_handler.set("y", y)
+        charge_handler.set("y span", y_span)
+    charge_handler.select(sim_name)
+    charge_handler.set("z max", z_max)
+    charge_handler.set("z min", z_min)
+    charge_handler.select("CHARGE")
+    charge_handler.set("simulation region", sim_name)
+    charge_handler.save()
+    return sim_name
+
+
+def __def_bias_regime(
+    charge_handler,
+    active_region,
+    bias_regime,
+    method_solver,
+    min_edge,
+    generation,
+    v_max,
+    v_single_point,
+    range_num_points,
+):
+    charge_handler.select("CHARGE")
+    if bias_regime == "forward":
+        charge_handler.set("solver type", method_solver)
+        charge_handler.set("enable initialization", True)
+        # charge_handler.set("init step size",1) #unsure if it works properly
+    elif bias_regime == "reverse":
+        charge_handler.set("solver type", "GUMMEL")
+        charge_handler.set("enable initialization", False)
+    if min_edge is not None:
+        charge_handler.set("min edge length", min_edge)
+    charge_handler.save()
+    if not generation:
+        for gen in active_region.GenName_List:
+            charge_handler.select("CHARGE::" + gen)
+            charge_handler.delete()
+    charge_handler.select("CHARGE::boundary conditions::" + active_region.Cathode)
+    if v_single_point is not None:
+        charge_handler.set("sweep type", "single")
+        charge_handler.save()
+        charge_handler.set("voltage", v_single_point)
+        charge_handler.save()
+    else:
+        charge_handler.set("sweep type", "range")
+        charge_handler.save()
+        charge_handler.set("range start", 0)
+        charge_handler.set("range stop", v_max)
+        charge_handler.set("range num points", range_num_points)
+        charge_handler.set("range backtracking", "enabled")
+    charge_handler.save()
+
+
 def __set_iv_parameters(
     charge,
     bias_regime: str,
-    name: SimInfo,
+    active_region: SimInfo,
     v_max,
     method_solver,
     def_sim_region=None,
-    B=None,
     v_single_point=None,
-    generation: str = None,
+    generation: bool = False,
     min_edge=None,
     range_num_points=101,
+    fdtd_results={},
 ):
     """
     Imports the generation rate into new CHARGE file, creates the simulation region based on the generation rate,
@@ -543,164 +631,82 @@ def __set_iv_parameters(
     Has the possibility to prepare the CHAGE file for a full IV curve ending at v_max Volts or a single voltage point (v_single_point).
     Can also input the radiative recombination value in the semiconductor material defined by "SCName" in the SimInfo dataclass.
     Args:
-            charge: as in "with lumapi.DEVICE(...) as charge"
-            bias_regime: (str) "forward" or "reverse" bias regime
-            name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
-            path: (str) CHARGE file directory
-            v_max: (float) determines the maximum voltage calculated in the IV curve
-            method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON"
-            def_sim_region: (str) input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
-                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region
-                        will be created
-            B: (float) Radiative recombination coeficient. By default it is None.
-            v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
-            generation: (str) Toogles on or off if the generation is deleted from the CHARGE file when running with a single point - useful for getting
-                    illuminated and dark band diagrams at a set voltage
+        charge: as in "with lumapi.DEVICE(...) as charge"
+        bias_regime: (str) "forward" or "reverse" bias regime
+        name: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+        path: (str) CHARGE file directory
+        v_max: (float) determines the maximum voltage calculated in the IV curve
+        method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON"
+        def_sim_region: (str) input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
+                    A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region
+                    will be created
+        B: (float) Radiative recombination coeficient. By default it is None.
+        v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
+        generation: (str) Toogles on or off if the generation is deleted from the CHARGE file when running with a single point - useful for getting
+                illuminated and dark band diagrams at a set voltage
     Returns:
 
             Lx,Ly: (float) dimentions of solar cell surface area normal to the incident light direction in meters
     """
-
     valid_dimensions = {"2d", "3d"}
     if def_sim_region is not None and def_sim_region.lower() not in valid_dimensions:
         raise LumericalError(
             "def_sim_region must be one of '2D', '2d', '3D', '3d' or have no input"
         )
     charge.switchtolayout()
-    if isinstance(name.GenName, list):
-        print("2T")
-        terminal = 2
-        for i in range(
-            0, len(name.GenName)
-        ):  # ADDS ALL THE GENERATIONS IN THE REGION LIST ARRAY
-            charge.addimportgen()
-            charge.set("name", str(name.GenName[i][:-4]))
-            # Import generation file path
-            charge.set("volume type", "solid")
-            charge.set("volume solid", str(name.SCName[i]))
-            charge.importdataset(name.GenName[i])
-            charge.save()
-    else:
-        print("4T")
-        terminal = 4
+    active_region_info_list = zip(
+        active_region.GenName_List,
+        active_region.SCName_List,
+        active_region.RadCoeff_List,
+    )
+    for genname, scname, rad_coeff in active_region_info_list:
+        logger.debug(f"Updating Charge information for: {genname}::{scname}")
+        # genpath = os.path.join(basepath, genname)
+        # logger.debug(f"Generation Path: {genpath}")
         charge.addimportgen()
-        charge.set("name", str(name.GenName[:-4]))
-        print(str(name.GenName[:-4]))
-        # Import generation file path
+        charge.set("name", genname[:-4])
         charge.set("volume type", "solid")
-        charge.set("volume solid", str(name.SCName))
-        charge.importdataset(name.GenName)
+        charge.set("volume solid", scname)
+        charge.importdataset(genname)
         charge.save()
-    if def_sim_region is not None:
-        # Defines boundaries for simulation region
-        charge.select("geometry::" + name.Anode)
-        z_max = charge.get("z max")
-        charge.select("geometry::" + name.Cathode)
-        z_min = charge.get("z min")
-        if terminal == 2:
-            charge.select(
-                "CHARGE::" + str(name.GenName[0][:-4])
-            )  # ALL SIMULATIION REGIONS SHOULD HAVE THE SAME THICKENESS, SELECTING [0] IS THE SAME AS ANY OTHER
-        elif terminal == 4:
-            charge.select("CHARGE::" + str(name.GenName[:-4]))
-        x_span = charge.get("x span")
-        x = charge.get("x")
-        y_span = charge.get("y span")
-        y = charge.get("y")
-        # Creates the simulation region (2D or 3D)
-        # charge.addsimulationregion()
-
-        if terminal == 2:
-            sim_name = "2Terminal"
-        elif terminal == 4:
-            sim_name = name.SCName
-        charge.addsimulationregion()
-        charge.set("name", sim_name)
-
-        if "2" in def_sim_region:
-            charge.set("dimension", "2D Y-Normal")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-        elif "3" in def_sim_region:
-            charge.set("dimension", "3D")
-            charge.set("x", x)
-            charge.set("x span", x_span)
-            charge.set("y", y)
-            charge.set("y span", y_span)
-        charge.select(str(sim_name))
-        charge.set("z max", z_max)
-        charge.set("z min", z_min)
-        charge.select("CHARGE")
-        charge.set("simulation region", sim_name)
-        charge.save()
+        # Set the B coefficient
+        if rad_coeff is not None:
+            charge.select("materials::" + scname + "::" + scname)
+            bandgap = charge.get("electronic.gamma.Eg.constant")
+            z_span = charge.get("z span")  # in m
+            mn = charge.get("electronic.gamma.mn.constant")
+            mp = charge.get("electronic.gamma.mp.constant")
+            ni = intrinsic_carrier_density(mn, mp, bandgap)
+            gen_wvl = fdtd_results[f"results.{genname}.Pabs_total"]["lambda"].flatten()
+            gen_abs = fdtd_results[f"results.{genname}.Pabs_total"][
+                "Pabs_total"
+            ].flatten()
+            rad_coeff = rad_recombination_coeff(gen_wvl, gen_abs, bandgap, z_span, ni)
+            charge.set("recombination.radiative.copt.constant", rad_coeff)
+    # Defines boundaries for simulation region
+    sim_region = __def_sim_region(charge, active_region, def_sim_region)
     # Defining solver parameters
-    if bias_regime == "forward":
-        charge.select("CHARGE")
-        charge.set("solver type", method_solver)
-        charge.set("enable initialization", True)
-        if min_edge is not None:
-            charge.set("min edge length", min_edge)
-        # charge.set("init step size",1) #unsure if it works properly
-        charge.save()
-        # Setting sweep parameters
-        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        if v_single_point is not None:
-            charge.set("sweep type", "single")
-            charge.save()
-            charge.set("voltage", v_single_point)
-            charge.save()
-            print("single")
-            if terminal == 2 and generation is not None:
-                for i in range(0, len(name.GenName)):
-                    charge.select("CHARGE::" + str(name.GenName[i][:-4]))
-                    charge.delete()
-                    charge.save()
-            elif terminal == 4 and generation is not None:
-                charge.select("CHARGE::" + str(name.GenName[:-4]))
-                charge.delete()
-                charge.save()
-        else:
-            charge.set("sweep type", "range")
-            charge.save()
-            charge.set("range start", 0)
-            charge.set("range stop", v_max)
-            charge.set("range num points", range_num_points)
-            charge.set("range backtracking", "enabled")
-            charge.save()
-    # Reverse bias regime
-    elif bias_regime == "reverse":
-        charge.select("CHARGE")
-        charge.set("solver type", "GUMMEL")
-        charge.set("enable initialization", False)
-        charge.save()
-        # Setting sweep parameters
-        charge.select("CHARGE::boundary conditions::" + str(name.Cathode))
-        charge.set("sweep type", "range")
-        charge.save()
-        charge.set("range start", 0)
-        charge.set("range stop", -1)
-        charge.set("range num points", 21)
-        charge.set("range backtracking", "enabled")
-        charge.save()
-        # Determining simulation region dimentions
-    if def_sim_region is not None:
-        sim_region = sim_name
-    else:
-        sim_region = charge.getnamed("CHARGE", "simulation region")
+    __def_bias_regime(
+        charge,
+        active_region,
+        bias_regime,
+        method_solver,
+        min_edge,
+        generation,
+        v_max,
+        v_single_point,
+        range_num_points,
+    )
+    # Variables necessary to export
     charge.select(sim_region)
-    Lx = charge.get("x span")
+    lx = charge.get("x span")
     if "3D" not in charge.get("dimension"):
         charge.select("CHARGE")
-        Ly = charge.get("norm length")
+        ly = charge.get("norm length")
     else:
         charge.select(str(sim_region))
-        Ly = charge.get("y span")
-    if B is not None:
-        charge.select("materials::" + name.SCName + "::" + name.SCName)
-        charge.set("recombination.radiative.copt.constant", B)
-        charge.save()
-    return Lx, Ly
+        ly = charge.get("y span")
+    return lx, ly
 
 def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False, min_edge= None, range_num_points = 101):
     """ 
