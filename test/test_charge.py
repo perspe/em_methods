@@ -138,7 +138,9 @@ class TestCHARGE(unittest.TestCase):
         print(PCE)
     
     def test_get_gen(self):
-        """ Test function to extract generation profiles """
+        """
+        Test function to extract generation profiles
+        """
         test_file_fdtd = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp")
         pvk_siminfo = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
         si_siminfo = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
