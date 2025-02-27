@@ -708,154 +708,153 @@ def __set_iv_parameters(
         ly = charge.get("y span")
     return lx, ly
 
-def run_fdtd_and_charge(active_region_list, properties, charge_file, path, fdtd_file, v_max = 1.5, run_FDTD = True, def_sim_region=None, save_csv = False, B = None,  method_solver = "NEWTON", v_single_point = None, avg_mode: bool = False, min_edge= None, range_num_points = 101):
-    """ 
-    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list
-    It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
+
+def run_fdtd_and_charge(
+    active_regions: Union[SimInfo, List[SimInfo]],
+    properties,
+    charge_file: str,
+    fdtd_file: str,
+    *,
+    run_FDTD=True,
+    def_sim_region=None,
+    max_volt=1.5,
+    v_single_point=None,
+    range_num_points=101,
+    avg_mode: bool = False,
+    min_edge=None,
+    save_csv=False,
+    savepath: str = ".",
+    charge_solver="NEWTON",
+    charge_kwargs={"device_kw": {"hide": True}, "delete": True},
+):
+    """
+    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_regions
+    The main results are the IV parameters for the solar cell
     Args:
-            active_region_list: list with SimInfo dataclassses with the details of the simulation 
-                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            properties: (Dictionary) with the property object and property names and values                    
-            charge_file: (str) name of CHARGE file
-            path: (str) directory where the FDTD and CHARGE files exist
-            fdtd_file: (str)  name of FDTD file
-            v_max: (float) determines the maximum voltage calculated in the IV curve
-            run_FDTD: (bool) that determines whether or not a new Generation profile is created
-            def_sim_region: (str) input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
-                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region 
-                        will be created
-            save_csv: (bool) determines wether or not the Current Density and Voltage (simulation outputs) are saved in csv file with name: "{names.SCName}_IV_curve.csv" 
-            B: (float) Radiative recombination coeficient. By default it is None. Input options: 
-                        -None: Simulation will use values in the charge files.
-                        -[value1, value2, ...]: Simulation will use the values in the B array. Note that value1 will correspond to the 1st object in the active_region_list array
-                        -[value1, True, ...]: Simulation will calculate the B value based on the current FTDT file for the second object in the active_region_list array
-            method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON" 
-            v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
+        active_regions: list with SimInfo details of the simulation
+        properties: Properties to be changed
+        charge_file: path to CHARGE file
+        fdtd_file: path FDTD file
+        run_FDTD: (bool) Calculate generation profile
+        def_sim_region: (None | str)
+            None: Do not create simulation region
+            str: Create Simulation region from '2D' '3D'
+        max_volt: maximum voltage to consider for the IV curve
+        v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
+        range_num_points:
+        avg_mode (bool): Simplify generation to 2D or calculate 3D
+        min_edge
+        save_csv: (bool) determines wether or not the Current Density and Voltage (simulation outputs) are saved in csv file with name: "{names.SCName}_IV_curve.csv"
+        savepath: Directory to save results data
+        charge_solver: Solver Method for CHARGE ("GUMMEL" or "NEWTON")
+        charge_kwargs: Override variables for charge_run
     Returns:
-            PCE, FF, Voc, Jsc, Current_Density, Voltage: np.arrays with the power convercion efficiency[%], fill factor[0-1], open circuit voltage[V], 
-                        short cirucit current[mA/cm2], current density array [mA/cm2], voltage array[V] for all the materials in the active_region_list. 
-                        (e.g. if the active_region_list has 2 materials: PCE = [pce1, pce2], ... Voltage = [[...],[...]] )
-            
-    """ 
-    
-    pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = [], [], [], [], [], []
-    valid_solver = {"GUMMEL", "NEWTON"}
-    if method_solver.upper() not in valid_solver:
-        raise LumericalError("method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input")
-    charge_path = os.path.join(path, charge_file)
-    if run_FDTD:
-        _ = get_gen(path, fdtd_file, properties, active_region_list, avg_mode = avg_mode)
-    if B == None:
-        B = [None for _ in range(0, len(active_region_list))]
+        PCE (%), FF[0-1], Voc[V], Jsc[mA/cm2], Current_Density[mA/cm2], Voltage[V]:
+    """
+    # Perform pre-run checks
+    if charge_solver.upper() not in ["GUMMEL", "NEWTON"]:
+        raise LumericalError("charge_solver must be 'GUMMEL' or 'NEWTON'")
+    if not isinstance(active_regions, list):
+        active_regions = [active_regions]
     if min_edge == None:
-        min_edge = [None for _ in range(0, len(active_region_list))]
-    if not isinstance(v_max, (list, np.ndarray)):
-        v_max = [v_max for _ in range(0, len(active_region_list))] #if the v_max is just a float then it assumes that scalar for all the active regions
+        min_edge = [None for _ in active_regions]
+    if not isinstance(max_volt, (list, np.ndarray)):
+        max_volt = [
+            max_volt for _ in active_regions
+        ]  # if the v_max is just a float then it assumes that scalar for all the active regions
     if not isinstance(range_num_points, (list, np.ndarray)):
-        range_num_points = [int(range_num_points) for _ in range(0, len(active_region_list))]
+        range_num_points = [
+            int(range_num_points) for _ in range(0, len(active_regions))
+        ]
+    if run_FDTD:
+        gen_results = get_gen(fdtd_file, properties, active_regions, avg_mode=avg_mode)
     results = None
-    for names in active_region_list:
-        if B[active_region_list.index(names)] == True: #checks if it will calculate B for that object
-            B[active_region_list.index(names)] = extract_B_radiative([names], path, fdtd_file, charge_file, properties = properties , run_abs = False)[0] #B value is calculated based on last FDTD for that index
-            print(f'The B values: {B}')
-        conditions_dic = {"bias_regime":"forward","name": names, "v_max": v_max[active_region_list.index(names)],"def_sim_region":def_sim_region,"B":B[active_region_list.index(names)], 
-                          "method_solver": method_solver.upper(), "v_single_point": v_single_point, "min_edge": min_edge[active_region_list.index(names)], "range_num_points" : range_num_points[active_region_list.index(names)]  }
-        get_results = {"results": {"CHARGE": str(names.Cathode)}}  # get_results: Dictionary with the properties to be calculated
-        try:
-            start_time = time.time()
-            results = charge_run(charge_path, properties, get_results, 
-                                func= __set_iv_parameters, delete = True, device_kw={"hide": True},**conditions_dic)
-            run_time = time.time() - start_time
-        except LumericalError:
-            try: 
-                start_time = time.time()          
-                logger.warning("Retrying simulation")
-                results = charge_run(charge_path, properties, get_results, 
-                               func= __set_iv_parameters, delete = True,  device_kw={"hide": True} ,**conditions_dic)
-                run_time = time.time() - start_time
-            except LumericalError:
-                pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
-                pce_array.append(pce)
-                ff_array.append(ff)
-                voc_array.append(voc)
-                jsc_array.append(jsc)
-                current_density_array.append(current_density)
-                voltage_array.append(voltage)
-                print(
-                    f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%"
-                )
-                continue
-
-        current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-        pce, ff, voc, jsc, current_density, voltage = iv_curve(
-            voltage, current=current, Lx=Lx, Ly=Ly
-        )
-
-        if np.isnan(voc) and not np.isnan(jsc):
-            print(
-                f"V_max = {max_volt[active_regions.index(names)]} V, which might be too small. Trying {max_volt[active_regions.index(names)]+0.2} V"
-            )
-            max_volt[active_regions.index(names)] = (
-                max_volt[active_regions.index(names)] + 0.2
-            )
-
-            conditions_dic = {
-                "bias_regime": "forward",
-                "name": names,
-                "v_max": max_volt[active_regions.index(names)],
-                "def_sim_region": def_sim_region,
-                "B": rad_recombination_coeff[active_regions.index(names)],
-                "method_solver": charge_solver.upper(),
-                "v_single_point": v_single_point,
-                "min_edge": min_edge[active_regions.index(names)],
-                "range_num_points": range_num_points[active_regions.index(names)],
+    pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = (
+        [] for _ in range(6)
+    )
+    iv_variables = [
+        pce_array,
+        ff_array,
+        voc_array,
+        jsc_array,
+        current_density_array,
+        voltage_array,
+    ]
+    for active_region, max_volt_i, min_edge_i, n_points_i in zip(
+        active_regions, max_volt, min_edge, range_num_points
+    ):
+        conditions_dic = {
+            "active_region": active_region,
+            "bias_regime": "forward",
+            "v_max": max_volt_i,
+            "def_sim_region": def_sim_region,
+            "method_solver": charge_solver.upper(),
+            "v_single_point": v_single_point,
+            "min_edge": min_edge_i,
+            "range_num_points": n_points_i,
+            "fdtd_results": get_gen,
+        }
+        charge_kwargs.update(
+            {
+                "basefile": charge_file,
+                "properties": properties,
+                "get_results": {"results": {"CHARGE": active_region.Cathode}},
+                "func": __set_iv_parameters,
             }
-            get_results = {
-                "results": {"CHARGE": str(names.Cathode)}
-            }  # get_results: Dictionary with the properties to be calculated
+        )
+        try:
+            results = charge_run(**charge_kwargs, **conditions_dic)
+        except LumericalError:
             try:
-                start_time = time.time()
-                results = charge_run(
-                    charge_path,
-                    properties,
-                    get_results,
-                    func=__set_iv_parameters,
-                    delete=True,
-                    device_kw={"hide": True},
-                    **conditions_dic,
-                )
-                run_time = time.time() - start_time
+                logger.warning("Retrying simulation")
+                results = charge_run(**charge_kwargs, **conditions_dic)
+            except LumericalError:
+                for variable in iv_variables:
+                    variable.append(np.nan)
+                continue
+        current, voltage, x_span, y_span = __charge_extract_iv_data(
+            results[0], active_region
+        )
+        pce, ff, voc, jsc, current_density, voltage = iv_curve(
+            voltage, current, x_span, y_span
+        )
+        if np.isnan(voc) and not np.isnan(jsc):
+            logger.warning("Found Jsc but not Voc, increase Voc and recalculate")
+            logger.debug("Current v_max={max_volt_i}")
+            max_volt_i += 0.2
+            charge_kwargs["kwargs"].update({"v_max": max_volt_i})
+            try:
+                results = charge_run(**charge_kwargs, **conditions_dic)
             except LumericalError:
                 pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
-                pce_array.append(pce)
-                ff_array.append(ff)
-                voc_array.append(voc)
-                jsc_array.append(jsc)
-                current_density_array.append(current_density)
-                voltage_array.append(voltage)
-                print(
-                    f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}%"
-                )
+                # for variable in iv_variables:
+                #     variable.append(np.nan)
                 continue
-
-            current, voltage, Lx, Ly = extract_iv_data(results[0], names)
-            pce, ff, voc, jsc, current_density, voltage = iv_curve(
-                voltage, current=current, Lx=Lx, Ly=Ly
+            current, voltage, x_span, y_span = __charge_extract_iv_data(
+                results[0], active_region
             )
-
+            pce, ff, voc, jsc, current_density, voltage = iv_curve(
+                voltage, current=current, Lx=x_span, Ly=y_span
+            )
         pce_array.append(pce)
         ff_array.append(ff)
         voc_array.append(voc)
         jsc_array.append(jsc)
         current_density_array.append(current_density)
         voltage_array.append(voltage)
-        print(
-            f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {voc_array[-1]:.3f}V \n Jsc =  {jsc_array[-1]:.4f} mA/cm² \n FF = {ff_array[-1]:.3f} \n PCE = {pce_array[-1]:.3f}% \n Run time = {run_time/60} mins "
+        logger.info(
+            f"""
+Semiconductor:{active_region.SCName}
+Cathode {active_region.Cathode}
+Voc = {voc_array[-1]:.3f}V
+Jsc =  {jsc_array[-1]:.4f} mA/cm²
+FF = {ff_array[-1]:.3f}
+PCE = {pce_array[-1]:.3f}%
+"""
         )
         if save_csv:
             df = pd.DataFrame({"Current_Density": current_density, "Voltage": voltage})
-            csv_path = os.path.join(basepath, f"{names.SCName}_IV_curve.csv")
+            csv_path = os.path.join(savepath, f"{active_region.SCName}_IV_curve.csv")
             df.to_csv(csv_path, sep="\t", index=False)
 
     return (
