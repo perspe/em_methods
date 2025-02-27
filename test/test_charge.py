@@ -2,7 +2,13 @@ import time
 import unittest
 import os
 import logging
-from em_methods.lumerical import charge_run, LumericalError, SimInfo, run_fdtd_and_charge, get_gen
+from em_methods.lumerical import (
+    charge_run,
+    LumericalError,
+    SimInfo,
+    run_fdtd_and_charge,
+    get_gen,
+)
 import pandas as pd
 
 # Override logger to always use debug
@@ -12,9 +18,11 @@ logger.setLevel(logging.DEBUG)
 BASETESTPATH_CHARGE: str = os.path.join("test", "charge")
 BASETESTPATH_FDTD_CHARGE: str = os.path.join("test", "fdtd_and_charge")
 
+
 def test_function(charge):
     logger.debug(f"Function runned in {charge}")
     return
+
 
 class TestCHARGE(unittest.TestCase):
     def test_single_run(self):
@@ -28,7 +36,8 @@ class TestCHARGE(unittest.TestCase):
                 properties,
                 get_results,
                 delete=False,
-                device_kw={"hide": True})
+                device_kw={"hide": True},
+            )
         except LumericalError:
             logger.critical("Error running file")
 
@@ -44,12 +53,13 @@ class TestCHARGE(unittest.TestCase):
                     properties,
                     get_results,
                     delete=True,
-                    device_kw={"hide": True},)
+                    device_kw={"hide": True},
+                )
             except LumericalError:
                 logger.critical(f"Error running file {i}")
 
     def test_run_function(self):
-        """ Test run with internal function to charge """
+        """Test run with internal function to charge"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_planar_2d.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
         get_results = {"CHARGE": "AZO"}
@@ -66,7 +76,7 @@ class TestCHARGE(unittest.TestCase):
 
     @unittest.expectedFailure
     def test_run_error(self):
-        """ Test run file that gives error """
+        """Test run file that gives error"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_run_error.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
         get_results = {"CHARGE": "AZO"}
@@ -80,7 +90,7 @@ class TestCHARGE(unittest.TestCase):
         )
 
     def test_version_error(self):
-        """ Test run file that gives error """
+        """Test run file that gives error"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_version_error.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
         try:
@@ -113,46 +123,101 @@ class TestCHARGE(unittest.TestCase):
         logger.info(info)
 
     def test_multiple_full(self):
-        logger.info("""
+        logger.info(
+            """
         ------------------------ NEW RUN --------------------------
-        """)
-        Perovskite = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
+        """
+        )
+        Perovskite = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"
+        )
         path = os.path.join("test", "charge")
         active_region_list = [Perovskite]
-        charge_file ="cell_for_test_psk.ldev"
+        charge_file = "cell_for_test_psk.ldev"
         fdtd_file = "cell_for_test.fsp"
-        x = [x*(10**-6)/1000.0 for x in range(40, 180, 10)]
-        properties = {
-                "::model": {
-                    'tITO': 0.1e-6,
-                    'tSnO2': 0.1e-6,
-                    'tSpiro': 0.4e-6
-                }
-        }
+        x = [x * (10**-6) / 1000.0 for x in range(40, 180, 10)]
+        properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.1e-6, "tSpiro": 0.4e-6}}
         PCE = []
         for n in x:
             properties["::model"]["tSnO2"] = n
             pce, *_ = run_fdtd_and_charge(
-                active_region_list, properties, charge_file, path, fdtd_file,"2d")
+                active_region_list, properties, charge_file, path, fdtd_file, "2d"
+            )
             PCE.append(pce)
         print(PCE)
-    
+
     def test_get_gen(self):
         """
         Test function to extract generation profiles
         """
-        test_file_fdtd = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp")
-        pvk_siminfo = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
-        si_siminfo = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
+        test_file_fdtd = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
+        )
+        pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"
+        )
+        si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"
+        )
         active_regions = [si_siminfo, pvk_siminfo]
         jsc = get_gen(test_file_fdtd, {}, active_regions, avg_mode=True)
 
-
     def test_run_fdtd_and_charge_4t(self):
-        """ Run single instance of run_fdtd_and_charge function """
-        test_file_fdtd = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp")
-        test_file_charge = os.path.join(BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev")
-        pvk_siminfo = SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")
-        si_siminfo = SimInfo("solar_generation_Si","G_Si.mat", "Si", "AZO", "ITO_bottom")
+        """Run single instance of run_fdtd_and_charge function"""
+        test_file_fdtd = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
+        )
+        test_file_charge = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
+        )
+        pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"
+        )
+        si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"
+        )
         active_regions = [si_siminfo, pvk_siminfo]
         run_fdtd_and_charge(active_regions, {}, test_file_charge, test_file_fdtd)
+
+    def test_run_fdtd_and_charge_4t_non_default(self):
+        """
+        Run single instance of run_fdtd_and_charge using non-default values
+        for some variables
+        """
+        test_file_fdtd = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
+        )
+        test_file_charge = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
+        )
+        pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
+        )
+        si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
+        )
+        active_regions = [si_siminfo, pvk_siminfo]
+        properties = {
+            "::model": {  #'p': 2.30 ,
+                #'rGrat': 470e-9,
+                #'rzGrat': 580e-9,
+                "tPerovskite": 163.43e-9,
+                "tlayer": 20e-9,
+                "tITO": 50e-9,
+                "tTCO": 50e-9,
+                "n": 2.80,
+                #'accuracy':3
+            }
+        }
+        run_fdtd_and_charge(
+            active_regions,
+            properties,
+            test_file_charge,
+            test_file_fdtd,
+            def_sim_region="2d",
+            max_volt=[0.8, 1.8],
+            min_edge=[0.005e-6, 0.001e-6],
+            avg_mode=True,
+            charge_solver="GUMMEL",
+            range_num_points=[31, 61],
+        )

@@ -187,13 +187,13 @@ def __charge_extract_iv_data(results, active_region):
     """
     Obtains the performance metrics of a solar cell
     Args:
-            results: Dictionary with all the results from the charge_run function
-            names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
-            regime: "am" or "dark" for illuminated IV or dark IV
+        results: Dictionary with all the results from the charge_run function
+        names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
+        regime: "am" or "dark" for illuminated IV or dark IV
     Returns:
-            If the curve is illuminated: PCE, FF, Voc, Jsc, current_density, voltage, stop, P
-            OR
-            If the curve is dark: current_density, voltage
+        If the curve is illuminated: PCE, FF, Voc, Jsc, current_density, voltage, stop, P
+        OR
+        If the curve is dark: current_density, voltage
     """
 
     current = np.array(results["results.CHARGE." + active_region.Cathode]["I"])
@@ -428,10 +428,9 @@ def _import_generation(gen_file):
 def _average_generation(gen, x, y):
     """Calculate the y and x/y averages generation profiles"""
     norm_y = np.max(y) - np.min(y)
-    y_gen = trapz(gen, y, axis=2) / norm_y
+    y_gen = trapezoid(gen, y, axis=2) / norm_y
     norm_area = norm_y * (np.max(x) - np.min(x))
-    xy_gen = trapz(trapz(gen, x, axis=1), y, axis=1) / norm_area
-
+    xy_gen = trapezoid(trapezoid(gen, x, axis=1), y, axis=1) / norm_area
     return y_gen, xy_gen
 
 
@@ -522,7 +521,11 @@ def get_gen(
 
 
 def __def_sim_region(charge_handler, active_region, def_sim_region):
+    """
+    Helper function for run_fdtd_and_charge to setup the simulation regions
+    """
     if def_sim_region is None:
+        logger.debug("Using simulation region defined in CHARGE file")
         return charge_handler.getnamed("CHARGE", "simulation region")
     charge_handler.select("geometry::" + active_region.Anode)
     z_max = charge_handler.get("z max")
@@ -578,21 +581,29 @@ def __def_bias_regime(
     v_single_point,
     range_num_points,
 ):
+    """
+    Helper function to run_fdtd_and_charge
+    This function is focused on defining the bias regime for the simulation
+    """
     charge_handler.select("CHARGE")
     if bias_regime == "forward":
+        logger.debug("Running for forward bias regime")
         charge_handler.set("solver type", method_solver)
         charge_handler.set("enable initialization", True)
         # charge_handler.set("init step size",1) #unsure if it works properly
     elif bias_regime == "reverse":
+        logger.debug("Running for reverse bias regime")
         charge_handler.set("solver type", "GUMMEL")
         charge_handler.set("enable initialization", False)
     if min_edge is not None:
+        logger.debug(f"Overriding min edge length to: {min_edge}")
         charge_handler.set("min edge length", min_edge)
     charge_handler.save()
-    if not generation:
-        for gen in active_region.GenName_List:
-            charge_handler.select("CHARGE::" + gen)
-            charge_handler.delete()
+    # if not generation:
+    #     logger.debug(f"Ignoring generation files")
+    #     for gen in active_region.GenName_List:
+    #         charge_handler.select("CHARGE::" + gen)
+    #         charge_handler.delete()
     charge_handler.select("CHARGE::boundary conditions::" + active_region.Cathode)
     if v_single_point is not None:
         charge_handler.set("sweep type", "single")
@@ -654,12 +665,11 @@ def __set_iv_parameters(
     active_region_info_list = zip(
         active_region.GenName_List,
         active_region.SCName_List,
+        active_region.SolarGenName_List,
         active_region.RadCoeff_List,
     )
-    for genname, scname, rad_coeff in active_region_info_list:
-        logger.debug(f"Updating Charge information for: {genname}::{scname}")
-        # genpath = os.path.join(basepath, genname)
-        # logger.debug(f"Generation Path: {genpath}")
+    for genname, scname, solar_gen_name, rad_coeff in active_region_info_list:
+        logger.debug(f"Updating Charge information for: {genname}::{scname}::{solar_gen_name}")
         charge.addimportgen()
         charge.set("name", genname[:-4])
         charge.set("volume type", "solid")
@@ -667,19 +677,30 @@ def __set_iv_parameters(
         charge.importdataset(genname)
         charge.save()
         # Set the B coefficient
-        if rad_coeff is not None:
+        if rad_coeff is None:
+            logger.debug("Using Default Radiative Recombination Coeff in CHARGE")
+        elif rad_coeff is True:
+            logger.debug("Calculating Radiative Recombination Coefficient from FDTD data")
+            charge.select("geometry::" + scname)
+            z_span = charge.get("z span")  # in m
             charge.select("materials::" + scname + "::" + scname)
             bandgap = charge.get("electronic.gamma.Eg.constant")
-            z_span = charge.get("z span")  # in m
             mn = charge.get("electronic.gamma.mn.constant")
             mp = charge.get("electronic.gamma.mp.constant")
             ni = intrinsic_carrier_density(mn, mp, bandgap)
-            gen_wvl = fdtd_results[f"results.{genname}.Pabs_total"]["lambda"].flatten()
-            gen_abs = fdtd_results[f"results.{genname}.Pabs_total"][
+            logger.debug(f"Extracted data: {bandgap}::{z_span}::{mn}::{mp}::{ni}")
+            gen_wvl = fdtd_results[f"results.{solar_gen_name}.Pabs_total"]["lambda"].flatten()
+            gen_abs = fdtd_results[f"results.{solar_gen_name}.Pabs_total"][
                 "Pabs_total"
             ].flatten()
             rad_coeff = rad_recombination_coeff(gen_wvl, gen_abs, bandgap, z_span, ni)
+            logger.debug(f"Calculated B coefficient: {rad_coeff}")
             charge.set("recombination.radiative.copt.constant", rad_coeff)
+        else:
+            charge.select("materials::" + scname + "::" + scname)
+            logger.debug("Using provided Radiative Recombination Coefficient")
+            charge.set("recombination.radiative.copt.constant", rad_coeff)
+        charge.save()
     # Defines boundaries for simulation region
     sim_region = __def_sim_region(charge, active_region, def_sim_region)
     # Defining solver parameters
@@ -722,7 +743,7 @@ def run_fdtd_and_charge(
     save_csv=False,
     savepath: str = ".",
     charge_solver="NEWTON",
-    charge_kwargs={"device_kw": {"hide": True}, "delete": True},
+    charge_kwargs={"device_kw": {"hide": True}, "delete": False},
 ):
     """
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_regions
@@ -763,8 +784,7 @@ def run_fdtd_and_charge(
         range_num_points = [
             int(range_num_points) for _ in range(0, len(active_regions))
         ]
-    if run_FDTD:
-        gen_results = get_gen(fdtd_file, properties, active_regions, avg_mode=avg_mode)
+    gen_results = get_gen(fdtd_file, properties, active_regions, avg_mode=avg_mode)
     results = None
     pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = (
         [] for _ in range(6)
@@ -789,7 +809,7 @@ def run_fdtd_and_charge(
             "v_single_point": v_single_point,
             "min_edge": min_edge_i,
             "range_num_points": n_points_i,
-            "fdtd_results": get_gen,
+            "fdtd_results": gen_results,
         }
         charge_kwargs.update(
             {
@@ -799,40 +819,40 @@ def run_fdtd_and_charge(
                 "func": __set_iv_parameters,
             }
         )
-        try:
-            results = charge_run(**charge_kwargs, **conditions_dic)
-        except LumericalError:
-            try:
-                logger.warning("Retrying simulation")
-                results = charge_run(**charge_kwargs, **conditions_dic)
-            except LumericalError:
-                for variable in iv_variables:
-                    variable.append(np.nan)
-                continue
+        logger.debug(f"Charge runconditions:\n{charge_kwargs}\n{conditions_dic}")
+        results = charge_run(**charge_kwargs, **conditions_dic)
+        # try:
+        #     results = charge_run(**charge_kwargs, **conditions_dic)
+        # except LumericalError:
+        #     try:
+        #         logger.warning("Retrying simulation")
+        #         results = charge_run(**charge_kwargs, **conditions_dic)
+        #     except LumericalError:
+        #         for variable in iv_variables:
+        #             variable.append(np.nan)
+        #         continue
         current, voltage, x_span, y_span = __charge_extract_iv_data(
             results[0], active_region
         )
         pce, ff, voc, jsc, current_density, voltage = iv_curve(
             voltage, current, x_span, y_span
         )
-        if np.isnan(voc) and not np.isnan(jsc):
-            logger.warning("Found Jsc but not Voc, increase Voc and recalculate")
-            logger.debug("Current v_max={max_volt_i}")
-            max_volt_i += 0.2
-            charge_kwargs["kwargs"].update({"v_max": max_volt_i})
-            try:
-                results = charge_run(**charge_kwargs, **conditions_dic)
-            except LumericalError:
-                pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
-                # for variable in iv_variables:
-                #     variable.append(np.nan)
-                continue
-            current, voltage, x_span, y_span = __charge_extract_iv_data(
-                results[0], active_region
-            )
-            pce, ff, voc, jsc, current_density, voltage = iv_curve(
-                voltage, current=current, Lx=x_span, Ly=y_span
-            )
+        # if np.isnan(voc) and not np.isnan(jsc):
+        #     logger.warning("Found Jsc but not Voc, increase Voc and recalculate")
+        #     logger.debug(f"Current v_max={max_volt_i}")
+        #     max_volt_i += 0.2
+        #     conditions_dic.update({"v_max": max_volt_i})
+        #     try:
+        #         results = charge_run(**charge_kwargs, **conditions_dic)
+        #     except LumericalError:
+        #         pce, ff, voc, jsc, current_density, voltage = (np.nan for _ in range(6))
+        #         continue
+        #     current, voltage, x_span, y_span = __charge_extract_iv_data(
+        #         results[0], active_region
+        #     )
+        #     pce, ff, voc, jsc, current_density, voltage = iv_curve(
+        #         voltage, current=current, Lx=x_span, Ly=y_span
+        #     )
         pce_array.append(pce)
         ff_array.append(ff)
         voc_array.append(voc)
@@ -997,144 +1017,6 @@ def run_fdtd_and_charge_EQE(
         # print(current_density)
         Jsc.append(current_density * 10)  # A/m2
     return Jsc, Jph  # arrays with information about all active materials
-
-
-def run_fdtd_and_charge_multi(
-    active_region_list,
-    properties,
-    charge_file,
-    path,
-    fdtd_file,
-    times_to_run=3,
-    v_max=1.5,
-    run_FDTD=True,
-    def_sim_region=None,
-    save_csv=False,
-    B=None,
-    method_solver="NEWTON",
-    v_single_point=None,
-):  # needs to be updated
-    """
-    UNTESTED
-
-
-    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_region_list multiple times (3)
-    It utilizes helper functions for various tasks like running simulations, extracting IV curve performance metrics PCE, FF, Voc, Jsc
-    Args:
-            active_region_list: list with SimInfo dataclassses with the details of the simulation
-                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            properties: (Dictionary) with the property object and property names and values
-            charge_file: (str) name of CHARGE file
-            path: (str) directory where the FDTD and CHARGE files exist
-            fdtd_file: (str)  name of FDTD file
-            v_max: (float) determines the maximum voltage calculated in the IV curve
-            run_FDTD: (bool) that determines whether or not a new Generation profile is created
-            def_sim_region: (str) input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
-                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region
-                        will be created
-            save_csv: (bool) determines wether or not the Current Density and Voltage (simulation outputs) are saved in csv file with name: "{names.SCName}_IV_curve.csv"
-            B: (float) Radiative recombination coeficient. By default it is None.
-            method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON"
-            v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
-    Returns:
-            PCE, FF, Voc, Jsc: array of np.arrays with active_region_list size with the averaged (after times_to_run times) power convercion efficiency[%], fill factor[0-1], open circuit voltage[V],
-                        short cirucit current[mA/cm2], for all the materials in the active_region_list.
-                        (e.g. if the active_region_list has 2 materials: PCE = [pce1_avg, pce2_avg] )
-    """
-    (
-        PCE,
-        FF,
-        Voc,
-        Jsc,
-        PCE_temp,
-        FF_temp,
-        Voc_temp,
-        Jsc_temp,
-        Current_Density,
-        Voltage,
-    ) = ([], [], [], [], [], [], [], [], [], [])
-    charge_path = os.path.join(path, charge_file)
-    get_gen(path, fdtd_file, properties, active_region_list)
-    results = None
-    get_results = {
-        "results": {"CHARGE": str(names.Cathode)}
-    }  # get_results: Dictionary with the properties to be calculated
-    for names in active_region_list:
-        for i in range(times_to_run):
-            try:
-                results = charge_run(
-                    charge_path,
-                    properties,
-                    get_results,
-                    func=__set_iv_parameters,
-                    delete=True,
-                    device_kw={"hide": True},
-                    **{
-                        "bias_regime": "forward",
-                        "name": names,
-                        "v_max": v_max,
-                        "def_sim_region": def_sim_region,
-                        "B": B[active_region_list.index(names)],
-                        "method_solver": method_solver,
-                        "v_single_point": v_single_point,
-                    },
-                )
-            except LumericalError:
-                try:
-                    logger.warning("Retrying simulation")
-                    results = charge_run(
-                        charge_path,
-                        properties,
-                        get_results,
-                        func=__set_iv_parameters,
-                        delete=True,
-                        device_kw={"hide": True},
-                        **{
-                            "bias_regime": "forward",
-                            "name": names,
-                            "v_max": v_max,
-                            "def_sim_region": def_sim_region,
-                            "B": B[active_region_list.index(names)],
-                            "method_solver": method_solver,
-                            "v_single_point": v_single_point,
-                        },
-                    )
-                except LumericalError:
-                    pce, ff, voc, jsc, current_density, voltage, stop, p = (
-                        np.nan for _ in range(8)
-                    )
-                    PCE_temp.append(pce)
-                    FF_temp.append(ff)
-                    Voc_temp.append(voc)
-                    Jsc_temp.append(jsc)
-                    # Current_Density.append(current_density)
-                    # Voltage.append(voltage)
-                    print(
-                        f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%"
-                    )
-                    continue
-            pce, ff, voc, jsc, current_density, voltage, stop, p = iv_curve(
-                results[0], "am", names
-            )
-            PCE_temp.append(pce)
-            FF_temp.append(ff)
-            Voc_temp.append(voc)
-            Jsc_temp.append(jsc)
-            # Current_Density.append(current_density)
-            # Voltage.append(voltage)
-            print(
-                f"Semiconductor {names.SCName}, cathode {names.Cathode}\n Voc = {Voc[-1]:.3f}V \n Jsc =  {Jsc[-1]:.4f} mA/cm² \n FF = {FF[-1]:.3f} \n PCE = {PCE[-1]:.3f}%"
-            )
-        pce_temp = np.average(PCE_temp)
-        ff_temp = np.average(FF_temp)
-        voc_temp = np.average(Voc_temp)
-        jsc_temp = np.average(Jsc_temp)
-    PCE.append(pce_temp)
-    FF.append(ff_temp)
-    Voc.append(voc_temp)
-    Jsc.append(jsc_temp)
-    return PCE, FF, Voc, Jsc
 
 
 def band_diagram(
@@ -1304,23 +1186,16 @@ def intrinsic_carrier_density(
     """
     Extracts the Bandgap, z_span and intrinsic carrier density of material in "names"
     Args:
-            names: SimInfo.SCname from SimInfo dataclassses with the details of the simulation
-            properties: (Dictionary) with the property object and property names and values
-            path: (str) directory where the FDTD and CHARGE files exist
-            charge_file: (str) name of CHARGE file
-            properties: (Dictionary) with the property object and property names and values
-
+        mn, mp: electron and hole effective masses
+        bandgap (eV), temperature (K)
     Returns:
-            Eg:(float) Band gap  [eV]
-            L:(float) [m]
-            ni:(float) [1/cm3]
-
+        intrinsic carrier density
     """
     mn = mn * 9.11 * 10**-31
     mp = mp * 9.11 * 10**-31
     Nc = 2 * ((2 * np.pi * mn * k * temperature / (h**2)) ** 1.5) * 10**-6
     Nv = 2 * ((2 * np.pi * mp * k * temperature / (h**2)) ** 1.5) * 10**-6
-    ni = ((Nv * Nc) ** 0.5) * (np.exp(-bandgap * e / (2 * k * bandgap)))
+    ni = ((Nv * Nc) ** 0.5) * (np.exp(-bandgap * e / (2 * k * temperature)))
     return ni
 
 
@@ -1374,14 +1249,13 @@ def rad_recombination_coeff(
     but considering the FDTD-derived absorption
     """
     energy = 1240.0 / (wavelength * 1e9)
-    bb_spectrum = blackbody_spectrum(energy)
     if not isinstance(energy, (int, float)) and not isinstance(
         absorption, (int, float)
     ):
-        absorption = _adjust_abs(energy, absorption, bandgap)
-        dark_current: float = e * trapezoid(-bb_spectrum * absorption, energy)
-    else:
-        dark_current = e * (-bb_spectrum * absorption)
+        energy, absorption = _adjust_abs(energy, absorption, bandgap)
+        dark_current: float = e * trapezoid(-blackbody_spectrum(energy) * absorption, energy)
+    elif isinstance(energy, float) and isinstance(absorption, float):
+        dark_current = e * (-blackbody_spectrum(energy) * absorption)
     dark_current *= 0.1  # mA/cm2
     return dark_current * 10**-5 / (e * (edensity**2) * (z_span))
 
