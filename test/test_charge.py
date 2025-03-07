@@ -198,26 +198,75 @@ class TestCHARGE(unittest.TestCase):
         )
         active_regions = [si_siminfo, pvk_siminfo]
         properties = {
-            "::model": {  #'p': 2.30 ,
-                #'rGrat': 470e-9,
-                #'rzGrat': 580e-9,
+            "::model": {
                 "tPerovskite": 163.43e-9,
                 "tlayer": 20e-9,
                 "tITO": 50e-9,
                 "tTCO": 50e-9,
                 "n": 2.80,
-                #'accuracy':3
             }
         }
+        si_bias_regime = {
+                "method_solver": "GUMMEL",
+                "voltage": 0.8,
+                "voltage_points": 31
+                }
+        pvk_bias_regime = {
+                "method_solver": "GUMMEL",
+                "voltage": 1.8,
+                "voltage_points": 61
+                }
         run_fdtd_and_charge(
             active_regions,
             properties,
             test_file_charge,
             test_file_fdtd,
             def_sim_region="2d",
-            max_volt=[0.8, 1.8],
+            override_bias_regime_args=[si_bias_regime, pvk_bias_regime],
             min_edge=[0.005e-6, 0.001e-6],
             avg_mode=True,
-            charge_solver="GUMMEL",
-            range_num_points=[31, 61],
+        )
+
+    def test_run_fdtd_and_charge_2t(self):
+        test_file_fdtd = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_2t_void_tandem.fsp"
+        )
+        test_file_charge = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_2t_void_tandem.ldev"
+        )
+        pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "interlayer", "ITO", True
+        )
+        si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "interlayer", 4.73e-15
+        )
+        active_regions = [si_siminfo, pvk_siminfo]
+        # properties = {
+        #     "::model": {
+        #         "tPerovskite": 163.43e-9,
+        #         "tlayer": 20e-9,
+        #         "tITO": 50e-9,
+        #         "tTCO": 50e-9,
+        #         "n": 2.80,
+        #     }
+        # }
+        si_bias_regime = {
+                "method_solver": "GUMMEL",
+                "voltage": 0.8,
+                "voltage_points": 31
+                }
+        pvk_bias_regime = {
+                "method_solver": "GUMMEL",
+                "voltage": 1.8,
+                "voltage_points": 61
+                }
+        run_fdtd_and_charge(
+            active_regions,
+            {},
+            test_file_charge,
+            test_file_fdtd,
+            def_sim_region="2d",
+            override_bias_regime_args=[si_bias_regime, pvk_bias_regime],
+            min_edge=[0.005e-6, 0.001e-6],
+            avg_mode=True,
         )
