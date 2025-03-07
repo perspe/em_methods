@@ -3,17 +3,13 @@ import logging
 from multiprocessing import Manager, Queue
 import os
 import shutil
-from typing import Dict, Union, List, overload, Tuple
-import numpy.typing as npt
+from typing import Dict, Union, List, Tuple
 from uuid import uuid4
 
 import h5py
 import numpy as np
 import pandas as pd
-from scipy.constants import c, e, h, k
 from scipy.integrate import trapezoid
-from scipy.interpolate import interp1d
-import time
 
 from PyAstronomy import pyaC
 from em_methods.lumerical.lum_helper import (
@@ -23,6 +19,10 @@ from em_methods.lumerical.lum_helper import (
     _get_lumerical_results,
 )
 from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis
+from em_methods.formulas.physiscs import (
+    rad_recombination_coeff,
+    intrinsic_carrier_density,
+)
 import lumapi
 
 
@@ -30,7 +30,6 @@ import lumapi
 logger = logging.getLogger("dev")
 
 
-# @dataclass(frozen=False)
 @dataclass()
 class SimInfo:
     """
@@ -501,7 +500,11 @@ def get_gen(
         "func": __prepare_gen,
     }
     if run_fdtd:
-        res, *_ = fdtd_run(**fdtd_base_args, **fdtd_kw, **{"active_regions": active_regions, "override_freq": override_freq})
+        res, *_ = fdtd_run(
+            **fdtd_base_args,
+            **fdtd_kw,
+            **{"active_regions": active_regions, "override_freq": override_freq},
+        )
     else:
         res, *_ = fdtd_run_analysis(fdtd_file, results, fdtd_kw=fdtd_kw)
     logger.debug(f"Get Gen run_fdtd results: {res}")
@@ -888,6 +891,7 @@ PCE = {pce_array[-1]:.3f}%
             df.to_csv(csv_path, sep="\t", index=False)
     return tuple(iv_variables)
 
+
 def band_diagram(
     active_region_list,
     properties,
@@ -1024,111 +1028,6 @@ def abs_extraction(names, path, fdtd_file, properties={}):
     )  # saves the results in file in path
     os.remove(new_filepath_fdtd)
     # os.remove(log_file_fdtd)
-
-
-def _adjust_abs(
-    energy: npt.NDArray,
-    absorption: npt.NDArray,
-    bandgap: float,
-    interp_points: int = 1000,
-) -> Tuple[npt.NDArray, npt.NDArray]:
-    """
-    Function that cuts absorption data below bandgap.
-    Useful when there is poor FDTD fitting to calculate the absorption.
-    Args:
-        energy: energy values in eV
-        abs_data: absorption data [0-1]
-        bandgap (in eV)
-    Returns:
-        array with absorption cutoff below bandgap
-    """
-    interp_abs = interp1d(energy, absorption)
-    new_energy = np.linspace(np.min(energy), np.max(energy), interp_points)
-    new_abs = interp_abs(new_energy)
-    cutoff_mask = new_energy < bandgap
-    return new_energy[cutoff_mask], new_abs[cutoff_mask]
-
-
-def intrinsic_carrier_density(
-    mn: float, mp: float, bandgap: float, temperature: float = 300
-):
-    """
-    Extracts the Bandgap, z_span and intrinsic carrier density of material in "names"
-    Args:
-        mn, mp: electron and hole effective masses
-        bandgap (eV), temperature (K)
-    Returns:
-        intrinsic carrier density
-    """
-    mn = mn * 9.11 * 10**-31
-    mp = mp * 9.11 * 10**-31
-    Nc = 2 * ((2 * np.pi * mn * k * temperature / (h**2)) ** 1.5) * 10**-6
-    Nv = 2 * ((2 * np.pi * mp * k * temperature / (h**2)) ** 1.5) * 10**-6
-    ni = ((Nv * Nc) ** 0.5) * (np.exp(-bandgap * e / (2 * k * temperature)))
-    return ni
-
-
-@overload
-def blackbody_spectrum(energy: float, temperature: float = 300.0) -> float:
-    ...
-
-
-@overload
-def blackbody_spectrum(
-    energy: npt.NDArray, temperature: Union[float, npt.NDArray] = 300.0
-) -> npt.NDArray:
-    ...
-
-
-@overload
-def blackbody_spectrum(
-    energy: Union[float, npt.NDArray], temperature: npt.NDArray
-) -> npt.NDArray:
-    ...
-
-
-def blackbody_spectrum(
-    energy: Union[float, npt.NDArray], temperature: Union[float, npt.NDArray] = 300.0
-) -> Union[float, npt.NDArray]:
-    """
-    Function that derives the blackbody spectrum at 300K in a given energy range defined by E[eV]
-    Args:
-        energy: (array) energy in ev
-    Returns:
-        Black Body Spectrum (eV.s.m2)-1
-    """
-    h_ev = h / e
-    k_b = k / e
-    return (
-        (2 * np.pi * energy**2)
-        / (h_ev**3 * c**2)
-        * (np.exp(energy / (k_b * temperature)) - 1) ** -1
-    )
-
-
-def rad_recombination_coeff(
-    wavelength: Union[float, npt.NDArray],
-    absorption: Union[float, npt.NDArray],
-    bandgap: float,
-    z_span: float,
-    edensity: float,
-) -> float:
-    """
-    Calculate the radiative constant (B) based on the SQ limit,
-    but considering the FDTD-derived absorption
-    """
-    energy = 1240.0 / (wavelength * 1e9)
-    if not isinstance(energy, (int, float)) and not isinstance(
-        absorption, (int, float)
-    ):
-        energy, absorption = _adjust_abs(energy, absorption, bandgap)
-        dark_current: float = e * trapezoid(
-            -blackbody_spectrum(energy) * absorption, energy
-        )
-    elif isinstance(energy, float) and isinstance(absorption, float):
-        dark_current = e * (-blackbody_spectrum(energy) * absorption)
-    dark_current *= 0.1  # mA/cm2
-    return dark_current * 10**-5 / (e * (edensity**2) * (z_span))
 
 
 def _get_replacement(lst):
