@@ -55,7 +55,7 @@ def fdtd_run(
     func=None,
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
-    delete: bool = False,
+    delete: bool = True,
     fdtd_kw={"hide": True},
     **kwargs,
 ):

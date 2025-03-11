@@ -584,9 +584,9 @@ def run_fdtd_and_charge(
     if not isinstance(active_regions, list):
         active_regions = [active_regions]
     if not isinstance(override_bias_regime_args, list):
-        override_bias_regime_args = [override_bias_regime_args]
+        override_bias_regime_args = [override_bias_regime_args] * len(active_regions)
     if min_edge is None:
-        min_edge = [min_edge]
+        min_edge = [min_edge] * len(active_regions)
     if len(active_regions) != len(override_bias_regime_args) or len(
         active_regions
     ) != len(min_edge):
@@ -629,6 +629,7 @@ def run_fdtd_and_charge(
         )
         result = charge_run(**charge_kw, **conditions_dic)
         results.append(result)
+    logger.debug("Run Successfuly")
     return results
 
 
@@ -756,13 +757,16 @@ def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]):
     """
     if isinstance(cathodes, str):
         cathodes = [cathodes]
+    if not isinstance(results, list):
+        results = [results]
     return_res = []
-    for cathode in cathodes:
+    for result_i, cathode in zip(results, cathodes):
         logger.debug(f"Calculating Results for {cathode}")
-        current = np.array(results[f"results.CHARGE.{cathode}"]["I"])
-        voltage = np.array(results[f"results.CHARGE.{cathode}"][f"V_{cathode}"])
-        x_span = results["func_output"][0]
-        y_span = results["func_output"][1]
+        result_i = result_i[0]
+        current = np.array(result_i[f"results.CHARGE.{cathode}"]["I"])
+        voltage = np.array(result_i[f"results.CHARGE.{cathode}"][f"V_{cathode}"])
+        x_span = result_i["func_output"][0]
+        y_span = result_i["func_output"][1]
         current_density = current.flatten() * 1e3 / (x_span * y_span * 1e4)
         voltage = voltage.flatten()
         res_i = iv_parameters(voltage, current_density)
