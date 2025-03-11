@@ -297,7 +297,7 @@ class TestCHARGE(unittest.TestCase):
                 "n": 2.80,
             }
         }
-        run_fdtd_and_charge_legacy(
+        results = run_fdtd_and_charge_legacy(
             region,
             properties,
             charge_name,
@@ -305,12 +305,12 @@ class TestCHARGE(unittest.TestCase):
             fdtd_name,
             v_max=v_max,
             def_sim_region="2d",
-            run_FDTD=True,
+            run_FDTD=False,
             B=B_list,
             avg_mode=True,
             method_solver="GUMMEL",
             min_edge=min_edge,
             range_num_points=range_num_points,
-            # save_csv=True,
+            save_csv=True,
         )
-        pass
+        print(results)

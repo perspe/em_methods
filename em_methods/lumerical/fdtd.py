@@ -3,10 +3,10 @@ from multiprocessing import Manager, Queue
 import os
 import re
 import shutil
-import sys
 from typing import Dict, List, Tuple, Union
 from uuid import uuid4
 import h5py
+import time
 
 import numpy as np
 import numpy.typing as npt
@@ -14,7 +14,12 @@ import pandas as pd
 import scipy.constants as scc
 from scipy.integrate import trapezoid
 
-from em_methods.lumerical.lum_helper import LumMethod, LumericalError, RunLumerical
+from em_methods.lumerical.lum_helper import (
+    LumMethod,
+    LumericalError,
+    RunLumerical,
+    _get_lumerical_results,
+)
 import lumapi
 
 # Get module logger
@@ -36,36 +41,6 @@ def __read_autoshutoff(log_file: str) -> List:
                 autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
     return autoshut_off_list
-
-
-def _get_fdtd_results(
-    fdtd_handler: lumapi.FDTD, get_results: Dict[str, Dict[str, float]]
-) -> Dict:
-    """
-    Alias function to extract results from FDTD file (to avoid code redundancy)
-    """
-    # Obtain results
-    results = {}
-    get_results_info = list(get_results.keys())
-    if "data" in get_results_info:
-        for key, value in get_results["data"].items():
-            if not isinstance(value, list):
-                value = [value]
-            for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["data." + key + "." + value_i] = fdtd_handler.getdata(
-                    key, value_i
-                )
-    if "results" in get_results_info:
-        for key, value in get_results["results"].items():
-            if not isinstance(value, list):
-                value = [value]
-            for value_i in value:
-                logger.debug(f"Getting result for: '{key}':'{value_i}'")
-                results["results." + key + "." + value_i] = fdtd_handler.getresult(
-                    key, value_i
-                )
-    return results
 
 
 """ Main functions """
@@ -220,7 +195,7 @@ def fdtd_run_large_data(
         logger.info(
             f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
         )
-        results = _get_fdtd_results(fdtd, get_results)
+        results = _get_lumerical_results(fdtd, get_results)
     # Gather info from log and the delete it
     log_file: str = os.path.join(
         savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
@@ -256,7 +231,8 @@ def fdtd_run_analysis(
             time: Time to run the simulation
     """
     with lumapi.FDTD(filename=basefile, **fdtd_kw) as fdtd:
-        results = _get_fdtd_results(fdtd, get_results)
+        fdtd.runanalysis()
+        results = _get_lumerical_results(fdtd, get_results)
     return results
 
 

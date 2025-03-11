@@ -75,242 +75,138 @@ class SimInfo:
         self.RadCoeff = new_rad_coefficient
 
 
-""" Main functions """
+""" Helper Functions """
 
 
-def charge_run(
-    basefile: str,
-    properties: Dict[str, Dict[str, float]],
-    get_results,
-    *,
-    get_info: Dict[str, str] = {},
-    func=None,
-    savepath: Union[None, str] = None,
-    override_prefix: Union[None, str] = None,
-    delete: bool = False,
-    device_kw={"hide": True},
-    **kwargs,
-):
-    """
-    Generic function to run lumerical files from python
-    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
-    Args:
-        basefile: Path to the original file
-        properties: Dictionary with the property object and property names and values
-        get_results: Dictionary with the results to extract
-        get_info: Extra properties to extract from the simulation
-        func: Function to run before the simulation
-        savepath (default=.): Override default savepath for the new file
-        override_prefix (default=None): Override prefix for the new file
-        delete (default=False): Delete newly generated file
-    Return:
-        results: Dictionary with all the results
-        time: Time to run the simulation
-    """
-
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
-    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(basefile, new_filepath)
-    # Get logfile name
-    log_file: str = os.path.join(
-        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
-    )
-    # Run simulation - the process is as follows
-    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
-    # 2. Create a process (RunLumerical) to run the lumerical file
-    #       - This avoids problems when the simulation gives errors
-    results = Manager().dict()
-    run_process = RunLumerical(
-        LumMethod.CHARGE,
-        results=results,
-        log_queue=Queue(-1),
-        filepath=new_filepath,
-        properties=properties,
-        get_results=get_results,
-        get_info=get_info,
-        func=func,
-        lumerical_kw=device_kw,
-        **kwargs,
-    )
-    run_process.start()
-    # check_thread = CheckRunState(log_file, run_process, process_queue)
-    # check_thread.start()
-    logger.debug("Run Process Started...")
-    run_process.join()
-    logger.debug(f"Simulation finished")
-    results_keys = list(results.keys())
-    if "runtime" not in results_keys:
-        raise LumericalError("Simulation Finished Prematurely")
-    if delete:
-        logger.debug(f"Deleting unwanted files")
-        os.remove(new_filepath)
-        os.remove(log_file)
-    if "analysis runtime" not in results_keys:
-        raise LumericalError("Simulation Failed in Analysis")
-    if "Error" in results_keys:
-        raise LumericalError(results["Error"])
-    # Extract data from process
-    logger.debug(f"Simulation data:\n{results}")
-    # Check for other possible runtime problems
-    if "data" not in results_keys:
-        raise LumericalError("No data available from simulation")
-    return (
-        results["data"],
-        results["runtime"],
-        results["analysis runtime"],
-        results["data_info"],
-    )
-
-
-def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
-    """
-    Generic function to gather simulation data from already simulated files
-    Args:
-        basefile: Path to the original file
-        get_results: Dictionary with the results to extract
-
-    Return:
-        results: Dictionary with all the results
-    """
-    with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
-        results = _get_lumerical_results(charge, get_results)
-        charge.close()
-    return results
-
-
-def IQE(
-    active_region_list,
-    properties,
-    charge_file,
-    path,
-    fdtd_file,
-    wl=[i for i in range(300, 1001, 50)],
-    min_edge=None,
-    avg_mode=False,
-    B=None,
-):
-    current_jsc = [[] for _ in range(len(active_region_list))]
-    Jsc_g = [[] for _ in range(len(active_region_list))]
-    Jph_g = [[] for _ in range(len(active_region_list))]
-    results_dir = os.path.join(
-        path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0])[:-3]
-    )  # remove the sufix _qe from the file's name
-    os.makedirs(results_dir, exist_ok=True)
-
-    for wvl in wl:
-        current_Jsc, current_Jph = run_fdtd_and_charge_EQE(
-            active_region_list,
-            properties,
-            charge_file,
-            path,
-            fdtd_file,
-            wvl * 10**-9,
-            min_edge=min_edge,
-            avg_mode=avg_mode,
-            B=B,
-        )
-        for i in range(len(active_region_list)):
-            Jsc_g[i].append(current_Jsc[i])
-            Jph_g[i].append(current_Jph[i])
-            if np.isnan(current_Jph[i]) or current_Jph[i] == 0:
-                print(
-                    f"Warning: Jph[{i}] is NaN or 0 at wavelength {wvl}, setting IQE to NaN"
-                )
-                iqe_value = np.nan
-            else:
-                iqe_value = -current_Jsc[i] / current_Jph[i]
-                print(f"Computed IQE[{i}] at {wvl} nm: {iqe_value}")
-
-            # Ensure IQE is saved as a scalar
-            iqe_scalar = (
-                iqe_value[0] if isinstance(iqe_value, (list, np.ndarray)) else iqe_value
-            )
-            current_jsc[i] = (
-                current_Jsc[i][0]
-                if isinstance(current_Jsc[i], (list, np.ndarray))
-                else current_Jsc[i]
-            )
-            # Save IQE
-            result_file = os.path.join(
-                results_dir, f"IQE_{active_region_list[i].SCName}.csv"
-            )
-            data = pd.DataFrame(
-                {
-                    "wavelength": [wvl],
-                    "IQE": [iqe_scalar],
-                    "Jsc": [-current_jsc[i][0]],
-                    "Jph": [current_Jph[i]],
-                }
-            )
-            if os.path.exists(result_file):
-                data.to_csv(result_file, mode="a", header=False, index=False)
-            else:
-                data.to_csv(result_file, index=False, header=True)
-
-    IQE_values = [
-        [-Jsc_g[i][j] / Jph_g[i][j] for j in range(len(wl))]
-        for i in range(len(active_region_list))
-    ]
-    return IQE_values, Jsc_g, Jph_g, wl
-
-
-def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = True):
-    """
-    Calculates the total internal quantum efficiency (IQE) and total absorption for a tandem solar cell configuration.
-    The function extracts absorption data, interpolates it to a common wavelength grid, and then processes IQE data
-    from previously computed results in imbedded folder called "IQE_results + fdtd_file name".
-
-    Args:
-            path: directory where the FDTD and CHARGE files exist.
-            fdtd_file: String FDTD file name.
-            active_region_list: list with SimInfo dataclasses containing the details of each active region in the simulation
-                                (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                      SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")]).
-            properties: Dictionary with the property object and property names and values.
-            run_abs: Boolean flag indicating whether to recompute absorption before processing IQE data.
-
-    Returns:
-            total_iqe: 1D numpy array containing the minimum IQE values across all active regions at each wavelength.
-            total_abs: 1D numpy array containing the total absorption across all active regions.
-            all_wvl_new[0]: 1D numpy array representing the common wavelength grid used for interpolation.
-    """
-    all_abs, all_wvl = [], []
-    all_iqe, all_iqe_wvl = [], []
-    all_wvl_new = []
-    min_max_wvl = float("inf")
-    for names in active_region_list:
-        if run_abs:
-            abs_extraction(
-                names, path, fdtd_file, properties=properties
-            )  # will calc the abs
-        results_path = os.path.join(path, names.SolarGenName)
-        abs_data = pd.read_csv(results_path + ".csv")
-        all_abs.append(abs_data["abs"])
-        all_wvl.append(abs_data["wvl"])
-    for i, _ in enumerate(active_region_list):
-        if max(all_wvl[i]) < min_max_wvl:
-            min_max_wvl = max(all_wvl[i])
-    for i, _ in enumerate(active_region_list):  # all abs should have the same size
-        all_wvl_new.append(
-            np.linspace(min(all_wvl[i]) * 10**9, min_max_wvl * 10**9, 1001)
-        )
-        all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i] * 10**9, all_abs[i])
-    total_abs = sum(all_abs)
-    iqe_path = os.path.join(path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0]))
-    for names in active_region_list:
-        results_path = os.path.join(iqe_path, "IQE_" + names.SCName)
-        iqe_data = pd.read_csv(results_path + ".csv")
-        all_iqe.append(iqe_data["IQE"])
-        all_iqe_wvl.append(iqe_data["wavelength"])
-    for i, _ in enumerate(active_region_list):
-        all_iqe[i] = np.interp(all_wvl_new[i], all_iqe_wvl[i], all_iqe[i])
-    all_iqe = np.array(all_iqe)  # Convert list of arrays to 2D NumPy array
-    total_iqe = np.min(all_iqe, axis=0)  # min IQE at each wavlength
-    return total_iqe, total_abs, all_wvl_new[0], all_iqe, all_abs
+# def IQE(
+#     active_region_list,
+#     properties,
+#     charge_file,
+#     path,
+#     fdtd_file,
+#     wl=[i for i in range(300, 1001, 50)],
+#     min_edge=None,
+#     avg_mode=False,
+#     B=None,
+# ):
+#     current_jsc = [[] for _ in range(len(active_region_list))]
+#     Jsc_g = [[] for _ in range(len(active_region_list))]
+#     Jph_g = [[] for _ in range(len(active_region_list))]
+#     results_dir = os.path.join(
+#         path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0])[:-3]
+#     )  # remove the sufix _qe from the file's name
+#     os.makedirs(results_dir, exist_ok=True)
+#
+#     for wvl in wl:
+#         current_Jsc, current_Jph = run_fdtd_and_charge_EQE(
+#             active_region_list,
+#             properties,
+#             charge_file,
+#             path,
+#             fdtd_file,
+#             wvl * 10**-9,
+#             min_edge=min_edge,
+#             avg_mode=avg_mode,
+#             B=B,
+#         )
+#         for i in range(len(active_region_list)):
+#             Jsc_g[i].append(current_Jsc[i])
+#             Jph_g[i].append(current_Jph[i])
+#             if np.isnan(current_Jph[i]) or current_Jph[i] == 0:
+#                 print(
+#                     f"Warning: Jph[{i}] is NaN or 0 at wavelength {wvl}, setting IQE to NaN"
+#                 )
+#                 iqe_value = np.nan
+#             else:
+#                 iqe_value = -current_Jsc[i] / current_Jph[i]
+#                 print(f"Computed IQE[{i}] at {wvl} nm: {iqe_value}")
+#
+#             # Ensure IQE is saved as a scalar
+#             iqe_scalar = (
+#                 iqe_value[0] if isinstance(iqe_value, (list, np.ndarray)) else iqe_value
+#             )
+#             current_jsc[i] = (
+#                 current_Jsc[i][0]
+#                 if isinstance(current_Jsc[i], (list, np.ndarray))
+#                 else current_Jsc[i]
+#             )
+#             # Save IQE
+#             result_file = os.path.join(
+#                 results_dir, f"IQE_{active_region_list[i].SCName}.csv"
+#             )
+#             data = pd.DataFrame(
+#                 {
+#                     "wavelength": [wvl],
+#                     "IQE": [iqe_scalar],
+#                     "Jsc": [-current_jsc[i][0]],
+#                     "Jph": [current_Jph[i]],
+#                 }
+#             )
+#             if os.path.exists(result_file):
+#                 data.to_csv(result_file, mode="a", header=False, index=False)
+#             else:
+#                 data.to_csv(result_file, index=False, header=True)
+#
+#     IQE_values = [
+#         [-Jsc_g[i][j] / Jph_g[i][j] for j in range(len(wl))]
+#         for i in range(len(active_region_list))
+#     ]
+#     return IQE_values, Jsc_g, Jph_g, wl
+#
+#
+# def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = True):
+#     """
+#     Calculates the total internal quantum efficiency (IQE) and total absorption for a tandem solar cell configuration.
+#     The function extracts absorption data, interpolates it to a common wavelength grid, and then processes IQE data
+#     from previously computed results in imbedded folder called "IQE_results + fdtd_file name".
+#
+#     Args:
+#             path: directory where the FDTD and CHARGE files exist.
+#             fdtd_file: String FDTD file name.
+#             active_region_list: list with SimInfo dataclasses containing the details of each active region in the simulation
+#                                 (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
+#                                       SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")]).
+#             properties: Dictionary with the property object and property names and values.
+#             run_abs: Boolean flag indicating whether to recompute absorption before processing IQE data.
+#
+#     Returns:
+#             total_iqe: 1D numpy array containing the minimum IQE values across all active regions at each wavelength.
+#             total_abs: 1D numpy array containing the total absorption across all active regions.
+#             all_wvl_new[0]: 1D numpy array representing the common wavelength grid used for interpolation.
+#     """
+#     all_abs, all_wvl = [], []
+#     all_iqe, all_iqe_wvl = [], []
+#     all_wvl_new = []
+#     min_max_wvl = float("inf")
+#     for names in active_region_list:
+#         if run_abs:
+#             abs_extraction(
+#                 names, path, fdtd_file, properties=properties
+#             )  # will calc the abs
+#         results_path = os.path.join(path, names.SolarGenName)
+#         abs_data = pd.read_csv(results_path + ".csv")
+#         all_abs.append(abs_data["abs"])
+#         all_wvl.append(abs_data["wvl"])
+#     for i, _ in enumerate(active_region_list):
+#         if max(all_wvl[i]) < min_max_wvl:
+#             min_max_wvl = max(all_wvl[i])
+#     for i, _ in enumerate(active_region_list):  # all abs should have the same size
+#         all_wvl_new.append(
+#             np.linspace(min(all_wvl[i]) * 10**9, min_max_wvl * 10**9, 1001)
+#         )
+#         all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i] * 10**9, all_abs[i])
+#     total_abs = sum(all_abs)
+#     iqe_path = os.path.join(path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0]))
+#     for names in active_region_list:
+#         results_path = os.path.join(iqe_path, "IQE_" + names.SCName)
+#         iqe_data = pd.read_csv(results_path + ".csv")
+#         all_iqe.append(iqe_data["IQE"])
+#         all_iqe_wvl.append(iqe_data["wavelength"])
+#     for i, _ in enumerate(active_region_list):
+#         all_iqe[i] = np.interp(all_wvl_new[i], all_iqe_wvl[i], all_iqe[i])
+#     all_iqe = np.array(all_iqe)  # Convert list of arrays to 2D NumPy array
+#     total_iqe = np.min(all_iqe, axis=0)  # min IQE at each wavlength
+#     return total_iqe, total_abs, all_wvl_new[0], all_iqe, all_abs
 
 
 def __prepare_gen(fdtd_handler, active_regions, override_freq):
@@ -376,7 +272,11 @@ def __get_gen(
             **{"active_regions": active_regions, "override_freq": override_freq},
         )
     else:
-        res, *_ = fdtd_run_analysis(fdtd_file, results, fdtd_kw=fdtd_kw)
+        if "fdtd_kw" in fdtd_kw.keys():
+            fdtd_kw = fdtd_kw["fdtd_kw"]
+        else:
+            fdtd_kw = {}
+        res = fdtd_run_analysis(fdtd_file, results, fdtd_kw=fdtd_kw)
     logger.debug(f"Get Gen run_fdtd results: {res}")
     if avg_mode:
         logger.debug("Averaged Genration -> 3d to 2d")
@@ -390,6 +290,9 @@ def __get_gen(
                     export_name=generation_name,
                 )
     return res
+
+
+""" Helper functions to set parameters in CHARGE """
 
 
 def set_sim_region(
@@ -636,6 +539,9 @@ def __set_iv_parameters(
     return xspan, yspan
 
 
+""" Main Run Functions (run_fdtd_and_charge and charge_run) """
+
+
 def run_fdtd_and_charge(
     active_regions: Union[SimInfo, List[SimInfo]],
     base_properties: Dict,
@@ -726,6 +632,112 @@ def run_fdtd_and_charge(
     return results
 
 
+def charge_run(
+    basefile: str,
+    properties: Dict[str, Dict[str, float]],
+    get_results,
+    *,
+    get_info: Dict[str, str] = {},
+    func=None,
+    savepath: Union[None, str] = None,
+    override_prefix: Union[None, str] = None,
+    delete: bool = True,
+    device_kw={"hide": True},
+    **kwargs,
+):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+        basefile: Path to the original file
+        properties: Dictionary with the property object and property names and values
+        get_results: Dictionary with the results to extract
+        get_info: Extra properties to extract from the simulation
+        func: Function to run before the simulation
+        savepath (default=.): Override default savepath for the new file
+        override_prefix (default=None): Override prefix for the new file
+        delete (default=False): Delete newly generated file
+    Return:
+        results: Dictionary with all the results
+        time: Time to run the simulation
+    """
+
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Get logfile name
+    log_file: str = os.path.join(
+        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
+    )
+    # Run simulation - the process is as follows
+    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
+    # 2. Create a process (RunLumerical) to run the lumerical file
+    #       - This avoids problems when the simulation gives errors
+    results = Manager().dict()
+    run_process = RunLumerical(
+        LumMethod.CHARGE,
+        results=results,
+        log_queue=Queue(-1),
+        filepath=new_filepath,
+        properties=properties,
+        get_results=get_results,
+        get_info=get_info,
+        func=func,
+        lumerical_kw=device_kw,
+        **kwargs,
+    )
+    run_process.start()
+    # check_thread = CheckRunState(log_file, run_process, process_queue)
+    # check_thread.start()
+    logger.debug("Run Process Started...")
+    run_process.join()
+    logger.debug(f"Simulation finished")
+    results_keys = list(results.keys())
+    if "runtime" not in results_keys:
+        raise LumericalError("Simulation Finished Prematurely")
+    if delete:
+        logger.debug(f"Deleting unwanted files")
+        os.remove(new_filepath)
+        os.remove(log_file)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+        raise LumericalError(results["Error"])
+    # Extract data from process
+    logger.debug(f"Simulation data:\n{results}")
+    # Check for other possible runtime problems
+    if "data" not in results_keys:
+        raise LumericalError("No data available from simulation")
+    return (
+        results["data"],
+        results["runtime"],
+        results["analysis runtime"],
+        results["data_info"],
+    )
+
+
+def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
+    """
+    Generic function to gather simulation data from already simulated files
+    Args:
+        basefile: Path to the original file
+        get_results: Dictionary with the results to extract
+
+    Return:
+        results: Dictionary with all the results
+    """
+    with lumapi.DEVICE(filename=basefile, **device_kw) as charge:
+        results = _get_lumerical_results(charge, get_results)
+        charge.close()
+    return results
+
+
+""" Alias Functions """
+
 """ Alias function to get bandstructure results """
 run_fdtd_and_charge_bandstructure = partial(
     run_fdtd_and_charge,
@@ -734,11 +746,8 @@ run_fdtd_and_charge_bandstructure = partial(
 )
 update_wrapper(run_fdtd_and_charge_bandstructure, run_fdtd_and_charge)
 
-""" Alias function to extract EQE information """
-run_fdtd_and_charge_eqe = partial(
-    run_fdtd_and_charge,
-    override_bias_regime_args={"voltage": 0, "is_voltage_range": False},
-)
+
+""" Functions to extract rund_fdtd_and_charge results """
 
 
 def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]):
@@ -794,6 +803,7 @@ def run_fdtd_and_charge_legacy(
     avg_mode=False,
     min_edge=None,
     range_num_points=101,
+    save_csv=False,
 ):
     charge_file = os.path.join(path, charge_file)
     fdtd_file = os.path.join(path, fdtd_file)
@@ -845,7 +855,18 @@ def run_fdtd_and_charge_legacy(
     final_results = []
     for result, active_region in zip(results, active_region_list):
         results_i = run_fdtd_and_charge_to_iv(result[0], active_region.Cathode)
-        final_results.append(results_i)
+        final_results.append(results_i[0])
+        if save_csv:
+            monitor = f"results.CHARGE.{active_region.Cathode}"
+            df = pd.DataFrame(
+                {
+                    "Current_Density": result[0][monitor]["I"].flatten(),
+                    "Voltage": result[0][monitor][f"V_{active_region.Cathode}"].flatten(),
+                }
+            )
+            csv_path = os.path.join(path, f"{active_region.SCName}_IV_curve.csv")
+            df.to_csv(csv_path, sep="\t", index=False)
+    logger.debug(f"Obtained Results: {final_results}")
     corrected_res = []
     for res in zip(*final_results):
         corrected_res.append(list(res))
