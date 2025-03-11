@@ -1,28 +1,27 @@
 from dataclasses import dataclass
+from functools import partial, update_wrapper
 import logging
 from multiprocessing import Manager, Queue
 import os
 import shutil
-from typing import Dict, Union, List, Tuple
+from typing import Dict, List, Tuple, Union
 from uuid import uuid4
 
-import h5py
 import numpy as np
 import pandas as pd
-from scipy.integrate import trapezoid
 
-from PyAstronomy import pyaC
+from em_methods.formulas.physiscs import (
+    intrinsic_carrier_density,
+    rad_recombination_coeff,
+)
+from em_methods.lumerical.fdtd import average_generation, fdtd_run, fdtd_run_analysis
 from em_methods.lumerical.lum_helper import (
     LumMethod,
     LumericalError,
     RunLumerical,
     _get_lumerical_results,
 )
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis
-from em_methods.formulas.physiscs import (
-    rad_recombination_coeff,
-    intrinsic_carrier_density,
-)
+from em_methods.utilities import iv_parameters
 import lumapi
 
 
@@ -71,6 +70,9 @@ class SimInfo:
     def getNamedGeneration(self, genname):
         """This extracts the extension from the generation filename"""
         return genname[:-4]
+
+    def update_rad_coefficient(self, new_rad_coefficient):
+        self.RadCoeff = new_rad_coefficient
 
 
 """ Main functions """
@@ -178,103 +180,6 @@ def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
         results = _get_lumerical_results(charge, get_results)
         charge.close()
     return results
-
-
-def __charge_extract_iv_data(results, active_region):
-    """
-    Obtains the performance metrics of a solar cell
-    Args:
-        results: Dictionary with all the results from the charge_run function
-        names: SimInfo dataclass structure about the simulation (e.g. SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"))
-        regime: "am" or "dark" for illuminated IV or dark IV
-    Returns:
-        If the curve is illuminated: PCE, FF, Voc, Jsc, current_density, voltage, stop, P
-        OR
-        If the curve is dark: current_density, voltage
-    """
-
-    current = np.array(results["results.CHARGE." + active_region.Cathode]["I"])
-    voltage = np.array(
-        results["results.CHARGE." + active_region.Cathode]["V_" + active_region.Cathode]
-    )
-    x_span = results["func_output"][0]
-    y_span = results["func_output"][1]
-    return current, voltage, x_span, y_span
-
-
-def iv_curve(
-    voltage, current=None, Lx=None, Ly=None, regime="am", current_density=None
-):
-    if current is None and current_density is None:
-        raise ValueError("Either current or current_density must be provided.")
-
-    if current_density is not None:
-        if current_density[0] > 0:
-            current_density = np.array(current_density) * -1
-        current_density = np.array(current_density)
-
-    else:
-        if Lx is None or Ly is None:
-            raise ValueError(
-                "Lx and Ly must be provided when current_density is not given."
-            )
-        Lx = Lx * 100  # from m to cm
-        Ly = Ly * 100  # from m to cm
-        area = Ly * Lx  # area in cm^2
-        current_density = (np.array(current) * 1000) / area  # mA/cm2
-
-    if (
-        len(current_density) == 1 and len(current_density[0]) != 1
-    ):  # CHARGE I output is not always consistent
-        current_density = current_density[0]
-        voltage = [float(arr[0]) for arr in voltage]
-    elif voltage.ndim == 2:
-        voltage = [float(arr[0]) for arr in voltage]
-    if current_density.ndim == 2:
-        current_density = [arr[0] for arr in current_density]
-
-    Ir = 1000  # W/m²
-    if regime == "am":
-        abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
-        if abs_voltage_min in voltage:
-            Jsc = current_density[np.where(voltage == abs_voltage_min)[0][0]]
-        elif -abs_voltage_min in voltage:
-            Jsc = current_density[np.where(voltage == -abs_voltage_min)[0][0]]
-
-        voltage = np.array(voltage)
-        current_density = np.array(current_density)
-        is_unordered = not np.all(voltage[:-1] <= voltage[1:])
-
-        if is_unordered:  # if it is unordered, then it will be ordered
-            sorted_indices_voltage = np.argsort(voltage)
-            voltage = voltage[sorted_indices_voltage]
-            current_density = current_density[sorted_indices_voltage]
-            _, unique_indices = np.unique(voltage, return_index=True)
-            voltage = voltage[unique_indices]
-            current_density = current_density[unique_indices]
-        Voc, stop = pyaC.zerocross1d(voltage, current_density, getIndices=True)
-
-        try:
-            stop = stop[0]
-            Voc = Voc[0]
-        except IndexError:
-            stop = np.nan
-            Voc = np.nan
-        try:
-            vals_v = np.linspace(min(voltage), max(voltage), 100)
-            new_j = np.interp(vals_v, voltage, current_density)
-            P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0]
-            FF = abs(max(P) / (Voc * Jsc))
-            PCE = ((FF * Voc * abs(Jsc) * 10**-3) / (Ir * (10**-4))) * 100
-        except ValueError:
-            P = np.nan
-            FF = np.nan
-            PCE = np.nan
-
-        return PCE, FF, Voc, Jsc, current_density, voltage
-
-    elif regime == "dark":
-        return current_density, voltage
 
 
 def IQE(
@@ -408,41 +313,6 @@ def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = 
     return total_iqe, total_abs, all_wvl_new[0], all_iqe, all_abs
 
 
-def _import_generation(gen_file):
-    """Import the necessary data
-    Filter - (z, x, y)
-    Generation - (z, x, y)
-    """
-    with h5py.File(gen_file, "r") as gen_file:
-        gen_data = np.transpose(np.array(gen_file["G"]), (0, 2, 1))
-        x = np.array(gen_file["x"]).transpose()
-        y = np.array(gen_file["y"]).transpose()
-        z = np.array(gen_file["z"]).transpose()
-
-    return gen_data, x, y, z
-
-
-def _average_generation(gen, x, y):
-    """Calculate the y and x/y averages generation profiles"""
-    norm_y = np.max(y) - np.min(y)
-    y_gen = trapezoid(gen, y, axis=2) / norm_y
-    norm_area = norm_y * (np.max(x) - np.min(x))
-    xy_gen = trapezoid(trapezoid(gen, x, axis=1), y, axis=1) / norm_area
-    return y_gen, xy_gen
-
-
-def _export_hdf_data(filename, **kwargs):
-    """Export data to an hdf5 file"""
-    # Check for existing file and override
-    if os.path.isfile(filename):
-        os.remove(filename)
-
-    # Add data do hdf datastructure
-    with h5py.File(filename, "x") as file:
-        for key, value in kwargs.items():
-            file.create_dataset(key, data=value, dtype="double")
-
-
 def __prepare_gen(fdtd_handler, active_regions, override_freq):
     """Function to preprocess the files necessary in get_gen function"""
     for names in active_regions:
@@ -455,14 +325,14 @@ def __prepare_gen(fdtd_handler, active_regions, override_freq):
             fdtd_handler.setglobalsource("wavelength stop", override_freq)
 
 
-def get_gen(
+def __get_gen(
     fdtd_file: str,
     properties: Dict,
     active_regions: List[SimInfo],
     avg_mode: bool = False,
     override_freq: Union[None, float] = None,
-    run_fdtd: bool = False,
-    fdtd_kw: Dict = {},
+    run_fdtd: bool = True,
+    fdtd_kw: Dict = {"fdtd_kw": {"hide": True}},
 ):
     """
     Alters the cell design ("properties"), simulates the FDTD file, and creates the generation rate .mat file(s)
@@ -513,17 +383,12 @@ def get_gen(
         for active_region in active_regions:
             for genregion in active_region.GenName_List:
                 generation_name = os.path.join(basepath, genregion)
-                logger.debug(f"New Generation Name: {generation_name}")
-                gen_data, x, y, z = _import_generation(generation_name)
-                y_gen, _ = _average_generation(gen_data, x.flatten(), y.flatten())
-                y_gen_3d = y_gen + np.zeros((len(x), len(z), len(y)))
-                export_3d_averaged_data = {
-                    "G": np.transpose(y_gen_3d, (1, 0, 2)),
-                    "x": x,
-                    "y": y,
-                    "z": z,
-                }
-                _export_hdf_data(generation_name, **export_3d_averaged_data)
+                average_generation(
+                    generation_name,
+                    mode="2d",
+                    export_mode="3d",
+                    export_name=generation_name,
+                )
     return res
 
 
@@ -588,6 +453,9 @@ def set_sim_region(
     charge_handler.set("z min", z_min)
     charge_handler.select("CHARGE")
     charge_handler.set("simulation region", sim_name)
+    # Correction factor for y_span in 2D simulations
+    if "2" in dimensions:
+        y_span = charge_handler.get("norm length")
     charge_handler.save()
     return sim_name, x_span, y_span
 
@@ -758,7 +626,11 @@ def __set_iv_parameters(
         sim_region = charge.getnamed("CHARGE", "simulation region")
         charge.select(sim_region)
         xspan = charge.get("x span")
-        yspan = charge.get("y span")
+        if "3D" not in charge.get("dimensions"):
+            charge.select("CHAGE")
+            charge.get("norm length")
+        else:
+            yspan = charge.get("y span")
     # Defining solver parameters
     set_bias_regime(charge, active_region.Cathode, **override_bias_regime_args)
     return xspan, yspan
@@ -770,44 +642,37 @@ def run_fdtd_and_charge(
     charge_file: str,
     fdtd_file: str,
     *,
+    def_sim_region: Union[None, str] = "2d",
+    min_edge: Union[List[float], None, List[None]] = None,
+    override_bias_regime_args: Union[Dict, List[Dict]] = {},
+    override_get_gen_args: Dict = {},
     charge_extra_properties: Dict = {},
     fdtd_extra_properties: Dict = {},
-    run_fdtd: bool = True,
-    def_sim_region: Union[None, str] = "2d",
-    override_bias_regime_args: Union[Dict, List[Dict]] = {
-        "voltage": 1.5,
-        "voltage_points": 101,
-    },
-    min_edge: Union[List[float], None, List[None]] = None,
-    avg_mode: bool = False,
-    save_csv=False,
-    savepath: str = ".",
-    charge_kw: Dict = {"device_kw": {"hide": True}, "delete": True},
-    fdtd_kw: Dict = {"fdtd_kw": {"hide": True}, "delete": True},
+    charge_get_extra_results: Dict = {},
+    charge_kw: Dict = {},
+    fdtd_kw: Dict = {},
 ):
     """
     Runs the FDTD and CHARGE files for the multiple active regions defined in the active_regions
     The main results are the IV parameters for the solar cell
     Args:
-        active_regions: SimInfo list with regions for simulation
+        active_regions: SimInfo list with FDTD and CHARGE connecting information
         base_properties: Properties to change in charge and fdtd
         charge_file: path to CHARGE file
         fdtd_file: path FDTD file
-        charge/fdtd_extra_properties: Additional properties to change in fdtd and charge
-        run_FDTD: (bool) Calculate generation profile or use already calculated
         def_sim_region: (None | str)
             None: Do not create simulation region
             str: Create Simulation region from '2D' '3D'
+        min_edge: Charge setting for the size of the simulation region
+        override_get_gen_args: Override arguments for get_gen
         override_bias_regime_args: Arguments for set_bias_regime function
             (voltage, voltage_points, is_voltage_range)
-        avg_mode (bool): Simplify generation to 2D or calculate 3D
-        min_edge: Charge setting for the size of the simulation region
-        save_csv: (bool) Save Current Density and Voltage in csv file "{names.SCName}_IV_curve.csv"
-        savepath: Directory to save results data
+        charge/fdtd_extra_properties: Additional properties to change in fdtd and charge
+        charge_get_extra_results: Adicional results to extract from charge
         charge_kw: Pass arguments for charge_run
         fdtd_kw: Pass arguments for fdtd_run
     Returns:
-        PCE (%), FF[0-1], Voc[V], Jsc[mA/cm2], Current_Density[mA/cm2], Voltage[V]:
+        list with result for each active region
     """
     # Perform pre-run checks
     if not isinstance(active_regions, list):
@@ -824,26 +689,14 @@ def run_fdtd_and_charge(
         )
     fdtd_extra_properties.update(base_properties)
     logger.debug(f"Final FDTD Properties: {fdtd_extra_properties}")
-    gen_results = get_gen(
+    gen_results = __get_gen(
         fdtd_file,
         fdtd_extra_properties,
         active_regions,
-        run_fdtd=run_fdtd,
-        avg_mode=avg_mode,
         fdtd_kw=fdtd_kw,
+        **override_get_gen_args,
     )
-    pce_array, ff_array, voc_array, jsc_array, current_density_array, voltage_array = (
-        [] for _ in range(6)
-    )
-    iv_variables = [
-        pce_array,
-        ff_array,
-        voc_array,
-        jsc_array,
-        current_density_array,
-        voltage_array,
-    ]
-    results = None
+    results = []
     for active_region, override_bias_regime_i, min_edge_i in zip(
         active_regions, override_bias_regime_args, min_edge
     ):
@@ -855,275 +708,145 @@ def run_fdtd_and_charge(
             "fdtd_results": gen_results,
         }
         charge_extra_properties.update(base_properties)
+        get_results = {"results": {"CHARGE": active_region.Cathode}}
+        get_results.update(charge_get_extra_results)
         charge_kw.update(
             {
                 "basefile": charge_file,
                 "properties": base_properties,
-                "get_results": {"results": {"CHARGE": active_region.Cathode}},
+                "get_results": get_results,
                 "func": __set_iv_parameters,
             }
         )
         logger.debug(
             f"Charge runconditions:\n{charge_extra_properties}\n{charge_kw}\n{conditions_dic}"
         )
-        results = charge_run(**charge_kw, **conditions_dic)
-        current, voltage, x_span, y_span = __charge_extract_iv_data(
-            results[0], active_region
-        )
-        iv_results = iv_curve(voltage, current, x_span, y_span)
-        for variable, var_result in zip(iv_variables, iv_results):
-            variable.append(var_result)
-        logger.info(
-            f"""
-Semiconductor:{active_region.SCName}
-Cathode {active_region.Cathode}
-Voc = {voc_array[-1]:.3f}V
-Jsc =  {jsc_array[-1]:.4f} mA/cm²
-FF = {ff_array[-1]:.3f}
-PCE = {pce_array[-1]:.3f}%
-"""
-        )
-        if save_csv:
-            df = pd.DataFrame(
-                {"Current_Density": jsc_array[-1], "Voltage": voc_array[-1]}
-            )
-            csv_path = os.path.join(savepath, f"{active_region.SCName}_IV_curve.csv")
-            df.to_csv(csv_path, sep="\t", index=False)
-    return tuple(iv_variables)
+        result = charge_run(**charge_kw, **conditions_dic)
+        results.append(result)
+    return results
 
 
-def band_diagram(
+""" Alias function to get bandstructure results """
+run_fdtd_and_charge_bandstructure = partial(
+    run_fdtd_and_charge,
+    charge_get_extra_results={"results": {"CHARGE::monitor": "bandstructure"}},
+    override_bias_regime_args={"voltage": 0, "is_voltage_range": False},
+)
+update_wrapper(run_fdtd_and_charge_bandstructure, run_fdtd_and_charge)
+
+""" Alias function to extract EQE information """
+run_fdtd_and_charge_eqe = partial(
+    run_fdtd_and_charge,
+    override_bias_regime_args={"voltage": 0, "is_voltage_range": False},
+)
+
+
+def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]):
+    """
+    Shortcut function to convert results from run_fdtd_and_charge to IV parameters
+    """
+    if isinstance(cathodes, str):
+        cathodes = [cathodes]
+    return_res = []
+    for cathode in cathodes:
+        logger.debug(f"Calculating Results for {cathode}")
+        current = np.array(results[f"results.CHARGE.{cathode}"]["I"])
+        voltage = np.array(results[f"results.CHARGE.{cathode}"][f"V_{cathode}"])
+        x_span = results["func_output"][0]
+        y_span = results["func_output"][1]
+        current_density = current.flatten() * 1e3 / (x_span * y_span * 1e4)
+        voltage = voltage.flatten()
+        res_i = iv_parameters(voltage, current_density)
+        return_res.append(res_i)
+    return return_res
+
+
+def run_fdtd_and_charge_to_bands(results, active_regions):
+    """
+    Shortcut function to convert results from run_fdtd_and_charge to IV parameters
+    """
+    return_res = []
+    for _ in active_regions:
+        ec = results["results.CHARGE::monitor.bandstructure"]["Ec"].flatten()
+        thickness = results["results.CHARGE::monitor.bandstructure"]["z"].flatten()
+        ev = results["results.CHARGE::monitor.bandstructure"]["Ev"].flatten()
+        efn = results["results.CHARGE::monitor.bandstructure"]["Efn"].flatten()
+        efp = results["results.CHARGE::monitor.bandstructure"]["Efp"].flatten()
+        return_res.append((thickness, ec, ev, efn, efp))
+    return return_res
+
+
+""" Compatibility Functions """
+
+
+def run_fdtd_and_charge_legacy(
     active_region_list,
     properties,
     charge_file,
     path,
     fdtd_file,
+    v_max=1.5,
+    run_FDTD=True,
     def_sim_region=None,
-    v_single_point: int = 0,
     B=None,
-    method_solver="GUMMEL",
+    method_solver="NEWTON",
+    v_single_point=None,
+    avg_mode=False,
     min_edge=None,
-    generation=None,
+    range_num_points=101,
 ):
-    """
-    Extracts the band diagram in a simulation region at v_single_point Volts. ATTENTION the monitor has to be placed preemptively in CHARGE with the desired geometry and position
-    Args:
-            active_region_list: list with SimInfo dataclassses with the details of the simulation
-                            (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-                                    SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")])
-            properties: (Dictionary) with the property object and property names and values
-            charge_file: (str) name of CHARGE file
-            path: (str) directory where the FDTD and CHARGE files exist
-            def_sim_region: (str) input that defines if it is necessary to create a new simulation region. Possible input values include '2D', '2d', '3D', '3d'.
-                        A simulation region will be defined accordingly to the specified dimentions. If no string is introduced then no new simulation region
-                        will be created
-            B: (float) Radiative recombination coeficient. By default it is None.
-            method_solver: (str) defines de method for solving the drift diffusion equations in CHARGE: "GUMMEL" or "NEWTON"
-            v_single_point: (float) If anything other than None, overrides v_max and the current response of the cell is calculated at v_single_point Volts.
-    Returns:
-            Thickness, Ec, Ev, Efn, Efp: array of np.arrays with active_region_list size
-                        (e.g. if the active_region_list has 2 materials: Ec = [[...]], [...]] )
-    """
-    valid_solver = {"GUMMEL", "NEWTON"}
-    if method_solver.upper() not in valid_solver:
-        raise LumericalError(
-            "method_solver must be 'GUMMEL' or 'NEWTON' or any case variation, or have no input"
-        )
-    if min_edge == None:
-        min_edge = [None for _ in range(0, len(active_region_list))]
+    charge_file = os.path.join(path, charge_file)
+    fdtd_file = os.path.join(path, fdtd_file)
+    if not isinstance(active_region_list, list):
+        active_region_list = [active_region_list]
     if B == None:
         B = [None for _ in range(0, len(active_region_list))]
-
-    charge_path = os.path.join(path, charge_file)
-    Ec, Ev, Efn, Efp, Thickness = [], [], [], [], []
-    for names in active_region_list:
-        if (
-            B[active_region_list.index(names)] == True
-        ):  # checks if it will calculate B for that object
-            B[active_region_list.index(names)] = extract_B_radiative(
-                [names],
-                path,
-                fdtd_file,
-                charge_file,
-                properties=properties,
-                run_abs=False,
-            )[
-                0
-            ]  # B value is calculated based on last FDTD for that index
-            print(f"The B values: {B}")
-        conditions_dic = {
-            "bias_regime": "forward",
-            "name": names,
-            "v_max": None,
-            "def_sim_region": def_sim_region,
-            "B": B[active_region_list.index(names)],
-            "method_solver": method_solver.upper(),
-            "v_single_point": v_single_point,
-            "min_edge": min_edge[active_region_list.index(names)],
-            "generation": generation,
-        }
-        get_results = {
-            "results": {"CHARGE::monitor": "bandstructure"}
-        }  # get_results: Dictionary with the properties to be calculated
-
-        results = charge_run(
-            charge_path,
-            properties,
-            get_results,
-            func=__set_iv_parameters,
-            delete=True,
-            device_kw={"hide": True},
-            **conditions_dic,
-        )
-        bandstructure = results[0]
-        ec = bandstructure["results.CHARGE::monitor.bandstructure"]["Ec"].flatten()
-        thickness = bandstructure["results.CHARGE::monitor.bandstructure"][
-            "z"
-        ].flatten()
-        ev = bandstructure["results.CHARGE::monitor.bandstructure"]["Ev"].flatten()
-        efn = bandstructure["results.CHARGE::monitor.bandstructure"]["Efn"].flatten()
-        efp = bandstructure["results.CHARGE::monitor.bandstructure"]["Efp"].flatten()
-        Ec.append(ec)
-        Ev.append(ev)
-        Efn.append(efn)
-        Efp.append(efp)
-        Thickness.append(thickness)
-    return Thickness, Ec, Ev, Efn, Efp
-
-
-def abs_extraction(names, path, fdtd_file, properties={}):
-    """
-    Extracts the Absoprtion spectrum of material in "names" and creates csv file with format: 'wvl':abs['lambda'].flatten(), 'pabs':abs['Pabs_total']
-    Args:
-            names: SimInfo.SCname from SimInfo dataclassses with the details of the simulation
-            properties: (Dictionary) with the property object and property names and values
-            path: (str) directory where the FDTD and CHARGE files exist
-            fdtd_file: (str)  name of FDTD file
-            properties: (Dictionary) with the property object and property names and values
-
-    """
-    fdtd_path = os.path.join(path, fdtd_file)
-    override_prefix: str = str(uuid4())[0:5]
-    new_fdtd_file = override_prefix + "_" + fdtd_file
-    new_filepath_fdtd: str = os.path.join(path, new_fdtd_file)
-    shutil.copyfile(fdtd_path, new_filepath_fdtd)
-    log_file_fdtd: str = os.path.join(
-        path, f"{override_prefix}_{os.path.splitext(fdtd_file)[0]}_p0.log"
-    )
-    with lumapi.FDTD(filename=new_filepath_fdtd, hide=True) as fdtd:
-        for structure_key, structure_value in properties.items():
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                fdtd.set(parameter_key, parameter_value)
-        fdtd.save()
-        fdtd.run()
-        fdtd.runanalysis(names.SolarGenName)
-        abs = fdtd.getresult(names.SolarGenName, "Pabs_total")
-        fdtd.switchtolayout()
-        fdtd.close()
-    results = pd.DataFrame({"wvl": abs["lambda"].flatten(), "pabs": abs["Pabs_total"]})
-    results_path = os.path.join(path, names.SolarGenName)
-    results.to_csv(
-        results_path + ".csv", header=("wvl", "abs"), index=False
-    )  # saves the results in file in path
-    os.remove(new_filepath_fdtd)
-    # os.remove(log_file_fdtd)
-
-
-def _get_replacement(lst):
-    for i in range(len(lst)):
-        if lst[i] < 0:
-            lst[i] = 0
-    return lst
-
-
-def get_iv_4t(folder, pvk_v, pvk_iv, si_v, si_iv):
-    """Plots the IV curve of a tandem solar cell, in 4-terminal configuration, with 2 subcells in parallel.
-    Note: Bottom subcell is divided into 2 cells, connected in series, to double the VOC.
-    Args:
-            folder: folder where the .txt files are stored
-            pvk_voltage_file: name of the PVK voltage file
-            pvk_current_file: name of the PVK current file
-            si_voltage_file: name of the Silicon voltage file
-            si_current_file: name of the Silicon current file
-    """
-    # PEROVSKITE______________________
-    pvk_iv = _get_replacement(np.array(pvk_iv).flatten())
-
-    # plt.figure(figsize=(5.5,5))
-    # plt.plot(pvk_v, pvk_iv, label = 'PVK subcell', c = 'steelblue')
-
-    # Determine Voc,pvk
-    Voc_pvk = pvk_v[np.where(pvk_iv == 0)[0]][0]
-
-    # SILICON__________________________
-    # plt.plot(si_v, _get_replacement(si_iv), label = 'Si subcell', c = 'yellowgreen', linestyle = '--')
-
-    si_v = si_v * 2
-    si_iv = _get_replacement(si_iv / 2)
-    # plt.plot(si_v, si_iv, label = '2 series Si subcell', c = 'yellowgreen')
-
-    # Determine Voc,Si
-    Voc_si = si_v[np.where(si_iv == 0)[0]][0]
-
-    # TANDEM____________________________
-
-    # Determine Voc
-    Voc = min(Voc_pvk, Voc_si)
-
-    # Determine voltage
-    tan_v = np.array([v for i, v in enumerate(pvk_v) if i % 2 == 0])
-    tan_leng = len(
-        tan_v[tan_v <= Voc]
-    )  # number of elements in the array that are less than Voc
-
-    # Determine current
-    pvk_iv = [v for i, v in enumerate(pvk_iv) if i % 2 == 0]
-    tandem_iv = si_iv[: len(pvk_iv)] + pvk_iv
-    tan_i = []
-
-    for i in range(len(tandem_iv)):
-        if i <= (tan_leng - 1):
-            tan_i.append(tandem_iv[i])
+    # Adapt v_max / v_single_point / range_num_points to override_bias_regime
+    if not isinstance(v_single_point, (list, np.ndarray)):
+        v_single_point = [v_single_point for _ in range(0, len(active_region_list))]
+    if not isinstance(v_max, (list, np.ndarray)):
+        v_max = [v_max for _ in range(0, len(active_region_list))]
+    if not isinstance(range_num_points, (list, np.ndarray)):
+        range_num_points = [
+            int(range_num_points) for _ in range(0, len(active_region_list))
+        ]
+    override_bias_regime_list = []
+    for active_region, b_i in zip(active_region_list, B):
+        active_region.update_rad_coefficient(b_i)
+    for v_i, v_single_i, range_i in zip(v_max, v_single_point, range_num_points):
+        if v_single_i is not None:
+            override_bias_regime_list.append(
+                {
+                    "voltage": v_single_i,
+                    "is_voltage_range": False,
+                    "method_solver": method_solver,
+                }
+            )
         else:
-            tan_i.append(0)
-    leng = min(len(tan_v), len(tan_i))
-
-    # PLOT Tandem IV curve
-    # plt.plot(tan_v[:leng], tan_i[:leng], label = 'PSTSC', c = 'crimson', linestyle='--')
-    # plt.legend()
-    # plt.ylabel('Current Density [mA/cm2]')
-    # plt.xlabel('Voltage [V]')
-    # plt.ylim(0,30)
-    # plt.xlim(-0.1,2)
-    # plt.grid(linestyle=':')
-
-    # plt.savefig(os.path.join(folder, "iv_curve_4t.svg"), dpi = 300, bbox_inches = 'tight')
-
-    # Get IV curve variables
-    voltage = si_v[: len(tandem_iv)].flatten()
-    current_density = tandem_iv
-    Ir = 1000  # W/m²
-
-    # DETERMINE JSC
-    abs_voltage_min = min(np.absolute(voltage))  # voltage value closest to zero
-    if abs_voltage_min in voltage:
-        Jsc = current_density[np.where(voltage == abs_voltage_min)[0]]
-        Isc = current_density[np.where(voltage == abs_voltage_min)[0]]
-    elif -abs_voltage_min in voltage:
-        Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]]
-        Isc = current_density[np.where(voltage == -abs_voltage_min)[0]]
-
-    # DETERMINE VOC THROUGH INTERPOLATION
-
-    vals_v = np.linspace(min(voltage), max(voltage), 100)
-    new_j = np.interp(vals_v, voltage, current_density.flatten())
-    P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] > 0]
-    # calculate the power for all points [W]
-    FF = abs(max(P) / (Voc * Isc))
-    PCE = ((FF * Voc * abs(Isc) * 10) / (Ir)) * 100
-
-    print(
-        f"FF = {FF[0]:.2f}, PCE = {PCE[0]:.2f} %, Voc = {Voc:.2f} V, Isc = {Isc[0]:.2f} mA/cm2"
+            override_bias_regime_list.append(
+                {
+                    "voltage": v_i,
+                    "is_voltage_range": True,
+                    "voltage_points": range_i,
+                    "method_solver": method_solver,
+                }
+            )
+    results = run_fdtd_and_charge(
+        active_region_list,
+        properties,
+        charge_file,
+        fdtd_file,
+        def_sim_region=def_sim_region,
+        min_edge=min_edge,
+        override_bias_regime_args=override_bias_regime_list,
+        override_get_gen_args={"run_fdtd": run_FDTD, "avg_mode": avg_mode},
     )
-    return vals_v, new_j
+    logger.debug(f"Simulated Results: {results}")
+    final_results = []
+    for result, active_region in zip(results, active_region_list):
+        results_i = run_fdtd_and_charge_to_iv(result[0], active_region.Cathode)
+        final_results.append(results_i)
+    corrected_res = []
+    for res in zip(*final_results):
+        corrected_res.append(list(res))
+    return corrected_res

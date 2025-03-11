@@ -6,11 +6,13 @@ import shutil
 import sys
 from typing import Dict, List, Tuple, Union
 from uuid import uuid4
+import h5py
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import scipy.constants as scc
+from scipy.integrate import trapezoid
 
 from em_methods.lumerical.lum_helper import LumMethod, LumericalError, RunLumerical
 import lumapi
@@ -345,3 +347,73 @@ def fdtd_get_material(
         if save:
             return_res.to_csv(os.path.join(basepath, save), sep=" ", index=False)
     return return_res
+
+
+""" Other functions """
+
+
+def import_generation(gen_file):
+    """
+    Import and rearrange the necessary data
+    Filter - (z, x, y)
+    Generation - (z, x, y)
+    """
+    with h5py.File(gen_file, "r") as gen_file:
+        gen_data = np.transpose(np.array(gen_file["G"]), (0, 2, 1))
+        x = np.array(gen_file["x"]).transpose()
+        y = np.array(gen_file["y"]).transpose()
+        z = np.array(gen_file["z"]).transpose()
+
+    return gen_data, x, y, z
+
+
+def _average_generation(gen, x, y):
+    """Calculate the y and x/y averages generation profiles"""
+    norm_y = np.max(y) - np.min(y)
+    y_gen = trapezoid(gen, y, axis=2) / norm_y
+    norm_area = norm_y * (np.max(x) - np.min(x))
+    xy_gen = trapezoid(trapezoid(gen, x, axis=1), y, axis=1) / norm_area
+    return y_gen, xy_gen
+
+
+def _export_hdf_data(filename, **kwargs):
+    """Export data to an hdf5 file"""
+    # Check for existing file and override
+    if os.path.isfile(filename):
+        os.remove(filename)
+
+    # Add data do hdf datastructure
+    with h5py.File(filename, "x") as file:
+        for key, value in kwargs.items():
+            file.create_dataset(key, data=value, dtype="double")
+
+
+def average_generation(
+    filename: str,
+    mode: str = "2d",
+    export_mode: str = "3d",
+    export_name: Union[None, str] = None,
+):
+    generation, x, y, z = import_generation(filename)
+    mode = mode.lower()
+    if mode == "2d":
+        average_gen, _ = _average_generation(generation, x.flatten(), y.flatten())
+    elif mode == "1d":
+        _, average_gen = _average_generation(generation, x.flatten(), y.flatten())
+        export_gen = {"G": average_gen, "z": z}
+    else:
+        raise Exception("Unexpected mode (2d or 1d)")
+    export_mode = export_mode.lower()
+    if export_mode == "3d":
+        average_gen = average_gen + np.zeros((len(x), len(z), len(y)))
+        export_gen = {
+            "G": np.transpose(average_gen, (1, 0, 2)),
+            "x": x,
+            "y": y,
+            "z": z,
+        }
+    else:
+        raise Exception("Unexpected export mode (3d)")
+    if export_name is not None:
+        _export_hdf_data(export_name, **export_gen)
+    return export_gen

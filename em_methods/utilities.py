@@ -1,6 +1,7 @@
 from typing import Dict, List, Union, Tuple
 from scipy.interpolate import interp1d
 from scipy.integrate import trapz, cumulative_trapezoid
+from scipy.optimize import brentq
 import scipy.constants as scc
 import pandas as pd
 import os
@@ -9,23 +10,21 @@ import numpy as np
 from em_methods import Units
 import matplotlib.pyplot as plt
 import matplotlib as mpl
-import matplotlib.colors as mcolors
-from PyAstronomy import pyaC
+import numpy.typing as npt
 from itertools import product
 import shutil
 from em_methods.optimization.pso import particle_swarm
-from em_methods.lumerical.charge import  iv_curve, _import_generation
+from em_methods.lumerical.fdtd import import_generation
 from em_methods.pv.diode import luqing_liu_diode
-
-#dont know if necessary yet
-import h5py
-from mpl_toolkits.mplot3d import Axes3D
-
+import logging
 
 # Get some module paths
 file_path = Path(os.path.abspath(__file__))
 parent_path = file_path.parent
 data_path = os.path.join(parent_path, "data")
+
+# Get module logger
+logger = logging.getLogger("sim")
 
 
 def jsc_files(
@@ -177,6 +176,48 @@ def lambertian_thickness(
             for t_i in thicknesses
         ]
     )
+
+""" Functions for solar cell calculations """
+
+SOLAR_IRRADIANCE = 1000
+
+def iv_parameters(
+    voltage: npt.ArrayLike,
+    current_density: npt.ArrayLike,
+    refinement_points: int = 1000,
+    interp_kw: Dict = {},
+):
+    """
+    Extract Voc, Jsc, FF and PCE from iv_curve data
+    Args:
+        voltage, current_density
+        refined_current: number of points for power calculation
+        interp_kw: Arguments to pass to interp1d function
+    """
+    voltage = np.array(voltage)
+    current_density = np.array(current_density)
+    min_voltage_index = np.argmin(voltage)
+    if current_density[min_voltage_index] < 0:
+        current_density *= -1
+    j_interp = interp1d(voltage, current_density)
+    jsc = j_interp(0)
+    v_min, v_max = np.min(voltage), np.max(voltage)
+    if current_density[0] * current_density[-1] >= 0:
+        voc = np.nan
+    else:
+        voc = brentq(j_interp, v_min, v_max, **interp_kw)
+    refined_voltage = np.linspace(v_min, v_max, refinement_points)
+    refined_current = j_interp(refined_voltage)
+    power = refined_voltage * refined_current
+    ff = np.max(power[power > 0]) / (voc * jsc)
+    pce = ff * 100 * voc * jsc * 10 / SOLAR_IRRADIANCE
+    logger.debug(f"""Calculated IV Performance Parameters:
+ Jsc: {jsc}
+ Voc: {voc}
+ FF: {ff}
+ PCE: {pce}
+ """)
+    return pce, ff, voc, jsc
 
 
 def __colorFader(c1, c2="#FFFFFF", mix=[0]):
@@ -521,7 +562,7 @@ def plot_IV_curves_v2(
             print('heyyyy', type(v[v_key]))
             print(v[v_key])
             print(j[j_key])
-            pce[pce_key], ff[ff_key], voc[voc_key], jsc[jsc_key], _, _ = iv_curve( np.array(v[v_key]), current_density = np.array(j[j_key]))
+            pce[pce_key], ff[ff_key], voc[voc_key], jsc[jsc_key], _, _ = iv_parameters( np.array(v[v_key]), current_density = np.array(j[j_key]))
             erase_iv = True
         else: 
             erase_iv = False
@@ -778,43 +819,43 @@ def plot_generation_3d(
         plt.savefig(os.path.join(path, str(gen_file) + "plot.png"))
 
 
-def iv_parameters(voltage, current_density, area, current=[]):
-    "area: in cm2"
-    Ir = 1000  # W/m²
-    current_density = np.array(current_density)
-    if current == []:
-        current = current_density * area * 10**-3
-    else:
-        current = np.array(current)
-    abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
-    if abs_voltage_min in voltage:
-        Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
-        Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
-        # Jsc = current_density[voltage.index(abs_voltage_min)]
-        # Isc = current[voltage.index(abs_voltage_min)]
-    elif -abs_voltage_min in voltage:
-        # the position in the array of Jsc and Isc should be the same
-        Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
-        Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
-        # Jsc = current_density[voltage.index(-abs_voltage_min)]
-        # Isc = current[voltage.index(-abs_voltage_min)]
-
-    Voc, stop = pyaC.zerocross1d(
-        np.array(voltage), np.array(current_density), getIndices=True
-    )
-    Voc = Voc[0]
-    P = [
-        voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0
-    ]  # calculate the power for all points [W]
-    vals_v = np.linspace(min(voltage), max(voltage), 100)
-    new_j = np.interp(vals_v, voltage, current)
-    P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0]
-
-    FF = abs(max(P) / (Voc * Isc))
-
-    PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
-    Jsc = -current_density[0]
-    return abs(FF), abs(PCE), abs(Jsc), abs(Voc)
+# def iv_parameters(voltage, current_density, area, current=[]):
+#     "area: in cm2"
+#     Ir = 1000  # W/m²
+#     current_density = np.array(current_density)
+#     if current == []:
+#         current = current_density * area * 10**-3
+#     else:
+#         current = np.array(current)
+#     abs_voltage_min = min(np.absolute(voltage))  # volatage value closest to zero
+#     if abs_voltage_min in voltage:
+#         Jsc = current_density[np.where(voltage == abs_voltage_min)[0]][0]
+#         Isc = current[np.where(voltage == abs_voltage_min)[0]][0]
+#         # Jsc = current_density[voltage.index(abs_voltage_min)]
+#         # Isc = current[voltage.index(abs_voltage_min)]
+#     elif -abs_voltage_min in voltage:
+#         # the position in the array of Jsc and Isc should be the same
+#         Jsc = current_density[np.where(voltage == -abs_voltage_min)[0]][0]
+#         Isc = current[np.where(voltage == -abs_voltage_min)[0]][0]
+#         # Jsc = current_density[voltage.index(-abs_voltage_min)]
+#         # Isc = current[voltage.index(-abs_voltage_min)]
+#
+#     Voc, stop = pyaC.zerocross1d(
+#         np.array(voltage), np.array(current_density), getIndices=True
+#     )
+#     Voc = Voc[0]
+#     P = [
+#         voltage[x] * abs(current[x]) for x in range(len(voltage)) if current[x] < 0
+#     ]  # calculate the power for all points [W]
+#     vals_v = np.linspace(min(voltage), max(voltage), 100)
+#     new_j = np.interp(vals_v, voltage, current)
+#     P = [vals_v[x] * abs(new_j[x]) for x in range(len(vals_v)) if new_j[x] < 0]
+#
+#     FF = abs(max(P) / (Voc * Isc))
+#
+#     PCE = ((FF * Voc * abs(Isc)) / (Ir * (area * 10**-4))) * 100
+#     Jsc = -current_density[0]
+#     return abs(FF), abs(PCE), abs(Jsc), abs(Voc)
 
 #2Terminal IV curve
 def fom_func(voc_temp, voltage, charge_current, diode_func_current):
@@ -900,7 +941,7 @@ def pso_func( eta_pso, path,  active_region_list, voltage_charge, current_densit
     """
     FoM_matrix = []
     generator = list(enumerate(zip(eta_pso)))
-    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage_charge, current_density = current_density_charge)
+    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage_charge, current_density = current_density_charge)
     jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
     rsh_derivative, rs_derivative =  calc_R(voc_temp,voltage_charge,current_density_charge)
 
@@ -996,7 +1037,7 @@ def plot_2T(folder, active_region_list,  param_dict):
         if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
             voltage_charge_iv_curve = voltage_charge
         current_density_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"]
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage_charge, current_density = current_density_charge)
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage_charge, current_density = current_density_charge)
         jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
         rsh_derivative_temp, rs_derivative_temp =  calc_R(voc_temp,voltage_charge,current_density_charge)    
         pce.append(pce_temp)
@@ -1054,7 +1095,7 @@ def plot_4T(folder,active_region_list):
         if np.array(voltage[i])[-1] > np.array(voltage_charge_iv_curve):
             voltage_charge_iv_curve = np.array(voltage[i])[-1]
         current_density.append(pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_curve(voltage[i], current_density = current_density[i])
+        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage[i], current_density = current_density[i])
         voc.append(voc_temp)
     for i, _ in enumerate(active_region_list):     
         new_voltage = np.linspace(min(voltage[i]), voltage_charge_iv_curve, 2001)

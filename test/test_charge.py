@@ -6,8 +6,11 @@ from em_methods.lumerical import (
     charge_run,
     LumericalError,
     SimInfo,
+)
+from em_methods.lumerical.charge import (
+    __get_gen,
     run_fdtd_and_charge,
-    get_gen,
+    run_fdtd_and_charge_legacy,
 )
 import pandas as pd
 
@@ -160,7 +163,7 @@ class TestCHARGE(unittest.TestCase):
             "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"
         )
         active_regions = [si_siminfo, pvk_siminfo]
-        jsc = get_gen(test_file_fdtd, {}, active_regions, avg_mode=True)
+        jsc = __get_gen(test_file_fdtd, {}, active_regions, avg_mode=True)
 
     def test_run_fdtd_and_charge_4t(self):
         """Run single instance of run_fdtd_and_charge function"""
@@ -207,15 +210,15 @@ class TestCHARGE(unittest.TestCase):
             }
         }
         si_bias_regime = {
-                "method_solver": "GUMMEL",
-                "voltage": 0.8,
-                "voltage_points": 31
-                }
+            "method_solver": "GUMMEL",
+            "voltage": 0.8,
+            "voltage_points": 31,
+        }
         pvk_bias_regime = {
-                "method_solver": "GUMMEL",
-                "voltage": 1.8,
-                "voltage_points": 61
-                }
+            "method_solver": "GUMMEL",
+            "voltage": 1.8,
+            "voltage_points": 61,
+        }
         run_fdtd_and_charge(
             active_regions,
             properties,
@@ -224,7 +227,7 @@ class TestCHARGE(unittest.TestCase):
             def_sim_region="2d",
             override_bias_regime_args=[si_bias_regime, pvk_bias_regime],
             min_edge=[0.005e-6, 0.001e-6],
-            avg_mode=True,
+            override_get_gen_args={"avg_mode": True},
         )
 
     def test_run_fdtd_and_charge_2t(self):
@@ -251,15 +254,15 @@ class TestCHARGE(unittest.TestCase):
         #     }
         # }
         si_bias_regime = {
-                "method_solver": "GUMMEL",
-                "voltage": 0.8,
-                "voltage_points": 31
-                }
+            "method_solver": "GUMMEL",
+            "voltage": 0.8,
+            "voltage_points": 31,
+        }
         pvk_bias_regime = {
-                "method_solver": "GUMMEL",
-                "voltage": 1.8,
-                "voltage_points": 61
-                }
+            "method_solver": "GUMMEL",
+            "voltage": 1.8,
+            "voltage_points": 61,
+        }
         run_fdtd_and_charge(
             active_regions,
             {},
@@ -268,5 +271,46 @@ class TestCHARGE(unittest.TestCase):
             def_sim_region="2d",
             override_bias_regime_args=[si_bias_regime, pvk_bias_regime],
             min_edge=[0.005e-6, 0.001e-6],
-            avg_mode=True,
+            override_get_gen_args={"avg_mode": True},
         )
+
+    def test_run_fdtd_and_charge_legacy(self):
+        """Test compatibility function for run_fdtd_and_charge"""
+        # 4T
+        fdtd_name = "test_planar_tandem_4t.fsp"
+        charge_name = "test_planar_tandem_4t.ldev"
+        Perovskite = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO"
+        )
+        Si = SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom")
+        region = [Si, Perovskite]
+        B_list = [4.73e-15, True]
+        v_max = [0.8, 1.6]
+        min_edge = [0.005 * 10**-6, 0.001 * 10**-6]
+        range_num_points = [31, 61]
+        properties = {
+            "::model": {
+                "tPerovskite": 163.43e-9,
+                "tlayer": 20e-9,
+                "tITO": 50e-9,
+                "tTCO": 50e-9,
+                "n": 2.80,
+            }
+        }
+        run_fdtd_and_charge_legacy(
+            region,
+            properties,
+            charge_name,
+            BASETESTPATH_FDTD_CHARGE,
+            fdtd_name,
+            v_max=v_max,
+            def_sim_region="2d",
+            run_FDTD=True,
+            B=B_list,
+            avg_mode=True,
+            method_solver="GUMMEL",
+            min_edge=min_edge,
+            range_num_points=range_num_points,
+            # save_csv=True,
+        )
+        pass
