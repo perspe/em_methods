@@ -14,6 +14,7 @@ Slab\ Waveguide
 PSO_Results
 
 # General Files
+test/**/*.csv
 *.log
 *.so
 *.pyd
