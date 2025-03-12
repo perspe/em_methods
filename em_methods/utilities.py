@@ -179,7 +179,7 @@ def lambertian_thickness(
 
 """ Functions for solar cell calculations """
 
-SOLAR_IRRADIANCE = 1000
+SOLAR_IRRADIANCE = 1000 # W/m2
 
 def iv_parameters(
     voltage: npt.ArrayLike,
@@ -203,6 +203,7 @@ def iv_parameters(
     jsc = j_interp(0)
     v_min, v_max = np.min(voltage), np.max(voltage)
     if current_density[0] * current_density[-1] >= 0:
+        logger.warning("Signal for the current density should change to calculate Voc")
         voc = np.nan
     else:
         voc = brentq(j_interp, v_min, v_max, **interp_kw)

@@ -13,7 +13,7 @@ from enum import Enum
 # Using any logger (such as dev) that log into
 # files may cause some problems in the end of the
 # program
-logger = logging.getLogger("sim")
+logger = logging.getLogger("dev")
 import lumapi
 
 class LumMethod(Enum):
@@ -120,7 +120,7 @@ class RunLumerical(Process):
         self,
         method: LumMethod,
         *,
-        results: Manager,
+        results,
         log_queue: Queue,
         filepath: str,
         properties: Dict[str, Dict[str, float]],

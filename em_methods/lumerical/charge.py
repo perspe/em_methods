@@ -26,7 +26,7 @@ import lumapi
 
 
 # Get module logger
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 
 
 @dataclass()
@@ -529,11 +529,13 @@ def __set_iv_parameters(
         sim_region = charge.getnamed("CHARGE", "simulation region")
         charge.select(sim_region)
         xspan = charge.get("x span")
-        if "3D" not in charge.get("dimensions"):
-            charge.select("CHAGE")
+        if "3D" not in charge.get("dimension"):
+            charge.select("CHARGE")
             charge.get("norm length")
         else:
             yspan = charge.get("y span")
+    if min_edge is not None:
+        set_mesh_conditions(charge, min_edge)
     # Defining solver parameters
     set_bias_regime(charge, active_region.Cathode, **override_bias_regime_args)
     return xspan, yspan
@@ -593,6 +595,21 @@ def run_fdtd_and_charge(
         raise Exception(
             "active_regions | override_bias_regime_args | min_edge should have the same size"
         )
+    # def_sim_region -> override_get_gen_args["avg_mode"] == True
+    if def_sim_region == "2d":
+        if not "avg_mode" in override_get_gen_args.keys():
+            logger.warning(
+                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
+            )
+            override_get_gen_args.update({"avg_mode": True})
+        elif (
+            "avg_mode" in override_get_gen_args.keys()
+            and not override_get_gen_args["avg_mode"]
+        ):
+            logger.warning(
+                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
+            )
+            override_get_gen_args["avg_mode"] = True
     fdtd_extra_properties.update(base_properties)
     logger.debug(f"Final FDTD Properties: {fdtd_extra_properties}")
     gen_results = __get_gen(
@@ -619,7 +636,7 @@ def run_fdtd_and_charge(
         charge_kw.update(
             {
                 "basefile": charge_file,
-                "properties": base_properties,
+                "properties": charge_extra_properties,
                 "get_results": get_results,
                 "func": __set_iv_parameters,
             }
@@ -751,7 +768,7 @@ update_wrapper(run_fdtd_and_charge_bandstructure, run_fdtd_and_charge)
 """ Functions to extract rund_fdtd_and_charge results """
 
 
-def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]):
+def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]) -> List[Tuple]:
     """
     Shortcut function to convert results from run_fdtd_and_charge to IV parameters
     """
@@ -774,17 +791,20 @@ def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]):
     return return_res
 
 
-def run_fdtd_and_charge_to_bands(results, active_regions):
+def run_fdtd_and_charge_to_bands(results: Union[List[Dict], Dict]) -> List[Tuple]:
     """
     Shortcut function to convert results from run_fdtd_and_charge to IV parameters
     """
+    if not isinstance(results, list):
+        results = [results]
     return_res = []
-    for _ in active_regions:
-        ec = results["results.CHARGE::monitor.bandstructure"]["Ec"].flatten()
-        thickness = results["results.CHARGE::monitor.bandstructure"]["z"].flatten()
-        ev = results["results.CHARGE::monitor.bandstructure"]["Ev"].flatten()
-        efn = results["results.CHARGE::monitor.bandstructure"]["Efn"].flatten()
-        efp = results["results.CHARGE::monitor.bandstructure"]["Efp"].flatten()
+    for results_i in results:
+        results_i = results_i[0]
+        ec = results_i["results.CHARGE::monitor.bandstructure"]["Ec"].flatten()
+        thickness = results_i["results.CHARGE::monitor.bandstructure"]["z"].flatten()
+        ev = results_i["results.CHARGE::monitor.bandstructure"]["Ev"].flatten()
+        efn = results_i["results.CHARGE::monitor.bandstructure"]["Efn"].flatten()
+        efp = results_i["results.CHARGE::monitor.bandstructure"]["Efp"].flatten()
         return_res.append((thickness, ec, ev, efn, efp))
     return return_res
 
@@ -858,14 +878,16 @@ def run_fdtd_and_charge_legacy(
     logger.debug(f"Simulated Results: {results}")
     final_results = []
     for result, active_region in zip(results, active_region_list):
-        results_i = run_fdtd_and_charge_to_iv(result[0], active_region.Cathode)
+        results_i = run_fdtd_and_charge_to_iv(result, active_region.Cathode)
         final_results.append(results_i[0])
         if save_csv:
             monitor = f"results.CHARGE.{active_region.Cathode}"
             df = pd.DataFrame(
                 {
                     "Current_Density": result[0][monitor]["I"].flatten(),
-                    "Voltage": result[0][monitor][f"V_{active_region.Cathode}"].flatten(),
+                    "Voltage": result[0][monitor][
+                        f"V_{active_region.Cathode}"
+                    ].flatten(),
                 }
             )
             csv_path = os.path.join(path, f"{active_region.SCName}_IV_curve.csv")

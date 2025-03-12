@@ -18,8 +18,8 @@ def intrinsic_carrier_density(
     Returns:
         intrinsic carrier density
     """
-    mn = mn * 9.11 * 10**-31
-    mp = mp * 9.11 * 10**-31
+    mn = mn * 9.11e-31
+    mp = mp * 9.11e-31
     Nc = 2 * ((2 * np.pi * mn * scc.k * temperature / (scc.h**2)) ** 1.5) * 10**-6
     Nv = 2 * ((2 * np.pi * mp * scc.k * temperature / (scc.h**2)) ** 1.5) * 10**-6
     ni = ((Nv * Nc) ** 0.5) * (np.exp(-bandgap * scc.e / (2 * scc.k * temperature)))
@@ -68,7 +68,7 @@ def _adjust_abs(
     energy: npt.NDArray,
     absorption: npt.NDArray,
     bandgap: float,
-    interp_points: int = 1000,
+    interp_points: int = 10000,
 ) -> Tuple[npt.NDArray, npt.NDArray]:
     """
     Function that cuts absorption data below bandgap.
@@ -83,7 +83,7 @@ def _adjust_abs(
     interp_abs = interp1d(energy, absorption)
     new_energy = np.linspace(np.min(energy), np.max(energy), interp_points)
     new_abs = interp_abs(new_energy)
-    cutoff_mask = new_energy < bandgap
+    cutoff_mask = new_energy > bandgap
     return new_energy[cutoff_mask], new_abs[cutoff_mask]
 
 
@@ -104,9 +104,9 @@ def rad_recombination_coeff(
     ):
         energy, absorption = _adjust_abs(energy, absorption, bandgap)
         dark_current: float = scc.e * trapezoid(
-            -blackbody_spectrum(energy) * absorption, energy
+            blackbody_spectrum(energy) * absorption, energy
         )
     elif isinstance(energy, float) and isinstance(absorption, float):
-        dark_current = scc.e * (-blackbody_spectrum(energy) * absorption)
+        dark_current = scc.e * (blackbody_spectrum(energy) * absorption)
     dark_current *= 0.1  # mA/cm2
-    return dark_current * 10**-5 / (scc.e * (edensity**2) * (z_span))
+    return dark_current * 1e-5 / (scc.e * (edensity**2) * (z_span))
