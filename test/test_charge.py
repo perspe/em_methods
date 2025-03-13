@@ -2,6 +2,7 @@ import time
 import unittest
 import os
 import logging
+import numpy as np
 from em_methods.lumerical import (
     charge_run,
     LumericalError,
@@ -10,10 +11,11 @@ from em_methods.lumerical import (
 from em_methods.lumerical.charge import (
     __get_gen,
     run_fdtd_and_charge,
+    run_iqe,
     run_fdtd_and_charge_legacy,
-    run_fdtd_and_charge_to_bands,
+    run_bandstructure_to_bands,
     run_fdtd_and_charge_to_iv,
-    run_fdtd_and_charge_bandstructure,
+    run_bandstructure,
 )
 import pandas as pd
 
@@ -211,7 +213,7 @@ class TestFDTDandCHARGE(unittest.TestCase):
         # Run with multiple simulation regions
         run_fdtd_and_charge(active_regions, {}, test_file_charge, test_file_fdtd)
         # Run with some non-default parameters
-        res = run_fdtd_and_charge(
+        _, res = run_fdtd_and_charge(
             active_regions,
             properties,
             test_file_charge,
@@ -311,16 +313,35 @@ class TestFDTDandCHARGE(unittest.TestCase):
         )
         active_regions = [si_siminfo, pvk_siminfo]
         # Run with 1 simulation region and default values
-        results = run_fdtd_and_charge_bandstructure(
+        _, results = run_bandstructure(
             active_regions, {}, test_file_charge, test_file_fdtd
         )
-        bands = run_fdtd_and_charge_to_bands(results)
+        bands = run_bandstructure_to_bands(results)
         # Override default values for bandstructure calculations
-        results = run_fdtd_and_charge_bandstructure(
+        _, results = run_bandstructure(
             active_regions,
             {},
             test_file_charge,
             test_file_fdtd,
             override_bias_regime_args={"voltage": 0.1, "is_voltage_range": False},
         )
-        bands = run_fdtd_and_charge_to_bands(results)
+        bands = run_bandstructure_to_bands(results)
+
+    def test_run_iqe(self):
+        test_file_fdtd = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t_iqe.fsp"
+        )
+        test_file_charge = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
+        )
+        pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
+        )
+        si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
+        )
+        active_regions = [si_siminfo, pvk_siminfo]
+        wavelengths = np.linspace(300, 900, 15)
+        # Run with 1 simulation region and default values
+        iqe_res = run_iqe(si_siminfo, {}, test_file_charge, test_file_fdtd, wavelengths, **{"fdtd_run": {"delete": False}})
+        print(iqe_res)

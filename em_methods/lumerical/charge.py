@@ -8,8 +8,10 @@ from typing import Dict, List, Tuple, Union
 from uuid import uuid4
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
+from em_methods import Units
 from em_methods.formulas.physiscs import (
     intrinsic_carrier_density,
     rad_recombination_coeff,
@@ -78,147 +80,24 @@ class SimInfo:
 """ Helper Functions """
 
 
-# def IQE(
-#     active_region_list,
-#     properties,
-#     charge_file,
-#     path,
-#     fdtd_file,
-#     wl=[i for i in range(300, 1001, 50)],
-#     min_edge=None,
-#     avg_mode=False,
-#     B=None,
-# ):
-#     current_jsc = [[] for _ in range(len(active_region_list))]
-#     Jsc_g = [[] for _ in range(len(active_region_list))]
-#     Jph_g = [[] for _ in range(len(active_region_list))]
-#     results_dir = os.path.join(
-#         path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0])[:-3]
-#     )  # remove the sufix _qe from the file's name
-#     os.makedirs(results_dir, exist_ok=True)
-#
-#     for wvl in wl:
-#         current_Jsc, current_Jph = run_fdtd_and_charge_EQE(
-#             active_region_list,
-#             properties,
-#             charge_file,
-#             path,
-#             fdtd_file,
-#             wvl * 10**-9,
-#             min_edge=min_edge,
-#             avg_mode=avg_mode,
-#             B=B,
-#         )
-#         for i in range(len(active_region_list)):
-#             Jsc_g[i].append(current_Jsc[i])
-#             Jph_g[i].append(current_Jph[i])
-#             if np.isnan(current_Jph[i]) or current_Jph[i] == 0:
-#                 print(
-#                     f"Warning: Jph[{i}] is NaN or 0 at wavelength {wvl}, setting IQE to NaN"
-#                 )
-#                 iqe_value = np.nan
-#             else:
-#                 iqe_value = -current_Jsc[i] / current_Jph[i]
-#                 print(f"Computed IQE[{i}] at {wvl} nm: {iqe_value}")
-#
-#             # Ensure IQE is saved as a scalar
-#             iqe_scalar = (
-#                 iqe_value[0] if isinstance(iqe_value, (list, np.ndarray)) else iqe_value
-#             )
-#             current_jsc[i] = (
-#                 current_Jsc[i][0]
-#                 if isinstance(current_Jsc[i], (list, np.ndarray))
-#                 else current_Jsc[i]
-#             )
-#             # Save IQE
-#             result_file = os.path.join(
-#                 results_dir, f"IQE_{active_region_list[i].SCName}.csv"
-#             )
-#             data = pd.DataFrame(
-#                 {
-#                     "wavelength": [wvl],
-#                     "IQE": [iqe_scalar],
-#                     "Jsc": [-current_jsc[i][0]],
-#                     "Jph": [current_Jph[i]],
-#                 }
-#             )
-#             if os.path.exists(result_file):
-#                 data.to_csv(result_file, mode="a", header=False, index=False)
-#             else:
-#                 data.to_csv(result_file, index=False, header=True)
-#
-#     IQE_values = [
-#         [-Jsc_g[i][j] / Jph_g[i][j] for j in range(len(wl))]
-#         for i in range(len(active_region_list))
-#     ]
-#     return IQE_values, Jsc_g, Jph_g, wl
-#
-#
-# def IQE_tandem(path, fdtd_file, active_region_list, properties, run_abs: bool = True):
-#     """
-#     Calculates the total internal quantum efficiency (IQE) and total absorption for a tandem solar cell configuration.
-#     The function extracts absorption data, interpolates it to a common wavelength grid, and then processes IQE data
-#     from previously computed results in imbedded folder called "IQE_results + fdtd_file name".
-#
-#     Args:
-#             path: directory where the FDTD and CHARGE files exist.
-#             fdtd_file: String FDTD file name.
-#             active_region_list: list with SimInfo dataclasses containing the details of each active region in the simulation
-#                                 (e.g. [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom"),
-#                                       SimInfo("solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO")]).
-#             properties: Dictionary with the property object and property names and values.
-#             run_abs: Boolean flag indicating whether to recompute absorption before processing IQE data.
-#
-#     Returns:
-#             total_iqe: 1D numpy array containing the minimum IQE values across all active regions at each wavelength.
-#             total_abs: 1D numpy array containing the total absorption across all active regions.
-#             all_wvl_new[0]: 1D numpy array representing the common wavelength grid used for interpolation.
-#     """
-#     all_abs, all_wvl = [], []
-#     all_iqe, all_iqe_wvl = [], []
-#     all_wvl_new = []
-#     min_max_wvl = float("inf")
-#     for names in active_region_list:
-#         if run_abs:
-#             abs_extraction(
-#                 names, path, fdtd_file, properties=properties
-#             )  # will calc the abs
-#         results_path = os.path.join(path, names.SolarGenName)
-#         abs_data = pd.read_csv(results_path + ".csv")
-#         all_abs.append(abs_data["abs"])
-#         all_wvl.append(abs_data["wvl"])
-#     for i, _ in enumerate(active_region_list):
-#         if max(all_wvl[i]) < min_max_wvl:
-#             min_max_wvl = max(all_wvl[i])
-#     for i, _ in enumerate(active_region_list):  # all abs should have the same size
-#         all_wvl_new.append(
-#             np.linspace(min(all_wvl[i]) * 10**9, min_max_wvl * 10**9, 1001)
-#         )
-#         all_abs[i] = np.interp(all_wvl_new[i], all_wvl[i] * 10**9, all_abs[i])
-#     total_abs = sum(all_abs)
-#     iqe_path = os.path.join(path, "IQE_results_" + str(os.path.splitext(fdtd_file)[0]))
-#     for names in active_region_list:
-#         results_path = os.path.join(iqe_path, "IQE_" + names.SCName)
-#         iqe_data = pd.read_csv(results_path + ".csv")
-#         all_iqe.append(iqe_data["IQE"])
-#         all_iqe_wvl.append(iqe_data["wavelength"])
-#     for i, _ in enumerate(active_region_list):
-#         all_iqe[i] = np.interp(all_wvl_new[i], all_iqe_wvl[i], all_iqe[i])
-#     all_iqe = np.array(all_iqe)  # Convert list of arrays to 2D NumPy array
-#     total_iqe = np.min(all_iqe, axis=0)  # min IQE at each wavlength
-#     return total_iqe, total_abs, all_wvl_new[0], all_iqe, all_abs
-
-
-def __prepare_gen(fdtd_handler, active_regions, override_freq):
+def __prepare_gen(
+    fdtd_handler, active_regions, override_wavelength, wavelength_units: Units
+):
     """Function to preprocess the files necessary in get_gen function"""
     for names in active_regions:
         for gen_obj, file in zip(names.SolarGenName_List, names.GenName_List):
             g_name = file.replace(".mat", "")
             fdtd_handler.select(gen_obj)
             fdtd_handler.set("export filename", g_name)
-        if override_freq is not None:
-            fdtd_handler.setglobalsource("wavelength start", override_freq)
-            fdtd_handler.setglobalsource("wavelength stop", override_freq)
+        if override_wavelength is not None:
+            fdtd_handler.setglobalsource(
+                "wavelength start",
+                override_wavelength * wavelength_units.convertTo(Units.M),
+            )
+            fdtd_handler.setglobalsource(
+                "wavelength stop",
+                override_wavelength * wavelength_units.convertTo(Units.M),
+            )
 
 
 def __get_gen(
@@ -226,7 +105,8 @@ def __get_gen(
     properties: Dict,
     active_regions: List[SimInfo],
     avg_mode: bool = False,
-    override_freq: Union[None, float] = None,
+    override_wavelength: Union[None, float] = None,
+    wavelength_units: Units = Units.NM,
     run_fdtd: bool = True,
     fdtd_kw: Dict = {"fdtd_kw": {"hide": True}},
 ):
@@ -236,10 +116,11 @@ def __get_gen(
     Args:
         fdtd_file: String FDTD file name
         properties: Dictionary with the property object and property names and values
-        active_regions: list with SimInfo dataclassses with the details of the simulations
+        active_regions: list with SimInfo details of the simulations
             [SimInfo("solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom")]
-        avg_mode: bool that determines whether or not the generation rate is averaged in y (necessary for light-trapping)
-        override_freq: Override frequencies in the file (necessary for EQE calculations)
+        avg_mode: average generation rate is averaged in y (for LT)
+        override_wavelength: Override wavelength in the file (for EQE calculations)
+        wavelength_units: Provided units for wavelength
         run_fdtd: Wether to run fdtd or simply import generation data
         fdtd_kw: Extra arguments to pass to fdtd_run and lumapi.FDTD (fdtd_kw)
     """
@@ -269,7 +150,11 @@ def __get_gen(
         res, *_ = fdtd_run(
             **fdtd_base_args,
             **fdtd_kw,
-            **{"active_regions": active_regions, "override_freq": override_freq},
+            **{
+                "active_regions": active_regions,
+                "override_wavelength": override_wavelength,
+                "wavelength_units": wavelength_units,
+            },
         )
     else:
         if "fdtd_kw" in fdtd_kw.keys():
@@ -544,112 +429,6 @@ def __set_iv_parameters(
 """ Main Run Functions (run_fdtd_and_charge and charge_run) """
 
 
-def run_fdtd_and_charge(
-    active_regions: Union[SimInfo, List[SimInfo]],
-    base_properties: Dict,
-    charge_file: str,
-    fdtd_file: str,
-    *,
-    def_sim_region: Union[None, str] = "2d",
-    min_edge: Union[List[float], None, List[None]] = None,
-    override_bias_regime_args: Union[Dict, List[Dict]] = {},
-    override_get_gen_args: Dict = {},
-    charge_extra_properties: Dict = {},
-    fdtd_extra_properties: Dict = {},
-    charge_get_extra_results: Dict = {},
-    charge_kw: Dict = {},
-    fdtd_kw: Dict = {},
-):
-    """
-    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_regions
-    The main results are the IV parameters for the solar cell
-    Args:
-        active_regions: SimInfo list with FDTD and CHARGE connecting information
-        base_properties: Properties to change in charge and fdtd
-        charge_file: path to CHARGE file
-        fdtd_file: path FDTD file
-        def_sim_region: (None | str)
-            None: Do not create simulation region
-            str: Create Simulation region from '2D' '3D'
-        min_edge: Charge setting for the size of the simulation region
-        override_get_gen_args: Override arguments for get_gen
-        override_bias_regime_args: Arguments for set_bias_regime function
-            (voltage, voltage_points, is_voltage_range)
-        charge/fdtd_extra_properties: Additional properties to change in fdtd and charge
-        charge_get_extra_results: Adicional results to extract from charge
-        charge_kw: Pass arguments for charge_run
-        fdtd_kw: Pass arguments for fdtd_run
-    Returns:
-        list with result for each active region
-    """
-    # Perform pre-run checks
-    if not isinstance(active_regions, list):
-        active_regions = [active_regions]
-    if not isinstance(override_bias_regime_args, list):
-        override_bias_regime_args = [override_bias_regime_args] * len(active_regions)
-    if min_edge is None:
-        min_edge = [min_edge] * len(active_regions)
-    if len(active_regions) != len(override_bias_regime_args) or len(
-        active_regions
-    ) != len(min_edge):
-        raise Exception(
-            "active_regions | override_bias_regime_args | min_edge should have the same size"
-        )
-    # def_sim_region -> override_get_gen_args["avg_mode"] == True
-    if def_sim_region == "2d":
-        if not "avg_mode" in override_get_gen_args.keys():
-            logger.warning(
-                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
-            )
-            override_get_gen_args.update({"avg_mode": True})
-        elif (
-            "avg_mode" in override_get_gen_args.keys()
-            and not override_get_gen_args["avg_mode"]
-        ):
-            logger.warning(
-                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
-            )
-            override_get_gen_args["avg_mode"] = True
-    fdtd_extra_properties.update(base_properties)
-    logger.debug(f"Final FDTD Properties: {fdtd_extra_properties}")
-    gen_results = __get_gen(
-        fdtd_file,
-        fdtd_extra_properties,
-        active_regions,
-        fdtd_kw=fdtd_kw,
-        **override_get_gen_args,
-    )
-    results = []
-    for active_region, override_bias_regime_i, min_edge_i in zip(
-        active_regions, override_bias_regime_args, min_edge
-    ):
-        conditions_dic = {
-            "active_region": active_region,
-            "override_bias_regime_args": override_bias_regime_i,
-            "def_sim_region": def_sim_region,
-            "min_edge": min_edge_i,
-            "fdtd_results": gen_results,
-        }
-        charge_extra_properties.update(base_properties)
-        get_results = {"results": {"CHARGE": active_region.Cathode}}
-        get_results.update(charge_get_extra_results)
-        charge_kw.update(
-            {
-                "basefile": charge_file,
-                "properties": charge_extra_properties,
-                "get_results": get_results,
-                "func": __set_iv_parameters,
-            }
-        )
-        logger.debug(
-            f"Charge runconditions:\n{charge_extra_properties}\n{charge_kw}\n{conditions_dic}"
-        )
-        result = charge_run(**charge_kw, **conditions_dic)
-        results.append(result)
-    logger.debug("Run Successfuly")
-    return results
-
-
 def charge_run(
     basefile: str,
     properties: Dict[str, Dict[str, float]],
@@ -754,15 +533,197 @@ def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
     return results
 
 
+def run_fdtd_and_charge(
+    active_regions: Union[SimInfo, List[SimInfo]],
+    base_properties: Dict,
+    charge_file: str,
+    fdtd_file: str,
+    *,
+    def_sim_region: Union[None, str] = "2d",
+    min_edge: Union[List[float], None, List[None]] = None,
+    override_bias_regime_args: Union[Dict, List[Dict]] = {},
+    override_get_gen_args: Dict = {},
+    charge_extra_properties: Dict = {},
+    fdtd_extra_properties: Dict = {},
+    charge_get_extra_results: Dict = {},
+    charge_kw: Dict = {},
+    fdtd_kw: Dict = {},
+):
+    """
+    Runs the FDTD and CHARGE files for the multiple active regions defined in the active_regions
+    The main results are the IV parameters for the solar cell
+    Args:
+        active_regions: SimInfo list with FDTD and CHARGE connecting information
+        base_properties: Properties to change in charge and fdtd
+        charge_file: path to CHARGE file
+        fdtd_file: path FDTD file
+        def_sim_region: (None | str)
+            None: Do not create simulation region
+            str: Create Simulation region from '2D' '3D'
+        min_edge: Charge setting for the size of the simulation region
+        override_get_gen_args: Override arguments for get_gen
+        override_bias_regime_args: Arguments for set_bias_regime function
+            (voltage, voltage_points, is_voltage_range)
+        charge/fdtd_extra_properties: Additional properties to change in fdtd and charge
+        charge_get_extra_results: Adicional results to extract from charge
+        charge_kw: Pass arguments for charge_run
+        fdtd_kw: Pass arguments for fdtd_run
+    Returns:
+        list with result for each active region
+    """
+    # Perform pre-run checks
+    if not isinstance(active_regions, list):
+        active_regions = [active_regions]
+    if not isinstance(override_bias_regime_args, list):
+        override_bias_regime_args = [override_bias_regime_args] * len(active_regions)
+    if min_edge is None:
+        min_edge = [min_edge] * len(active_regions)
+    if len(active_regions) != len(override_bias_regime_args) or len(
+        active_regions
+    ) != len(min_edge):
+        raise Exception(
+            "active_regions | override_bias_regime_args | min_edge should have the same size"
+        )
+    # def_sim_region -> override_get_gen_args["avg_mode"] == True
+    if def_sim_region == "2d":
+        if not "avg_mode" in override_get_gen_args.keys():
+            logger.warning(
+                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
+            )
+            override_get_gen_args.update({"avg_mode": True})
+        elif (
+            "avg_mode" in override_get_gen_args.keys()
+            and not override_get_gen_args["avg_mode"]
+        ):
+            logger.warning(
+                f"def_sim_region = '2d' -> avg_mode = True in override_get_gen_args"
+            )
+            override_get_gen_args["avg_mode"] = True
+    fdtd_extra_properties.update(base_properties)
+    logger.debug(f"Final FDTD Properties: {fdtd_extra_properties}")
+    gen_results = __get_gen(
+        fdtd_file,
+        fdtd_extra_properties,
+        active_regions,
+        fdtd_kw=fdtd_kw,
+        **override_get_gen_args,
+    )
+    results = []
+    for active_region, override_bias_regime_i, min_edge_i in zip(
+        active_regions, override_bias_regime_args, min_edge
+    ):
+        conditions_dic = {
+            "active_region": active_region,
+            "override_bias_regime_args": override_bias_regime_i,
+            "def_sim_region": def_sim_region,
+            "min_edge": min_edge_i,
+            "fdtd_results": gen_results,
+        }
+        charge_extra_properties.update(base_properties)
+        get_results = {"results": {"CHARGE": active_region.Cathode}}
+        get_results.update(charge_get_extra_results)
+        charge_kw.update(
+            {
+                "basefile": charge_file,
+                "properties": charge_extra_properties,
+                "get_results": get_results,
+                "func": __set_iv_parameters,
+            }
+        )
+        logger.debug(
+            f"Charge runconditions:\n{charge_extra_properties}\n{charge_kw}\n{conditions_dic}"
+        )
+        result = charge_run(**charge_kw, **conditions_dic)
+        results.append(result)
+    logger.debug("Run Successfuly")
+    return gen_results, results
+
+
+def run_iqe(
+    active_regions: Union[SimInfo, List[SimInfo]],
+    base_properties: Dict,
+    charge_file: str,
+    fdtd_file: str,
+    wavelengths: npt.ArrayLike,
+    /,
+    wavelength_units: Units =  Units.NM,
+    **override_fdtd_and_charge_args,
+):
+    """
+    Calculate the IQE for wavelengths
+    active_regions: Regions in the simulation to run the simulation
+    base_properties: Properties to change in FDTD and CHARGE
+    charge_file/fdtd_file: Path for fdtd and charge files
+    wavelengths: ArrayLike with wavelengths to run simulations
+    wavelength_units: Units for the wavelength
+    override_fdtd_and_charge_args: Override other run_fdtd_and_charge args
+    """
+    if not isinstance(active_regions, list):
+        active_regions = [active_regions]
+    base_run_fdtd_and_charge = {
+        "active_regions": active_regions,
+        "base_properties": base_properties,
+        "charge_file": charge_file,
+        "fdtd_file": fdtd_file,
+    }
+    if "override_bias_regime_args" in override_fdtd_and_charge_args.keys():
+        if override_fdtd_and_charge_args["override_bias_regime_args"][
+            "is_voltage_range"
+        ]:
+            logger.warning("IQE simulations require constant voltage")
+    override_fdtd_and_charge_args.update(
+        {"override_bias_regime_args": {"voltage": 0, "is_voltage_range": False}}
+    )
+    override_fdtd_and_charge_args.update(base_run_fdtd_and_charge)
+    iqe_results = {active_region.SCName: [] for active_region in active_regions}
+    for wavelength in wavelengths:
+        logger.debug(f"Running IQE for: {wavelength}")
+        if "override_get_gen_args" in override_fdtd_and_charge_args.keys():
+            logger.warning(
+                "Overriding any provided override_wavelength in override_get_gen_args"
+            )
+            override_fdtd_and_charge_args["override_get_gen_args"].update(
+                {
+                    "override_wavelength": wavelength,
+                    "wavelength_units": wavelength_units,
+                }
+            )
+        else:
+            override_fdtd_and_charge_args.update(
+                {
+                    "override_get_gen_args": {
+                        "override_wavelength": wavelength,
+                        "wavelength_units": wavelength_units,
+                    }
+                }
+            )
+        fdtd_res, charge_res = run_fdtd_and_charge(**override_fdtd_and_charge_args)
+        for active_region, charge_res_i in zip(active_regions, charge_res):
+            x_span, y_span = charge_res_i[0]["func_output"]
+            area = x_span * y_span
+            jph = 0
+            # TODO: What happens for multiple gens at the same time?
+            for sgname in active_region.SolarGenName_List:
+                jph += fdtd_res[f"data.{sgname}.Jsc"]
+            isc = charge_res_i[0][f"results.CHARGE.{active_region.Cathode}"][
+                "I"
+            ].flatten()[0]
+            jsc = - isc / area
+            iqe_results[active_region.SCName].append(jsc / jph)
+            logger.info(f"IQE ({wavelength}): {jsc/jph} ({jsc:.3g}/{jph:.3g})")
+    iqe_results = {key: np.array(value) for key, value in iqe_results.items()}
+    return iqe_results
+
+
 """ Alias Functions """
 
 """ Alias function to get bandstructure results """
-run_fdtd_and_charge_bandstructure = partial(
+run_bandstructure = partial(
     run_fdtd_and_charge,
     charge_get_extra_results={"results": {"CHARGE::monitor": "bandstructure"}},
     override_bias_regime_args={"voltage": 0, "is_voltage_range": False},
 )
-update_wrapper(run_fdtd_and_charge_bandstructure, run_fdtd_and_charge)
+update_wrapper(run_bandstructure, run_fdtd_and_charge)
 
 
 """ Functions to extract rund_fdtd_and_charge results """
@@ -791,7 +752,7 @@ def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]) -> List[
     return return_res
 
 
-def run_fdtd_and_charge_to_bands(results: Union[List[Dict], Dict]) -> List[Tuple]:
+def run_bandstructure_to_bands(results: Union[List[Dict], Dict]) -> List[Tuple]:
     """
     Shortcut function to convert results from run_fdtd_and_charge to IV parameters
     """
@@ -865,7 +826,7 @@ def run_fdtd_and_charge_legacy(
                     "method_solver": method_solver,
                 }
             )
-    results = run_fdtd_and_charge(
+    _, results = run_fdtd_and_charge(
         active_region_list,
         properties,
         charge_file,
