@@ -3,6 +3,7 @@ import unittest
 import os
 import logging
 import numpy as np
+from em_methods import Units
 from em_methods.lumerical import (
     charge_run,
     LumericalError,
@@ -25,6 +26,8 @@ logger.setLevel(logging.DEBUG)
 
 BASETESTPATH_CHARGE: str = os.path.join("test", "charge")
 BASETESTPATH_FDTD_CHARGE: str = os.path.join("test", "fdtd_and_charge")
+
+COMPATIBILITY = False
 
 
 def test_function(charge):
@@ -157,6 +160,41 @@ class TestCHARGE(unittest.TestCase):
 
 class TestFDTDandCHARGE(unittest.TestCase):
     """Run all the functions associated with run_fdtd_and_charge"""
+    def setUp(self) -> None:
+        self.test_fdtd_4t = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
+        )
+        self.test_charge_4t = os.path.join(
+            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
+        )
+        self.pvk_siminfo = SimInfo(
+            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
+        )
+        self.si_siminfo = SimInfo(
+            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
+        )
+        self.active_regions = [self.si_siminfo, self.pvk_siminfo]
+        self.properties = {
+            "::model": {
+                "tPerovskite": 163.43e-9,
+                "tlayer": 20e-9,
+                "tITO": 50e-9,
+                "tTCO": 50e-9,
+                "n": 2.80,
+            }
+        }
+        self.no_properties = {}
+        self.si_bias_regime = {
+            "method_solver": "GUMMEL",
+            "voltage": 0.8,
+            "voltage_points": 31,
+        }
+        self.pvk_bias_regime = {
+            "method_solver": "GUMMEL",
+            "voltage": 1.6,
+            "voltage_points": 61,
+        }
+        return super().setUp()
 
     # def test_get_gen(self):
     #     """
@@ -176,56 +214,22 @@ class TestFDTDandCHARGE(unittest.TestCase):
 
     def test_run_fdtd_and_charge(self):
         """Batch Tests with changing arguments in run_fdtd_and_charge"""
-        test_file_fdtd = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
-        )
-        test_file_charge = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
-        )
-        pvk_siminfo = SimInfo(
-            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
-        )
-        si_siminfo = SimInfo(
-            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
-        )
-        active_regions = [si_siminfo, pvk_siminfo]
-        properties = {
-            "::model": {
-                "tPerovskite": 163.43e-9,
-                "tlayer": 20e-9,
-                "tITO": 50e-9,
-                "tTCO": 50e-9,
-                "n": 2.80,
-            }
-        }
-        si_bias_regime = {
-            "method_solver": "GUMMEL",
-            "voltage": 0.8,
-            "voltage_points": 31,
-        }
-        pvk_bias_regime = {
-            "method_solver": "GUMMEL",
-            "voltage": 1.6,
-            "voltage_points": 61,
-        }
         # Run with 1 simulation region and default values
-        run_fdtd_and_charge(si_siminfo, {}, test_file_charge, test_file_fdtd)
+        run_fdtd_and_charge(self.si_siminfo, self.no_properties, self.test_charge_4t, self.test_fdtd_4t)
         # Run with multiple simulation regions
-        run_fdtd_and_charge(active_regions, {}, test_file_charge, test_file_fdtd)
+        run_fdtd_and_charge(self.active_regions, self.no_properties, self.test_charge_4t, self.test_fdtd_4t)
         # Run with some non-default parameters
         _, res = run_fdtd_and_charge(
-            active_regions,
-            properties,
-            test_file_charge,
-            test_file_fdtd,
+            self.active_regions,
+            self.properties,
+            self.test_charge_4t,
+            self.test_fdtd_4t,
             def_sim_region="2d",
-            override_bias_regime_args=[si_bias_regime, pvk_bias_regime],
+            override_bias_regime_args=[self.si_bias_regime, self.pvk_bias_regime],
             min_edge=[0.005e-6, 0.001e-6],
-            # override_get_gen_args={"avg_mode": True},
-            charge_kw={"delete": True},
         )
         iv_data = run_fdtd_and_charge_to_iv(
-            res, [active_region.Cathode for active_region in active_regions]
+            res, [active_region.Cathode for active_region in self.active_regions]
         )
         comp_pce = [4.7, 15.2]
         comp_ff = [0.79, 0.81]
@@ -233,30 +237,49 @@ class TestFDTDandCHARGE(unittest.TestCase):
             self.assertAlmostEqual(iv_i[0], cmp_pce_i, 1)
             self.assertAlmostEqual(iv_i[1], cmp_ff_i, 1)
 
-    # def test_run_fdtd_and_charge_2t(self):
-    #     """test run_fdtd_and_charge 2t"""
-    #     test_file_fdtd = os.path.join(
-    #         BASETESTPATH_FDTD_CHARGE, "test_2t_void_tandem.fsp"
-    #     )
-    #     test_file_charge = os.path.join(
-    #         BASETESTPATH_FDTD_CHARGE, "test_2t_void_tandem.ldev"
-    #     )
-    #     pvk_siminfo = SimInfo(
-    #         "solar_generation_PVK", "G_PVK.mat", "Perovskite", "interlayer", "ITO", True
-    #     )
-    #     si_siminfo = SimInfo(
-    #         "solar_generation_Si", "G_Si.mat", "Si", "AZO", "interlayer", 4.73e-15
-    #     )
-    #     active_regions = [si_siminfo, pvk_siminfo]
-    #     run_fdtd_and_charge(
-    #         active_regions,
-    #         {},
-    #         test_file_charge,
-    #         test_file_fdtd,
-    #         def_sim_region="2d",
-    #         override_get_gen_args={"avg_mode": True},
-    #     )
+    def test_run_fdtd_and_charge_2t(self):
+        """test run_fdtd_and_charge 2t"""
+        run_fdtd_and_charge(
+            self.active_regions,
+            self.no_properties,
+            self.test_charge_4t,
+            self.test_fdtd_4t,
+            def_sim_region="2d",
+        )
 
+    def test_bandgap(self):
+        """Test Shortcut Function to calculate the band diagram"""
+        # Run with 1 simulation region and default values
+        _, results = run_bandstructure(
+            self.active_regions, self.no_properties, self.test_charge_4t, self.test_fdtd_4t
+        )
+        _ = run_bandstructure_to_bands(results)
+        # Override default values for bandstructure calculations
+        _, results = run_bandstructure(
+            self.active_regions,
+            self.no_properties,
+            self.test_charge_4t,
+            self.test_fdtd_4t,
+            override_bias_regime_args={"voltage": 0.1, "is_voltage_range": False},
+        )
+        _ = run_bandstructure_to_bands(results)
+
+    def test_run_iqe(self):
+        wavelengths = np.linspace(300, 900, 3)
+        # Run with 1 simulation region and default values
+        iqe_res = run_iqe(
+            self.si_siminfo,
+            self.no_properties,
+            self.test_charge_4t,
+            self.test_fdtd_4t,
+            wavelengths,
+            fdtd_and_charge_args={"fdtd_kw": {"delete": True}},
+        )
+        print(iqe_res)
+
+    """ Test of compatibility functions """
+
+    @unittest.skipIf(COMPATIBILITY, "Only run for compatibility mode")
     def test_run_fdtd_and_charge_legacy(self):
         """Test compatibility function for run_fdtd_and_charge"""
         fdtd_name = "test_planar_tandem_4t.fsp"
@@ -279,7 +302,7 @@ class TestFDTDandCHARGE(unittest.TestCase):
                 "n": 2.80,
             }
         }
-        results = run_fdtd_and_charge_legacy(
+        run_fdtd_and_charge_legacy(
             region,
             properties,
             charge_name,
@@ -295,53 +318,3 @@ class TestFDTDandCHARGE(unittest.TestCase):
             range_num_points=range_num_points,
             save_csv=True,
         )
-        print(results)
-
-    def test_bandgap(self):
-        """ Test Shortcut Function to calculate the band diagram """
-        test_file_fdtd = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.fsp"
-        )
-        test_file_charge = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
-        )
-        pvk_siminfo = SimInfo(
-            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
-        )
-        si_siminfo = SimInfo(
-            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
-        )
-        active_regions = [si_siminfo, pvk_siminfo]
-        # Run with 1 simulation region and default values
-        _, results = run_bandstructure(
-            active_regions, {}, test_file_charge, test_file_fdtd
-        )
-        bands = run_bandstructure_to_bands(results)
-        # Override default values for bandstructure calculations
-        _, results = run_bandstructure(
-            active_regions,
-            {},
-            test_file_charge,
-            test_file_fdtd,
-            override_bias_regime_args={"voltage": 0.1, "is_voltage_range": False},
-        )
-        bands = run_bandstructure_to_bands(results)
-
-    def test_run_iqe(self):
-        test_file_fdtd = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t_iqe.fsp"
-        )
-        test_file_charge = os.path.join(
-            BASETESTPATH_FDTD_CHARGE, "test_planar_tandem_4t.ldev"
-        )
-        pvk_siminfo = SimInfo(
-            "solar_generation_PVK", "G_PVK.mat", "Perovskite", "ITO_top", "ITO", True
-        )
-        si_siminfo = SimInfo(
-            "solar_generation_Si", "G_Si.mat", "Si", "AZO", "ITO_bottom", 4.73e-15
-        )
-        active_regions = [si_siminfo, pvk_siminfo]
-        wavelengths = np.linspace(300, 900, 15)
-        # Run with 1 simulation region and default values
-        iqe_res = run_iqe(si_siminfo, {}, test_file_charge, test_file_fdtd, wavelengths, **{"fdtd_run": {"delete": False}})
-        print(iqe_res)

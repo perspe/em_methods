@@ -254,7 +254,6 @@ def set_mesh_conditions(charge_handler, min_edge: float):
     logger.debug(f"Overriding min edge length to: {min_edge}")
     charge_handler.set("min edge length", min_edge)
     charge_handler.save()
-    pass
 
 
 def set_bias_regime(
@@ -645,9 +644,9 @@ def run_iqe(
     charge_file: str,
     fdtd_file: str,
     wavelengths: npt.ArrayLike,
-    /,
+    *,
     wavelength_units: Units =  Units.NM,
-    **override_fdtd_and_charge_args,
+    fdtd_and_charge_args = {}
 ):
     """
     Calculate the IQE for wavelengths
@@ -666,30 +665,30 @@ def run_iqe(
         "charge_file": charge_file,
         "fdtd_file": fdtd_file,
     }
-    if "override_bias_regime_args" in override_fdtd_and_charge_args.keys():
-        if override_fdtd_and_charge_args["override_bias_regime_args"][
+    if "override_bias_regime_args" in fdtd_and_charge_args.keys():
+        if fdtd_and_charge_args["override_bias_regime_args"][
             "is_voltage_range"
         ]:
             logger.warning("IQE simulations require constant voltage")
-    override_fdtd_and_charge_args.update(
+    fdtd_and_charge_args.update(
         {"override_bias_regime_args": {"voltage": 0, "is_voltage_range": False}}
     )
-    override_fdtd_and_charge_args.update(base_run_fdtd_and_charge)
+    fdtd_and_charge_args.update(base_run_fdtd_and_charge)
     iqe_results = {active_region.SCName: [] for active_region in active_regions}
     for wavelength in wavelengths:
         logger.debug(f"Running IQE for: {wavelength}")
-        if "override_get_gen_args" in override_fdtd_and_charge_args.keys():
+        if "override_get_gen_args" in fdtd_and_charge_args.keys():
             logger.warning(
                 "Overriding any provided override_wavelength in override_get_gen_args"
             )
-            override_fdtd_and_charge_args["override_get_gen_args"].update(
+            fdtd_and_charge_args["override_get_gen_args"].update(
                 {
                     "override_wavelength": wavelength,
                     "wavelength_units": wavelength_units,
                 }
             )
         else:
-            override_fdtd_and_charge_args.update(
+            fdtd_and_charge_args.update(
                 {
                     "override_get_gen_args": {
                         "override_wavelength": wavelength,
@@ -697,7 +696,8 @@ def run_iqe(
                     }
                 }
             )
-        fdtd_res, charge_res = run_fdtd_and_charge(**override_fdtd_and_charge_args)
+        logger.debug(f"Run FDTD and CHARGE args: {fdtd_and_charge_args}")
+        fdtd_res, charge_res = run_fdtd_and_charge(**fdtd_and_charge_args)
         for active_region, charge_res_i in zip(active_regions, charge_res):
             x_span, y_span = charge_res_i[0]["func_output"]
             area = x_span * y_span

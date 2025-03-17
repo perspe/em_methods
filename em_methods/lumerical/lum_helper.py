@@ -13,7 +13,7 @@ from enum import Enum
 # Using any logger (such as dev) that log into
 # files may cause some problems in the end of the
 # program
-logger = logging.getLogger("dev")
+logger = logging.getLogger("sim")
 import lumapi
 
 class LumMethod(Enum):
