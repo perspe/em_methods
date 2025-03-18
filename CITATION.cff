@@ -1,0 +1,65 @@
+cff-version: 1.2.0
+title: EM_Methods
+message: "Please cite the relevant articles, when using the tools provided in this repository"
+url: "https://github.com/perspe/em_methods"
+authors:
+    - family-names: "Alexandre"
+      given-names: "Miguel"
+      orcid: "https://orcid.org/0000-0002-7533-9469"
+    - family-names: "Santos"
+      given-names: "Ivan M."
+      orcid: "https://orcid.org/0000-0001-6593-8698"
+    - family-names: "Almeida"
+      given-names: "Eva"
+    - family-names: "Dyreby"
+      given-names: "Mónica"
+prefered-citations:
+    - type: article
+    title: "SCATMM: Easy-to-Use Graphical User Interface for Light Propagation in Arbitrary Multilayers"
+    doi: 10.5334/jors.511
+    date-released: 2024-08-19
+    journal: "Journal of open research software"
+    month: 8
+    issue: 1
+    volume: 12
+    year: 2024
+    authors:
+        - family-names: "Alexandre"
+          given-names: "Miguel"
+          orcid: "https://orcid.org/0000-0002-7533-9469"
+        - family-names: "Santos"
+          given-names: "Ivan M."
+          orcid: "https://orcid.org/0000-0001-6593-8698"
+        - family-names: "Martins"
+          given-names: "Rodrigo"
+          orcid: "https://orcid.org/0000-0002-1997-7669"
+        - family-names: "Mendes"
+          given-names: "Manuel J."
+          orcid: "https://orcid.org/0000-0002-7374-0726"
+    - type: article
+    title: "Photonic-Enhanced Perovskite Solar Cells: Tailoring Color and Light Capture"
+    doi: 10.1021/acsomega.4c04979
+    date-released: 2024-10-11
+    journal: "ACS Omega"
+    month: 10
+    issue: 42
+    volume: 9
+    year: 2024
+    authors:
+        - family-names: "Almeida"
+          given-names: "Eva"
+        - family-names: "Alexandre"
+          given-names: "Miguel"
+          orcid: "https://orcid.org/0000-0002-7533-9469"
+        - family-names: "Santos"
+          given-names: "Ivan M."
+          orcid: "https://orcid.org/0000-0001-6593-8698"
+        - family-names: "Martins"
+          given-names: "Rodrigo"
+          orcid: "https://orcid.org/0000-0002-1997-7669"
+        - family-names: "Águas"
+          given-names: "Hugo"
+          orcid: "https://orcid.org/0000-0001-7350-649X"
+        - family-names: "Mendes"
+          given-names: "Manuel J."
+          orcid: "https://orcid.org/0000-0002-7374-0726"

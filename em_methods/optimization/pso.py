@@ -632,7 +632,7 @@ if __name__ == "__main__":
     def test_func_3(x, y):
         return np.sin(x * y)
 
-    fit, gbest, pbest, _ = _particle_swarm(
+    fit, gbest, pbest, _ = particle_swarm(
         test_func_3,
         {"x": [0, 3.14], "y": [0, 3.14]},
         maximize=True,

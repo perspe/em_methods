@@ -5,8 +5,10 @@ __pycache__
 build
 dist
 *.egg-info
+*.eggs
 .cache
 .spyproject
+# wheelhouse
 # Test Folders
 Profile
 PWEM
@@ -16,6 +18,7 @@ PSO_Results
 # General Files
 test/**/*.csv
 *.log
+# Allow binaries for easier installation
 *.so
 *.pyd
 *cpython*
