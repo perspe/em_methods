@@ -17,6 +17,7 @@ data_path = os.path.join(parent_path, "data")
 def jsc_files(
     input_data: Union[List[Union[str, pd.DataFrame]], str, pd.DataFrame],
     *,
+    am_spectrum: str = "am1.5",
     wvl_units: Units = Units.NM,
     percent: bool = False,
     **read_csv_args,
@@ -25,6 +26,7 @@ def jsc_files(
     Calculate Jsc for a single or multiple files
     Args:
         filename: file or list of files
+        am_spectrum: incate what spectrum to use
         wvl_units: wavelength units (default nm)
         percent: EQE or absorption files in %
         **read_csv_args: pass args for read_csv
@@ -41,9 +43,12 @@ def jsc_files(
     wvl_factor = wvl_units.convertTo(Units.NM)
     units_factor = (scc.h * scc.c) / (scc.e * 1e-10)
     # Import spectrum and interpolate
-    solar_spectrum = pd.read_csv(
-        os.path.join(data_path, "solar_data.csv"), sep=" ", names=["WVL", "IRR"]
-    )
+    if "am1.5" in am_spectrum.lower():
+        solar_spectrum = pd.read_csv(
+            os.path.join(data_path, "solar_data_am1.5.csv"), sep=" ", names=["WVL", "IRR"])
+    elif "am0" in am_spectrum.lower():
+        solar_spectrum = pd.read_csv(
+            os.path.join(data_path, "solar_data_am0.csv"), sep=",", names=["WVL", "IRR"])
     int_spectrum = interp1d(solar_spectrum["WVL"], solar_spectrum["IRR"])
     # Dictionary for cumulative results
     jsc_sum: Dict = {}
@@ -152,7 +157,7 @@ def lambertian_thickness(
         Array with the Lambertian Jsc
     """
     solar_spectrum = pd.read_csv(
-        os.path.join(data_path, "solar_data.csv"), sep=" ", names=["WVL", "IRR"]
+        os.path.join(data_path, "solar_data_am1.5.csv"), sep=" ", names=["WVL", "IRR"]
     )
     astm_interp = interp1d(solar_spectrum["WVL"], solar_spectrum["IRR"])
     # Convert general units to nm
