@@ -35,7 +35,6 @@ logger.debug(f"LUMAPI_PATH: {LUMAPI_PATH}")
 sys.path.append(LUMAPI_PATH)
 if os.name == "nt":
     os.add_dll_directory(LUMAPI_PATH)
->>>>>>> main
 import lumapi
 
 class LumMethod(Enum):

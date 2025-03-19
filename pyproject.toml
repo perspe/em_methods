@@ -1,9 +1,5 @@
 [build-system]
-<<<<<<< HEAD
-requires=["setuptools", "cython", "numpy", "scipy", "PyAstronomy"]
-=======
-requires=["setuptools", "cython>=3.0.9"]
->>>>>>> main
+requires=["setuptools", "cython", "numpy", "scipy"]
 build-backend="setuptools.build_meta"
 
 [project]
