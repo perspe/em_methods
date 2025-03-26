@@ -1,6 +1,6 @@
 from typing import Dict, List, Union, Tuple
 from scipy.interpolate import interp1d
-from scipy.integrate import trapz, cumulative_trapezoid, trapezoid
+from scipy.integrate import cumulative_trapezoid, trapezoid
 from scipy.optimize import brentq
 import scipy.constants as scc
 import pandas as pd
