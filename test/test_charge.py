@@ -196,6 +196,26 @@ class TestFDTDandCHARGE(unittest.TestCase):
         }
         return super().setUp()
 
+    def test_problem(self):
+        charge_file = r"problem.ldev"
+        fdtd_file = r"problem.fsp"
+        path = os.path.join("test", "charge")
+        test = SimInfo("solar_generation", "G.mat", "cSi", "cathode", "anode")
+        active_region_list = [test]
+        d = [0.05e-6]
+        properties = {}
+        #_, results = run_fdtd_and_charge(active_region_list, properties, charge_file, fdtd_file,  def_sim_region = None)
+        pce_1, ff_1, voc_1, jsc_1, j_1, v_1 = run_fdtd_and_charge_legacy(
+            active_region_list,
+            properties,
+            charge_file,
+            path,
+            fdtd_file,
+            v_max = 0.8,
+            def_sim_region=None,
+            run_FDTD = False,
+            method_solver = "GUMMEL") 
+
     # def test_get_gen(self):
     #     """
     #     Test function to extract generation profiles
