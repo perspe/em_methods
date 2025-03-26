@@ -415,7 +415,7 @@ def __set_iv_parameters(
         xspan = charge.get("x span")
         if "3D" not in charge.get("dimension"):
             charge.select("CHARGE")
-            charge.get("norm length")
+            yspan = charge.get("norm length")
         else:
             yspan = charge.get("y span")
     if min_edge is not None:
@@ -787,7 +787,7 @@ def run_fdtd_and_charge_legacy(
     v_single_point=None,
     avg_mode=False,
     min_edge=None,
-    range_num_points=101,
+    range_num_points=31,
     save_csv=False,
 ):
     charge_file = os.path.join(path, charge_file)
