@@ -228,10 +228,10 @@ def iv_parameters(
     ff = np.max(power[power > 0]) / (voc * jsc)
     pce = ff * 100 * voc * jsc * 10 / SOLAR_IRRADIANCE
     logger.debug(f"""Calculated IV Performance Parameters:
- Jsc: {jsc}
- Voc: {voc}
- FF: {ff}
  PCE: {pce}
+ FF: {ff}
+ Voc: {voc}
+ Jsc: {jsc}
  """)
     return pce, ff, voc, jsc
 
