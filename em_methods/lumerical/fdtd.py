@@ -94,6 +94,7 @@ def fdtd_run(
     run_process = RunLumerical(
         LumMethod.FDTD,
         results=results,
+        solver="FDTD",
         log_queue=Queue(-1),
         filepath=new_filepath,
         properties=properties,

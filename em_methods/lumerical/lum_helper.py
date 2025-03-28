@@ -140,6 +140,7 @@ class RunLumerical(Process):
     def __init__(
         self,
         method: LumMethod,
+        solver: str,
         *,
         results,
         log_queue: Queue,
@@ -157,6 +158,7 @@ class RunLumerical(Process):
         self.log_queue = log_queue
         self.results = results
         self.method = method
+        self.solver = solver
         self.filepath = filepath
         self.properties = properties
         self.get_results = get_results
@@ -206,10 +208,7 @@ class RunLumerical(Process):
             logger.debug(f"Running...")
             start_time = time.time()
             lumfile.switchtolayout()
-            if self.method == LumMethod.CHARGE:
-                lumfile.run("CHARGE")
-            else:
-                lumfile.run()
+            lumfile.run(self.solver)
             runtime = time.time() - start_time
             self.results["runtime"] = runtime
             start_time = time.time()

@@ -477,6 +477,7 @@ def charge_run(
     run_process = RunLumerical(
         LumMethod.CHARGE,
         results=results,
+        solver="CHARGE",
         log_queue=Queue(-1),
         filepath=new_filepath,
         properties=properties,
@@ -748,7 +749,7 @@ def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]) -> List[
         current_density = current.flatten() * 1e3 / (x_span * y_span * 1e4)
         voltage = voltage.flatten()
         res_i = iv_parameters(voltage, current_density)
-        return_res.append(res_i)
+        return_res.append(res_i+(voltage, current_density))
     return return_res
 
 
