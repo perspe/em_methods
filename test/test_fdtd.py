@@ -1,7 +1,8 @@
 import unittest
 import os
 import logging
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material
+from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run
+import lumapi
 
 # Override logger to always use debug
 logger = logging.getLogger('sim')
@@ -117,3 +118,28 @@ class TestFDTD(unittest.TestCase):
         }
         fdtd_kw = {"hide": True}
         fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw=fdtd_kw)
+
+    def test_rcwa(self):
+        """ Test running a RCWA solver and extracting the results """
+        rcwa_file: str = os.path.join(BASETESTPATH, "test_rcwa.fsp")
+        properties = {}
+        results = {
+            "results":
+                {"RCWA": "total_energy"}
+        }
+        results = rcwa_run(rcwa_file, properties, results)
+
+    def test_solvers(self):
+        """ Test running different solvers in the same file """
+        rcwa_file: str = os.path.join(BASETESTPATH, "test_rcwa.fsp")
+        properties = {}
+        results = {
+            "results":
+                {"RCWA": "total_energy"}
+        }
+        results = rcwa_run(rcwa_file, properties, results)
+        results = {
+            "results":
+                {"R": "T"}
+        }
+        results = fdtd_run(rcwa_file, properties, results)

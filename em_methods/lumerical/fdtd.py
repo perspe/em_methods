@@ -137,6 +137,88 @@ def fdtd_run(
         results["data_info"],
     )
 
+def rcwa_run(
+    basefile: str,
+    properties: Dict[str, Dict[str, float]],
+    get_results: Dict[str, Dict[str, Union[str, List]]],
+    *,
+    get_info: Dict[str, str] = {},
+    func=None,
+    savepath: Union[None, str] = None,
+    override_prefix: Union[None, str] = None,
+    delete: bool = True,
+    fdtd_kw={"hide": True},
+    **kwargs,
+):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+        basefile: Path to the original file
+        properties: Dictionary with the property object and property names and values
+        get_results: Dictionary with the results to extract
+        get_info: Extra properties to extract from the simulation
+        func: Function to run before the simulation
+        savepath (default=.): Override default savepath for the new file
+        override_prefix (default=None): Override prefix for the new file
+        delete (default=False): Delete newly generated file
+    Return:
+        results: Dictionary with all the results
+        time: Time to run the simulation
+    """
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Run simulation - the process is as follows
+    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
+    # 2. Create a process (RunLumerical) to run the lumerical file
+    #       - This avoids problems when the simulation gives errors
+    results = Manager().dict()
+    run_process = RunLumerical(
+        LumMethod.FDTD,
+        results=results,
+        solver="RCWA",
+        log_queue=Queue(-1),
+        filepath=new_filepath,
+        properties=properties,
+        get_results=get_results,
+        get_info=get_info,
+        func=func,
+        lumerical_kw=fdtd_kw,
+        **kwargs,
+    )
+    run_process.start()
+    # check_thread = CheckRunState(log_file, run_process, process_queue)
+    # check_thread.start()
+    logger.debug("Run Process Started...")
+    run_process.join()
+    logger.debug(f"Simulation finished")
+    results_keys = list(results.keys())
+    if "runtime" not in results_keys:
+        raise LumericalError("Simulation Finished Prematurely")
+    if delete:
+        logger.debug(f"Deleting unwanted files")
+        os.remove(new_filepath)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+        raise LumericalError(results["Error"])
+    # Extract data from process
+    logger.debug(f"Simulation data:\n{results}")
+    # Check for other possible runtime problems
+    if "data" not in results_keys:
+        raise LumericalError("No data available from simulation")
+    data_results = results["data"]
+    return (
+        data_results,
+        results["runtime"],
+        results["analysis runtime"],
+        results["data_info"],
+    )
 
 def fdtd_run_large_data(
     basefile: str,
