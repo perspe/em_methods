@@ -1,5 +1,5 @@
 [build-system]
-requires=["setuptools", "cython", "numpy", "scipy"]
+requires=["setuptools", "cython", "wheel"]
 build-backend="setuptools.build_meta"
 
 [project]
@@ -9,13 +9,11 @@ description="Library with useful tools for modelling of solar cells"
 keywords=["EM","PWEM","SMM","TMM","RCWA"]
 license={text="GPL3"}
 requires-python = ">=3.9"
-
 dependencies=[
     "numpy>=1.2",
-    "cython>=3.0.9",
     "scipy",
-    "PyAstronomy",
     "matplotlib",
+    "pandas"
 ]
 
 [tool.setuptools.packages.find]
@@ -34,8 +32,8 @@ undef-macros=["NDEBUG"]
 [tool.setuptools.package-data]
 "em_methods"=["data/*","*.ini"]
 
-# [tool.setuptools.exclude-package-data]
-# "em_methods"=["*test*", "fuels/*"]
+[tool.setuptools.exclude-package-data]
+"em_methods"=["*test*", "fuels/*"]
 
 [tool.cython]
 language_level="3"

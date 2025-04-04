@@ -28,6 +28,7 @@ test/**/*.csv
 *.fsp
 *.ldev
 *.mat
+*-workspace
 
 # Specific files
 *py_smm_base.cpp
