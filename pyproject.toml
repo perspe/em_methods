@@ -1,13 +1,23 @@
 [build-system]
-requires=["setuptools", "cython", "wheel"]
+requires=["setuptools>=77.0.3", "cython", "wheel"]
 build-backend="setuptools.build_meta"
 
 [project]
 name="em_methods"
-version="0.05"
+version="0.1"
+#authors = {
+#    {name="Miguel Alexandre", email = "m.alexandre@fct.unl.pt"}
+#}
+#maintainers = {
+#    {name="Miguel Alexandre", email = "m.alexandre@fct.unl.pt"}
+#}
 description="Library with useful tools for modelling of solar cells"
-keywords=["EM","PWEM","SMM","TMM","RCWA"]
-license={text="GPL3"}
+keywords=["EM","PWEM","SMM","TMM","RCWA", "Ansys Lumerical"]
+license= {file="LICENCE"}
+# When license = {file=...} becomes deprecated change to bellow
+#license={text="GPL3-3.0-or-later"}
+#license-files=["LICENCE"]
+readme="README.md"
 requires-python = ">=3.9"
 dependencies=[
     "numpy>=1.2",
@@ -41,4 +51,3 @@ language_level="3"
 [tool.cibuildwheel]
 skip = ["pp*_*", "*musllinux*", "*i686"]
 # output-dir = "dist"
-
