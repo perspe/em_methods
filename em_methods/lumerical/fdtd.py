@@ -130,7 +130,7 @@ def fdtd_run(
         raise LumericalError("No data available from simulation")
     data_results = results["data"]
     data_results["autoshutoff"] = autoshutoff
-    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
+    logger.info(f"Autoshutoff: {autoshutoff[-1]}")
     return (
         data_results,
         results["runtime"],
@@ -291,7 +291,7 @@ def fdtd_run_large_data(
                 autoshut_off_val = float(log_line.split(" ")[-1])
                 autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
-    logger.info(
+    logger.warning(
         f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s | Autoshutoff: {autoshut_off_list[-1]}"
     )
     if delete:
