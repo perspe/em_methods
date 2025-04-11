@@ -130,6 +130,7 @@ def fdtd_run(
         raise LumericalError("No data available from simulation")
     data_results = results["data"]
     data_results["autoshutoff"] = autoshutoff
+    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
     return (
         data_results,
         results["runtime"],
@@ -275,9 +276,6 @@ def fdtd_run_large_data(
         start_time = time.time()
         fdtd.runanalysis()
         analysis_runtime = time.time() - start_time
-        logger.info(
-            f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s"
-        )
         results = _get_lumerical_results(fdtd, get_results)
     # Gather info from log and the delete it
     log_file: str = os.path.join(
@@ -293,6 +291,9 @@ def fdtd_run_large_data(
                 autoshut_off_val = float(log_line.split(" ")[-1])
                 autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
+    logger.info(
+        f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s | Autoshutoff: {autoshut_off_list[-1]}"
+    )
     if delete:
         os.remove(new_filepath)
         os.remove(log_file)
