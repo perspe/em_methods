@@ -411,6 +411,7 @@ def __set_iv_parameters(
         )
     else:
         sim_region = charge.getnamed("CHARGE", "simulation region")
+        logger.debug(f"Using defined sim_region: {sim_region}")
         charge.select(sim_region)
         xspan = charge.get("x span")
         if "3D" not in charge.get("dimension"):
