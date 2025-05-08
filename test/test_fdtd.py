@@ -1,7 +1,7 @@
 import unittest
 import os
 import logging
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run
+from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run, filtered_pabs
 import lumapi
 
 # Override logger to always use debug
@@ -143,3 +143,23 @@ class TestFDTD(unittest.TestCase):
                 {"R": "T"}
         }
         results = fdtd_run(rcwa_file, properties, results)
+
+    def test_filter(self):
+        """ Test if filter works properly """
+        fdtd_file: str = os.path.join(BASETESTPATH, "test_2t_tandem_planar_model.fsp")
+        properties = {}
+        results = {
+            "results":
+                {"Pabs_all_materials": ["Pabs", "Pabs_total"], 
+                 "Pabs_all_materials::index": ["x", "y", "z", "f", "index_z"],
+                 "SG_WBG": ["Pabs", "Jsc", "Pabs_total"],
+                 "SG_LBG": ["Pabs", "Jsc", "Pabs_total"]}
+                 }
+        sim = fdtd_run(fdtd_file, properties, results, delete=False)
+        sim = sim[0]
+        
+        wbg_pabs = filtered_pabs(fdtd_file, sim, "Pabs_all_materials", "Perovskite WBG", "am1.5", tol=1*10**-15)
+        jsc_res_wbg = round(abs(wbg_pabs['jsc']), 2)
+        solar_gen_wbg = round(0.1 * sim['results.SG_WBG.Jsc'], 2)
+        
+        self.assertAlmostEqual(jsc_res_wbg, solar_gen_wbg, 0)
