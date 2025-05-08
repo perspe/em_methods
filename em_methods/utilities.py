@@ -14,7 +14,7 @@ import numpy.typing as npt
 from itertools import product
 import shutil
 from em_methods.optimization.pso import particle_swarm
-from em_methods.lumerical.fdtd import import_generation
+#from em_methods.lumerical.fdtd import import_generation
 from em_methods.pv.diode import luqing_liu_diode
 import logging
 
