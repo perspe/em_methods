@@ -157,9 +157,7 @@ class TestFDTD(unittest.TestCase):
                  }
         sim = fdtd_run(fdtd_file, properties, results, delete=False)
         sim = sim[0]
-        
-        wbg_pabs = filtered_pabs(fdtd_file, sim, "Pabs_all_materials", "Perovskite WBG", "am1.5", tol=1*10**-15)
+        wbg_pabs = filtered_pabs("Pabs_all_materials", sim, (fdtd_file, "Perovskite WBG"), "am1.5", tol=1*10**-15)
         jsc_res_wbg = round(abs(wbg_pabs['jsc']), 2)
         solar_gen_wbg = round(0.1 * sim['results.SG_WBG.Jsc'], 2)
-        
         self.assertAlmostEqual(jsc_res_wbg, solar_gen_wbg, 0)
