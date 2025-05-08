@@ -140,6 +140,7 @@ def fdtd_run(
         results["data_info"],
     )
 
+
 def rcwa_run(
     basefile: str,
     properties: Dict[str, Dict[str, float]],
@@ -222,6 +223,7 @@ def rcwa_run(
         results["analysis runtime"],
         results["data_info"],
     )
+
 
 def fdtd_run_large_data(
     basefile: str,
@@ -480,70 +482,64 @@ def average_generation(
         _export_hdf_data(export_name, **export_gen)
     return export_gen
 
-def filtered_pabs(fdtd_file: str, 
-                  data, 
-                  pabs_monitor: str, 
-                  material_name: str, 
-                  am_spectrum: str, 
-                  tol=1*10**-15):
 
+def filtered_pabs(
+    pabs_monitor_name: str,
+    results: Dict,
+    cmp_data: Union[complex, Tuple[str, str]],
+    am_spectrum: str = "am1.5",
+    tol=1e-15,
+):
     """
     Generic function to filter the pabs of the absorber from the total pabs
     Steps: (Copy file to new location/Update Properties/Run/Extract Results)
     Args:
-        fdtd_file: Path to the original file
-        data: Dictionary with the results extracted from fdtd_run
-        pabs_monitor: Name of the pabs monitor from lumerical 
-        material_name: Name of the absorber / material to individualize
+        pabs_monitor_name: Name of the pabs monitor from lumerical
+        results: Dictionary with the results extracted from fdtd_run
+        cmp_data: Data to compare the results:
+            - Complex
+            - Tuple (fdtd_file, material_name)
         am_spectrum: AM spectrum to calculate photocurrent - am0 or am1.5
         tol: tolerance to compare the index values of the absorber with the rest
     Return:
         results: Dictionary with jsc, filtered Pabs and pabs_lambdas
     """
-
-    # Data from Pabs monitor
-    pabs = data[f'results.{pabs_monitor}.Pabs']['Pabs']
-    pabs_wvl = data[f'results.{pabs_monitor}.Pabs']['lambda']
-    x = data[f'results.{pabs_monitor}::index.x'].flatten()
-    y = data[f'results.{pabs_monitor}::index.y'].flatten()
-    z = data[f'results.{pabs_monitor}::index.z'].flatten()
-    f = data[f'results.{pabs_monitor}::index.f'].flatten()
+    if (
+        f"results.{pabs_monitor_name}.Pabs"
+        and f"results.{pabs_monitor_name}::index.x" not in results.keys()
+    ):
+        raise Exception("Missing data: results should contain 'Pabs' and 'index' data")
+    if am_spectrum not in ["am0", "am1.5"]:
+        raise Exception("Unexpected am_spectrum: 'am0' or 'am1.5' available")
+    # Extract data from Pabs monitor
+    pabs = results[f"results.{pabs_monitor_name}.Pabs"]["Pabs"]
+    pabs_wvl = results[f"results.{pabs_monitor_name}.Pabs"]["lambda"]
+    x = results[f"results.{pabs_monitor_name}::index.x"].flatten()
+    y = results[f"results.{pabs_monitor_name}::index.y"].flatten()
+    z = results[f"results.{pabs_monitor_name}::index.z"].flatten()
+    f = results[f"results.{pabs_monitor_name}::index.f"].flatten()
     n_freq = len(f)
-    index_4d = data[f'results.{pabs_monitor}::index.index_z']
-
-    # Perovskite indice data
-    names: str = f'{material_name}'
-    perovs_info = fdtd_get_material(fdtd_file, names, f)
-    n_filter_material = perovs_info[f'n_fit_{material_name}'][0]
-    k_filter_material = perovs_info[f'k_fit_{material_name}'][0]
-
-    # Imaginary Perovskite index for comparison
-    cmp_index = n_filter_material + 1j*k_filter_material
-
-    # Transform 4D matriz into 3D
-    index_3d = index_4d[:,:,:,0]
-
-    # Binary matrix creation
-    filter_3d = np.isclose((index_3d[:,:,:]), cmp_index, rtol=tol)
-
-    # Transform back into 4D to multiply with Pabs
-    filter_4d = np.repeat(filter_3d[..., np.newaxis], n_freq, axis = -1)
-
-    # Filter the Pabs
+    index_4d = results[f"results.{pabs_monitor_name}::index.index_z"]
+    # Get Material index data
+    if isinstance(cmp_data, tuple):
+        fdtd_file, material_name = cmp_data
+        perovs_info = fdtd_get_material(fdtd_file, material_name, f)
+        n_filter_material = perovs_info[f"n_fit_{material_name}"][0]
+        k_filter_material = perovs_info[f"k_fit_{material_name}"][0]
+        cmp_index = n_filter_material + 1j * k_filter_material
+    else:
+        cmp_index = cmp_data
+    index_3d = index_4d[:, :, :, 0]
+    filter_3d = np.isclose((index_3d[:, :, :]), cmp_index, rtol=tol)
+    filter_4d = np.repeat(filter_3d[..., np.newaxis], n_freq, axis=-1)
     pabs_filtered = pabs * filter_4d
-
-    # Integration in volume of filtered pabs
-    int_x = scipy.integrate.trapezoid(pabs_filtered, x=x, axis=0)
-    int_y = scipy.integrate.trapezoid(int_x, x=y, axis=0)
-    int_z = scipy.integrate.trapezoid(int_y, x=z, axis=0)
+    int_x = trapezoid(pabs_filtered, x=x, axis=0)
+    int_y = trapezoid(int_x, x=y, axis=0)
+    int_z = trapezoid(int_y, x=z, axis=0)
     pabs_perovskite = int_z
-
-    # Create a dic 
-    data_dict = {"Wavelength": pabs_wvl.flatten()*10**9, "Pabs_total": pabs_perovskite}
-    df = pd.DataFrame(data_dict)
-    jsc = jsc_files(df, am_spectrum=am_spectrum)[0].values[0]
-
-    # Return Dic
-    dic = {'jsc': jsc, 'pabs_perovskite': pabs_perovskite, 'pabs_wvl': pabs_wvl}
-
-    return dic 
+    data_dict = {
+        "Wavelength": pabs_wvl.flatten() * 10**9,
+        "Pabs_total": pabs_perovskite,
+    }
+    jsc = jsc_files(pd.DataFrame(data_dict), am_spectrum=am_spectrum)[0].values[0]
+    return {"jsc": jsc, "pabs_perovskite": pabs_perovskite, "pabs_wvl": pabs_wvl}
