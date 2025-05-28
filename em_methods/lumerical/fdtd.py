@@ -476,3 +476,125 @@ def average_generation(
     if export_name is not None:
         _export_hdf_data(export_name, **export_gen)
     return export_gen
+
+
+def absorption_per_angle_results( monitor_name: str,
+                                  run_res: dict, 
+                                  angle_step : int = 1
+):
+    """
+    Compute angularly-resolved absorption results from 3D electromagnetic field data from solar_generation in FDTD.
+
+    This function calculates absorbed power in a simulation volume as a function of incidence angle and frequency.
+    It processes voxel-wise absorption contributions based on electric field intensity and the imaginary part
+    of the refractive index, returning both integrated and angle-resolved metrics.
+
+    Parameters
+    ----------
+       monitor_name: name of monitor in FDTD with eletromagnetic data
+       run_res: FDTD results dictionary
+
+    Returns
+    -------
+    total_absorption_per_angle : ndarray, shape (Na,). Total absorption (summed over all frequencies) for each angular bin.
+    angle_bins : ndarray, shape (Na,). Angle bin starting values in degrees (from 0 to <180°), one per `angle_step`.
+    theta : ndarray, shape (Nx, Ny, Nz, Nf). Incidence angle (in degrees) computed from the Poynting vector at each voxel and frequency.
+    total_absorption_per_freq: ndarray, shape (Na,). Total absorption per frequency (summed over all angles).
+    absorption_per_angle_per_freq : ndarray, shape (Nf,). Total absorbed power at each frequency, normalized by the source power.
+    voxel_count_per_angle : ndarray, shape (Na,). Number of voxels contributing to each angular bin (across all frequencies).
+    absorption_per_angle_per_freq : ndarray, shape (Na, Nf). Absorbed power for each angle and frequency bin.
+    voxel_count_per_angle_freq : ndarray, shape (Na, Nf). Number of voxels per angle and frequency (used for normalization or debugging).
+    """
+    
+    Ex = np.squeeze(run_res[0][f"results.{monitor_name}::field.Ex"])
+    Ey = np.squeeze(run_res[0][f"results.{monitor_name}::field.Ey"])
+    Ez = np.squeeze(run_res[0][f"results.{monitor_name}::field.Ez"])
+    # Hx = np.squeeze(run_res[0][f"results.{monitor_name}::field.Hx"])
+    # Hy = np.squeeze(run_res[0][f"results.{monitor_name}::field.Hy"])
+    # Hz = np.squeeze(run_res[0][f"results.{monitor_name}::field.Hz"])
+    x = np.squeeze(run_res[0][f"results.{monitor_name}::field.x"])
+    y = np.squeeze(run_res[0][f"results.{monitor_name}::field.y"])
+    z = np.squeeze(run_res[0][f"results.{monitor_name}::field.z"])
+    Pz = np.squeeze(run_res[0][f"results.{monitor_name}::field.Pz"])
+    Px = np.squeeze(run_res[0][f"results.{monitor_name}::field.Px"])
+    Py = np.squeeze(run_res[0][f"results.{monitor_name}::field.Py"])
+    index_x= np.squeeze(run_res[0][f"results.{monitor_name}::index.index_x"])
+    index_y= np.squeeze(run_res[0][f"results.{monitor_name}::index.index_y"])
+    index_z= np.squeeze(run_res[0][f"results.{monitor_name}::index.index_z"])
+    freq= np.squeeze(run_res[0][f"results.{monitor_name}::field.f"])
+    source_power = run_res[0]["source"]["Psource"].flatten() #W/m3
+
+    # Angle binning parameters
+    angle_start = 0
+    angle_stop = 180
+
+    # Compute voxel volume from coordinate grids
+    XX, YY, ZZ = np.meshgrid(x, y, z)
+    XX_diff, YY_diff, ZZ_diff = np.zeros_like(XX), np.zeros_like(YY), np.zeros_like(ZZ)
+    XX_diff[1:, 1:, 1:] = -XX[:-1, :-1, :-1] + XX[1:, 1:, 1:]
+    YY_diff[1:, 1:, 1:] = -YY[:-1, :-1, :-1] + YY[1:, 1:, 1:]
+    ZZ_diff[1:, 1:, 1:] = -ZZ[:-1, :-1, :-1] + ZZ[1:, 1:, 1:]
+    dV = XX_diff * YY_diff * ZZ_diff  # voxel volume
+    dV_exp = np.repeat(dV[..., None], Ex.shape[-1], axis=-1)
+
+    eps0 = 8.854* 10**-12 # vacuum permittivity [F/m]
+
+    total_absorption_per_angle =  []
+    angle_bins = []
+    voxel_count_per_angle =[]
+    absorption_per_angle_per_freq = np.zeros((len(range(angle_start, angle_stop, angle_step)), len(freq)))
+    voxel_count_per_angle_freq = np.zeros((len(range(angle_start, angle_stop, angle_step)), len(freq)))
+
+    # Compute incidence angle (theta) from Poynting vector direction
+    theta = np.degrees(np.arccos(-np.real(Pz) / (np.sqrt(np.real(Px)**2 + np.real(Py)**2 + np.real(Pz)**2)))) # theta for each frequency, for each voxel
+
+    for i in np.arange(angle_start, angle_stop, angle_step):
+        W = freq*2*np.pi #[rad/s] 1D
+        mask = (theta <= i+angle_step) & (theta >= i) #gets all the tehtas  in this raneg    
+        Pabs_x = 0.5 * eps0 * W[None, None, None, :] * (np.abs(Ex)**2) * np.imag(index_x**2)
+        Pabs_y = 0.5 * eps0 * W[None, None, None, :] * (np.abs(Ey)**2) * np.imag(index_y**2)
+        Pabs_z = 0.5 * eps0 * W[None, None, None, :] * (np.abs(Ez)**2) * np.imag(index_z**2)
+        Pabs = (Pabs_x + Pabs_y + Pabs_z)*dV_exp /source_power[None, None, None,:]  #4d array with pabs data in every voxel  and frequency
+        total_absorption_per_angle.append(np.sum(Pabs[mask])) #sum of all Pabs within the range
+        voxel_count_per_angle.append(np.sum(mask))
+        angle_bins.append(i)
+
+    # Compute absorption per angle and per frequency
+    for i in range(angle_start, angle_stop, 1):
+        mask = (theta <= i+1) & (theta >= i) #gets all the thetas in this range
+        for fi,f in enumerate(freq):
+            W = f*2*np.pi #[rad/s] 1D
+            Pabs_x = 0.5 * eps0 * W * (np.abs(Ex[:,:,:,fi])**2) * np.imag(index_x[:,:,:,fi]**2)
+            Pabs_y = 0.5 * eps0 * W * (np.abs(Ey[:,:,:,fi])**2) * np.imag(index_y[:,:,:,fi]**2)
+            Pabs_z = 0.5 * eps0 * W * (np.abs(Ez[:,:,:,fi])**2) * np.imag(index_z[:,:,:,fi]**2)
+            Pabs = (Pabs_x + Pabs_y + Pabs_z)*dV_exp[:,:,:,fi] /source_power[fi]
+            absorption_per_angle_per_freq[i, fi] = np.sum(Pabs[mask[:, :, :, fi]])
+            voxel_count_per_angle_freq[i, fi] = np.sum(mask[:, :, :, fi])
+
+    # Compute total absorption per frequency
+    W = freq*2*np.pi #[rad/s] 1D      
+    Pabs_x = 0.5 * eps0 * W * (np.abs(Ex)**2) * np.imag(index_x**2)
+    Pabs_y = 0.5 * eps0 * W * (np.abs(Ey)**2) * np.imag(index_y**2)
+    Pabs_z = 0.5 * eps0 * W * (np.abs(Ez)**2) * np.imag(index_z**2)
+    Pabs = np.sqrt(Pabs_x**2 + Pabs_y**2 + Pabs_z**2) 
+    Pabs = Pabs_x+ Pabs_y + Pabs_z
+    Abs_raw = Pabs * dV_exp  # W (power) per voxel per freq
+    total_absorption_per_freq = np.sum(Abs_raw, axis=(0,1,2))  # shape (Nf,)
+    total_absorption_per_freq = total_absorption_per_freq / source_power
+
+    # Optional diagnostic plot
+    # plt.figure(figsize=(6, 3))
+    # plt.plot((3e8/freq)*1e9, total_absorption_per_freq)
+    # plt.ylabel('Absorption')
+    # plt.xlabel('Wavelenght [nm]')
+    # plt.show()
+    
+    return (
+        np.array(total_absorption_per_angle),            
+        np.array(angle_bins),           
+        np.array(theta),                         
+        np.array(total_absorption_per_freq),                
+        np.array(voxel_count_per_angle),       
+        absorption_per_angle_per_freq,              
+        voxel_count_per_angle_freq         
+    )
