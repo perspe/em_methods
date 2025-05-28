@@ -578,7 +578,7 @@ def plot_IV_curves_v2(
             print('heyyyy', type(v[v_key]))
             print(v[v_key])
             print(j[j_key])
-            pce[pce_key], ff[ff_key], voc[voc_key], jsc[jsc_key], _, _ = iv_parameters( np.array(v[v_key]), current_density = np.array(j[j_key]))
+            pce[pce_key], ff[ff_key], voc[voc_key], jsc[jsc_key] = iv_parameters( np.array(v[v_key]), current_density = np.array(j[j_key]))
             erase_iv = True
         else: 
             erase_iv = False
@@ -957,7 +957,7 @@ def pso_func( eta_pso, path,  active_region_list, voltage_charge, current_densit
     """
     FoM_matrix = []
     generator = list(enumerate(zip(eta_pso)))
-    pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage_charge, current_density = current_density_charge)
+    pce_temp, ff_temp, voc_temp, jsc_temp =  iv_parameters(voltage_charge, current_density = current_density_charge)
     jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
     rsh_derivative, rs_derivative =  calc_R(voc_temp,voltage_charge,current_density_charge)
 
@@ -1053,7 +1053,9 @@ def plot_2T(folder, active_region_list,  param_dict):
         if np.array(voltage_charge)[-1] > np.array(voltage_charge_iv_curve)[-1]:
             voltage_charge_iv_curve = voltage_charge
         current_density_charge = pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"]
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage_charge, current_density = current_density_charge)
+        if current_density_charge[0] < 0: 
+            current_density_charge = -current_density_charge
+        pce_temp, ff_temp, voc_temp, jsc_temp =  iv_parameters(voltage_charge, current_density = current_density_charge)
         jmpp_temp = calc_jmpp(voltage_charge,current_density_charge)
         rsh_derivative_temp, rs_derivative_temp =  calc_R(voc_temp,voltage_charge,current_density_charge)    
         pce.append(pce_temp)
@@ -1111,7 +1113,7 @@ def plot_4T(folder,active_region_list):
         if np.array(voltage[i])[-1] > np.array(voltage_charge_iv_curve):
             voltage_charge_iv_curve = np.array(voltage[i])[-1]
         current_density.append(pd.read_csv(os.path.join(folder, f"{arl.SCName}_IV_curve.csv"), delimiter='\t')["Current_Density"])
-        pce_temp, ff_temp, voc_temp, jsc_temp, _, _ =  iv_parameters(voltage[i], current_density = current_density[i])
+        pce_temp, ff_temp, voc_temp, jsc_temp =  iv_parameters(voltage[i], current_density = current_density[i])
         voc.append(voc_temp)
     for i, _ in enumerate(active_region_list):     
         new_voltage = np.linspace(min(voltage[i]), voltage_charge_iv_curve, 2001)
