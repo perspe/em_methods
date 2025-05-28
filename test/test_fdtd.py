@@ -1,7 +1,7 @@
 import unittest
 import os
 import logging
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run
+from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run, absorption_per_angle_results
 import lumapi
 
 # Override logger to always use debug
@@ -143,3 +143,25 @@ class TestFDTD(unittest.TestCase):
                 {"R": "T"}
         }
         results = fdtd_run(rcwa_file, properties, results)
+
+    def test_ang_abs(self):
+        """ Test absorption per angle function """
+        fdtd_file: str = os.path.join(BASETESTPATH, "best_4t_planar_tandem.fsp")
+        properties = {}
+        monitor_name = "solar_generation_Si"
+        results = {"results":{
+                        f"{monitor_name}::field": ["Ex", "Ey", "Ez", "Hx", "Hy", "Hz", "Px", "Py", "Pz","x", "y", "z", "f", ],
+                        f"{monitor_name}::index": ["index_x", "index_y", "index_z"]},
+                    "source": "source"}
+        run_res = fdtd_run(
+                    fdtd_file,
+                    properties = properties,
+                    get_results = results,
+                    override_prefix=f"test",
+                    delete = True
+                    )
+        total_absorption_per_angle, *_ = absorption_per_angle_results(monitor_name, run_res)
+        self.assertAlmostEqual(sum(total_absorption_per_angle), 52.6439, 3)
+        
+        
+        
