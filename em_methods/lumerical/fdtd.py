@@ -491,8 +491,8 @@ def absorption_per_angle_results( monitor_name: str,
 
     Parameters
     ----------
-       monitor_name: name of monitor in FDTD with eletromagnetic data
-       run_res: FDTD results dictionary
+       monitor_name : Name of the 2D monitor used in the simulation (e.g., "solar_generation_Si").
+       run_res:  Dictionary containing simulation results exported from Lumerical FDTD, with field components and source data.
 
     Returns
     -------
@@ -597,4 +597,79 @@ def absorption_per_angle_results( monitor_name: str,
         np.array(voxel_count_per_angle),       
         absorption_per_angle_per_freq,              
         voxel_count_per_angle_freq         
+    )
+
+def angular_results(monitor_name:str,
+                    run_res:dict):
+    
+    """
+    Computes the angular distribution of the Poynting vector and splits 
+    the transmitted power into specular (θ ≤ 2°) and diffuse (θ > 2°) components
+    from a 2D field monitor in an FDTD simulation.
+
+    Parameters
+    ----------
+    monitor_name : Name of the 2D monitor used in the simulation (e.g., Ttot").
+    run_res : Dictionary containing simulation results exported from Lumerical FDTD, with field components and source data.
+
+    Returns
+    -------
+    angular_avg : ndarray, shape (Nf,). Mean angle of incidence θ (in degrees) over the 2D monitor for each frequency.
+    spec_power_norm : ndarray, shape (Nf,). Power transmitted into the specular direction (θ ≤ 2°), normalized by source power.
+    diff_power_norm : ndarray, shape (Nf,). Power transmitted into diffuse directions (θ > 2°), normalized by source power.
+    theta_ang : list of ndarray, each shape (Nx, Ny). Angular distribution θ (in degrees) across the 2D monitor, per frequency.
+    """
+    
+    Ex = np.squeeze(run_res[0][f"data.{monitor_name}.Ex"])
+    Ey = np.squeeze(run_res[0][f"data.{monitor_name}.Ey"])
+    Ez = np.squeeze(run_res[0][f"data.{monitor_name}.Ez"])
+    Hx = np.squeeze(run_res[0][f"data.{monitor_name}.Hx"])
+    Hy = np.squeeze(run_res[0][f"data.{monitor_name}.Hy"])
+    Hz = np.squeeze(run_res[0][f"data.{monitor_name}.Hz"])
+    x = np.squeeze(run_res[0][f"data.{monitor_name}.x"])
+    y = np.squeeze(run_res[0][f"data.{monitor_name}.y"])
+    source_power = run_res[0]["source"]["Psource"].flatten()
+
+    XX, YY = np.meshgrid(x, y)
+    XX = XX.T
+    YY = YY.T
+    # Calculate the size difference (for the integration)
+    XX_diff, YY_diff = np.zeros_like(XX), np.zeros_like(YY)
+    XX_diff[1:, 1:] = -XX[:-1, :-1] + XX[1:, 1:]
+    YY_diff[1:, 1:] = -YY[:-1, :-1] + YY[1:, 1:]
+    spec_power = []
+    diff_power = []
+    angular_avg = []
+    theta_ang = []
+    for fi in range(Ex.shape[-1]):
+        Ex_i, Hx_i = Ex[..., fi], Hx[..., fi]
+        Ey_i, Hy_i = Ey[..., fi], Hy[..., fi]
+        Ez_i, Hz_i = Ez[..., fi], Hz[..., fi]
+        Pz = np.real((Ex_i * np.conjugate(Hy_i) - Ey_i * np.conjugate(Hx_i)))
+        Px = np.real((Ey_i * np.conjugate(Hz_i) - Ez_i * np.conjugate(Hy_i)))
+        Py = np.real((-Ex_i * np.conjugate(Hz_i) + Ez_i * np.conjugate(Hx_i)))
+        theta = np.degrees(np.arccos(-Pz / (np.sqrt(Px**2 + Py**2 + Pz**2))))
+        angular_avg.append(np.mean(theta))
+        theta_ang.append(theta)
+        spec_cutoff = theta <= 2
+        diff_cutoff = theta > 2
+        spec_power.append(
+            1
+            / 2
+            * np.sum(
+                np.real(Pz[spec_cutoff]) * XX_diff[spec_cutoff] * YY_diff[spec_cutoff]
+            )
+        )
+        diff_power.append(
+            1
+            / 2
+            * np.sum(
+                np.real(Pz[diff_cutoff]) * XX_diff[diff_cutoff] * YY_diff[diff_cutoff]
+            )
+        )
+    return (
+        np.array(angular_avg),
+        np.array(spec_power) / source_power,
+        np.array(diff_power) / source_power,
+        np.array(theta_ang),
     )
