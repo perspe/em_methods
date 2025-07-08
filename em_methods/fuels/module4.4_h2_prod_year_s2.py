@@ -132,6 +132,7 @@ EC_consumption = 4300                                           # Wh/Nm3 H2  (en
 EC_water = 0.92                                                 # L/Nm3 H2
 H2_heating_value = 119.96                                       # MJ/kg, Energy density of hydrogen gas , LHV 
 EC_consumption_ph = EC_consumption * EC_production_ph           # Wh/h  (energy need for one hour to produce 1000 Nm3 H2)
+H2_purity = 0.998                                               # Hydrogen purity
     
 
 
@@ -425,7 +426,7 @@ def EC_calculations_2(EC_capacity, EC_production_ph, EC_consumption_ph, EC_water
     EC_supply_cons = [V1T_gen / (EC_units * EC_consumption_ph) for V1T_gen in L1T_gen]    # ratio between energy supplied and required
     L_EC_usage = np.clip(EC_supply_cons, 0, 1)                                            # sets EC usage between 0 and 1: it means that above 1 there is excess of solar energy (that will be exported)
     L_EC_supply_ph = EC_units * EC_consumption_ph * L_EC_usage                            # Wh/Wpeak/h or Wh/h, Energy required by EC units
-    L_H2_volume_ph = EC_units * EC_production_ph * L_EC_usage                             # Nm3/Wpeak/h or Nm3/h H2 production
+    L_H2_volume_ph = H2_purity * EC_units * EC_production_ph * L_EC_usage                             # Nm3/Wpeak/h or Nm3/h H2 production
     L_EC_water_ph = L_H2_volume_ph * EC_water * 1000                                      # mL/Wpeak/h or mL/h, water comsumption
     
     L_H2_mass_ph = [hydrogen_volume_to_mass(V_H2_volume_ph)*1000 for V_H2_volume_ph in L_H2_volume_ph]      # g/Wpeak/h or g/h

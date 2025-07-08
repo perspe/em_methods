@@ -106,7 +106,7 @@ def display_results():
 
     # Calculate fuel derivatives for different fuels
     fuels_data = {
-        'H2': fuel_derivatives(H2_kg_value, 119.96, 2.01568, 8.988e-5, 0, 1, 5.26, get_carbon_tax(CITY)),
+        'H2': fuel_derivatives(H2_kg_value, 119.96, 2.01568, 8.988e-5, 0, 1, 7.17, get_carbon_tax(CITY)),
         'O2': fuel_derivatives(H2_kg_value, 0, 15.999, 1.429e-3, 0, 0.5, 0.2185, get_carbon_tax(CITY)),
         'NH3': fuel_derivatives(H2_kg_value, 18.646, 17.03022, 0.769e-3, 0, 0.6666667, 0.7288, get_carbon_tax(CITY)),
         'CH4': fuel_derivatives(H2_kg_value, 50.00, 16.04236, 0.717e-3, 1, 0.5, 1.9170, get_carbon_tax(CITY)),

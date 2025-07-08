@@ -142,6 +142,7 @@ EC_production_ph = 1000                                         # Nm3/hour, full
 EC_consumption_ph = 4300                                        # Wh/Nm3 H2  (energy need for one hour to produce 1 Nm3/h)
 EC_water = 0.92                                                 # L per Nm3 H2
 H2_heating_value = 119.96                                       # MJ/kg, Energy density of hydrogen gas , LHV 
+H2_purity = 0.998                                               # Hydrogen purity
 
 EC_production_pd = 24 * EC_production_ph                        # Nm3/day, full power
 EC_consumption_pd = EC_consumption_ph * EC_production_pd        # Wh/day  (energy need for one day to produce 24k Nm3 H2) 
@@ -443,7 +444,7 @@ def EC_calculations_1(EC_production_pd, EC_consumption_pd, EC_water, H2_heating_
     '''
     
     EC_supply_pd = (statistics.mean(L1T_gen)*24*PVutilization)                            # Wh/Wpeak or Wh per day, average annual PV energy minus system losses
-    H2_volume_pd = EC_supply_pd * EC_production_pd /  EC_consumption_pd                   # Nm3/Wpeak or Nm3 per day H2, H2 produced assuming EC is working at full power, and there is no limit of EC units    
+    H2_volume_pd = H2_purity * EC_supply_pd * EC_production_pd /  EC_consumption_pd                   # Nm3/Wpeak or Nm3 per day H2, H2 produced assuming EC is working at full power, and there is no limit of EC units    
     EC_water_pd = H2_volume_pd * EC_water * 1000                                          # mL/Wpeak
     H2_mass_pd = hydrogen_volume_to_mass(H2_volume_pd)                                    # kg/Wpeak or kg per day
     H2_calorific_power_pd = H2_mass_pd * H2_heating_value / 0.0036                        # Wh/Wpeak or Wh per day, energy content of hydrogen, (1 Wh = 0.0036 MJ) 

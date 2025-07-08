@@ -3,11 +3,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import sys
 
 # Default simulation variables
 CITY = "Sines"
 SCENARIO = 1
-EC_LIFETIME = 12
+
+if SCENARIO == 1:
+    EC_LIFETIME = 12
+    EC_opex_correction = 1
+elif SCENARIO == 2:
+    EC_LIFETIME = 9
+    EC_opex_correction = 1.25
+else:
+    print("SCENARIO must be 1 or 2")
+    sys.exit()
 DISCOUNT_RATE = 7.5  # %
 LIFETIME = 25  # years
 
@@ -21,51 +31,51 @@ if CITY == "Sines":
     electricity_price = 0.20e-3  # €/Wh
     water_price = 1.20  # €/m3
     if SCENARIO == 1:
-        installed_PV = 30.289  # W
-        ec_capacity = 5.458  # W
-        battery_capacity = 9.087  # Wh
-        grid_imports = 27314  # Wh
-        grid_exports = 26310  # Wh
+        installed_PV = 30.35  # W
+        ec_capacity = 5.469  # W
+        battery_capacity = 9.105  # Wh
+        grid_imports = 27369  # Wh
+        grid_exports = 26362  # Wh
     elif SCENARIO == 2:
-        installed_PV = 36.916  # W
-        ec_capacity = 18.458  # W
+        installed_PV = 36.99  # W
+        ec_capacity = 18.495  # W
         battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
-        grid_exports = 10462  # Wh
+        grid_exports = 10482  # Wh
     else:
         raise Exception("Invalid Scenario (choose either 1 or 2)")
 elif CITY == "Edmonton":
     electricity_price = 0.11e-3  # €/Wh
     water_price = 1.12  # €/m3
     if SCENARIO == 1:
-        installed_PV = 42.223  # W
-        ec_capacity = 5.458  # W
-        battery_capacity = 12.667  # Wh
-        grid_imports = 28528  # Wh
-        grid_exports = 27195  # Wh
+        installed_PV = 42.307  # W
+        ec_capacity = 5.4695  # W
+        battery_capacity = 12.693  # Wh
+        grid_imports = 28587  # Wh
+        grid_exports = 27252  # Wh
     elif SCENARIO == 2:
-        installed_PV = 49.1431  # W
-        ec_capacity = 24.572  # W
+        installed_PV = 49.242  # W
+        ec_capacity = 24.62  # W
         battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
-        grid_exports = 7837  # Wh
+        grid_exports = 7852  # Wh
     else:
         raise Exception("Invalid Scenario (choose either 1 or 2)")
 elif CITY == "Crystal Brook":
     electricity_price = 0.24e-3  # €/Wh
     water_price = 1.98  # €/m3
     if SCENARIO == 1:
-        installed_PV = 32.928  # W
-        ec_capacity = 5.458  # W
-        battery_capacity = 9.878  # Wh
-        grid_imports = 26583  # Wh
-        grid_exports = 25430  # Wh
+        installed_PV = 32.992  # W
+        ec_capacity = 5.4689  # W
+        battery_capacity = 9.897  # Wh
+        grid_imports = 26635  # Wh
+        grid_exports = 25480  # Wh
     elif SCENARIO == 2:
-        installed_PV = 39.316  # W
-        ec_capacity = 19.658  # W
+        installed_PV = 39.395  # W
+        ec_capacity = 19.685  # W
         battery_capacity = 0  # Wh
         grid_imports = 0  # Wh
-        grid_exports = 9280  # Wh
+        grid_exports = 9297  # Wh
     else:
         raise Exception("Invalid Scenario (choose either 1 or 2)")
 else:
@@ -77,7 +87,7 @@ else:
 pv_capex = 0.9 * installed_PV
 pv_opex = 0.017 * installed_PV
 ec_capex = 1.666 * ec_capacity
-ec_opex = 0.02 * ec_capex + (0.075 * LIFETIME / EC_LIFETIME) * ec_capex
+ec_opex = EC_opex_correction * 0.02 * ec_capex + (0.075 * LIFETIME / EC_LIFETIME) * ec_capex
 battery_capex = 1.84260942 * battery_capacity
 battery_opex = 0.04206468 * battery_capacity
 
