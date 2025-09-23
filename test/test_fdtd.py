@@ -6,7 +6,7 @@ import lumapi
 
 # Override logger to always use debug
 logger = logging.getLogger('sim')
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 BASETESTPATH: str = os.path.join("test", "fdtd")
 
@@ -28,7 +28,7 @@ class TestFDTD(unittest.TestCase):
                 {"T": "T",
                  "R": "T"}
         }
-        fdtd_run(fdtd_file, properties, results, delete=True)
+        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw={"hide": False})
 
     def test_fdtd_run_internals(self):
         """ Test internal components of fdtd_run function """

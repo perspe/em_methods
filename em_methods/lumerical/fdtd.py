@@ -32,12 +32,12 @@ logger = logging.getLogger("sim")
 
 def __read_autoshutoff(log_file: str) -> List:
     # Gather info from log and the delete it
-    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
+    autoshut_off_re = re.compile(r"^[0-9]{0,3}.?[0-9]+%")
     autoshut_off_list: List[Tuple[float, float]] = []
     with open(log_file, mode="r") as log:
         for log_line in log.readlines():
             match = re.search(autoshut_off_re, log_line)
-            if match:
+            if match and not "initialized" in log_line:
                 autoshut_off_percent = float(log_line.split(" ")[0][:-1])
                 autoshut_off_val = float(log_line.split(" ")[-1])
                 autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
@@ -285,15 +285,7 @@ def fdtd_run_large_data(
     log_file: str = os.path.join(
         savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
     )
-    autoshut_off_re = re.compile("^[0-9]{0,3}\.?[0-9]+%")
-    autoshut_off_list: List[Tuple[float, float]] = []
-    with open(log_file, mode="r") as log:
-        for log_line in log.readlines():
-            match = re.search(autoshut_off_re, log_line)
-            if match:
-                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
-                autoshut_off_val = float(log_line.split(" ")[-1])
-                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
+    autoshut_off_list = __read_autoshutoff(log_file)
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
     logger.warning(
         f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s | Autoshutoff: {autoshut_off_list[-1]}"
