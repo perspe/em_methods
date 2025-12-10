@@ -144,6 +144,7 @@ def _preview_results(
     FoM: List[float],
     best_array: npt.NDArray,
     param_names: List[str],
+    basepath: str
 ):
     """Update the global plot preview of the results"""
     ax[0].clear()
@@ -161,7 +162,7 @@ def _preview_results(
             fontfamily="Arial",
             fontsize=10,
         )
-    plt.savefig("pso_update_res.png", dpi=200)
+    plt.savefig(os.path.join(basepath, "pso_update.png"), dpi=300)
     logger.debug("Updated Summary Figure")
 
 
@@ -300,7 +301,7 @@ def particle_swarm(
         )
         logger.debug(f"{np.arange(iteration)}::{gbest_array}")
         _preview_results(
-            ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names
+            ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names, basepath
         )
     # Export data
     if export:
@@ -368,7 +369,7 @@ def particle_swarm(
         iteration += 1
         if progress:
             _preview_results(
-                ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names
+                ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names, basepath
             )
         if export:
             export_data = np.c_[param_space.T, func_results, vel_space.T]

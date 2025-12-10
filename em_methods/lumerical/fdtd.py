@@ -58,6 +58,7 @@ def fdtd_run(
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
     delete: bool = True,
+    delete_log: bool = True,
     fdtd_kw={"hide": True},
     **kwargs,
 ):
@@ -118,8 +119,10 @@ def fdtd_run(
     autoshutoff = __read_autoshutoff(log_file)
     logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
     if delete:
-        logger.debug(f"Deleting unwanted files")
+        logger.debug(f"Deleting Main File")
         os.remove(new_filepath)
+    if delete_log:
+        logger.debug(f"Deleting log file")
         os.remove(log_file)
     if "analysis runtime" not in results_keys:
         raise LumericalError("Simulation Failed in Analysis")
@@ -232,7 +235,7 @@ def fdtd_run_large_data(
     *,
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
-    delete: bool = False,
+    delete: bool = True,
     fdtd_kw: bool = {"hide": True},
 ):
     """
