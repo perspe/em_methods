@@ -596,7 +596,7 @@ def absorption_per_angle_results( monitor_name: str,
         np.array(total_absorption_per_freq),                
         np.array(voxel_count_per_angle),       
         absorption_per_angle_per_freq,              
-        voxel_count_per_angle_freq         
+        voxel_count_per_angle_freq, freq         
     )
 
 def angular_results(monitor_name:str,
