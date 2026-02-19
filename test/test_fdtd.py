@@ -1,7 +1,7 @@
 import unittest
 import os
 import logging
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run, filtered_pabs
+from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run, filtered_pabs, fdtd_batch
 import lumapi
 
 # Override logger to always use debug
@@ -161,3 +161,24 @@ class TestFDTD(unittest.TestCase):
         jsc_res_wbg = round(abs(wbg_pabs['jsc']), 2)
         solar_gen_wbg = round(0.1 * sim['results.SG_WBG.Jsc'], 2)
         self.assertAlmostEqual(jsc_res_wbg, solar_gen_wbg, 0)
+
+    def test_fdtd_batch(self):
+        fdtd_file: str = os.path.join(BASETESTPATH, "test_planar.fsp")
+        results = {
+            "data":
+                {"solar_generation": "Jsc"},
+            "results":
+                {"T": "T",
+                 "R": "T"}
+        }
+        properties_list = [
+            properties = {
+                "::model":
+                    {"RT_mode": 1},
+                "Planar_layers":
+                    {"Perovskite": tpvk*1e-9,
+                        "Spiro": 100e-9}
+            }
+            for tpvk in [100, 200, 300, 400, 500]
+        ]
+        fdtd_batch(fdtd_file, properties_list, results, fdtd_kw={"hide": False})

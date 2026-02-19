@@ -1,5 +1,5 @@
 import logging
-from multiprocessing import Manager, Queue
+from multiprocessing import Manager, Queue, Pool
 import os
 import re
 import shutil
@@ -44,9 +44,96 @@ def __read_autoshutoff(log_file: str) -> List:
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
     return autoshut_off_list
 
+def __close_simulation(results, new_filepath, delete, log_file, delete_log):
+    results_keys = results.keys()
+    if "runtime" not in results_keys:
+        raise LumericalError("Simulation Finished Prematurely")
+    autoshutoff = __read_autoshutoff(log_file)
+    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
+    if delete:
+        logger.debug(f"Deleting Main File")
+        os.remove(new_filepath)
+    if delete_log:
+        logger.debug(f"Deleting log file")
+        os.remove(log_file)
+    if "analysis runtime" not in results_keys:
+        raise LumericalError("Simulation Failed in Analysis")
+    if "Error" in results_keys:
+        raise LumericalError(results["Error"])
+    # Extract data from process
+    logger.debug(f"Simulation data:\n{results}")
+    # Check for other possible runtime problems
+    if "data" not in results_keys:
+        raise LumericalError("No data available from simulation")
+    data_results = results["data"]
+    data_results["autoshutoff"] = autoshutoff
+    logger.info(f"Autoshutoff: {autoshutoff[-1]}")
+    return (
+        data_results,
+        results["runtime"],
+        results["analysis runtime"],
+        results["data_info"],
+    )
+
 
 """ Main functions """
 
+def fdtd_batch(
+    basefile: str,
+    properties: List[Dict],
+    get_results: Dict[str, Dict[str, Union[str, List]]],
+    *,
+    get_info: Dict[str, str] = {},
+    func=None,
+    savepath: Union[None, str] = None,
+    delete: bool = True,
+    delete_log: bool = True,
+    fdtd_kw={"hide": True},
+    **kwargs,):
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    final_results = []
+    files = []
+    log_files =[]
+    for index, property in enumerate(properties):
+        new_filepath: str = os.path.join(savepath, f"b{index}_" + basename)
+        files.append(new_filepath)
+        logger.debug(f"new_filepath:{new_filepath}")
+        shutil.copyfile(basefile, new_filepath)
+        # Get logfile name
+        log_file: str = os.path.join(
+            savepath, f"b{index}_{os.path.splitext(basename)[0]}_p0.log"
+        )
+        log_files.append(log_file)
+        # Run simulation - the process is as follows
+        # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
+        # 2. Create a process (RunLumerical) to run the lumerical file
+        #       - This avoids problems when the simulation gives errors
+        results = Manager().dict()
+        run_process = RunLumerical(
+            LumMethod.FDTD,
+            results=results,
+            solver="FDTD",
+            log_queue=Queue(-1),
+            filepath=new_filepath,
+            properties=property,
+            get_results=get_results,
+            get_info=get_info,
+            func=func,
+            lumerical_kw=fdtd_kw,
+            **kwargs,
+        )
+        final_results.append(run_process)
+        run_process.start()
+        logger.debug(f"Run {index} Process Started...")
+    run_process.join()
+    logger.debug(f"Simulation finished")
+    return_res = []
+    for final_result, file, log_file in zip(final_results, files, log_files):
+        res = __close_simulation(final_result, file, delete, log_file, delete_log)
+        return_res.append(res)
+    return return_res
 
 def fdtd_run(
     basefile: str,
