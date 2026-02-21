@@ -20,15 +20,15 @@ from em_methods.lumerical.fdtd import average_generation, fdtd_run, fdtd_run_ana
 from em_methods.lumerical.lum_helper import (
     LumMethod,
     LumericalError,
-    RunLumerical,
     _get_lumerical_results,
+    lumerical_run
 )
 from em_methods.utilities import iv_parameters
 import lumapi
 
 
 # Get module logger
-logger = logging.getLogger("sim")
+logger = logging.getLogger("sim_file")
 
 
 @dataclass()
@@ -439,7 +439,8 @@ def charge_run(
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
     delete: bool = True,
-    device_kw={"hide": True},
+    delete_log: bool = True,
+    lumerical_kw={"hide": True},
     **kwargs,
 ):
     """
@@ -458,65 +459,11 @@ def charge_run(
         results: Dictionary with all the results
         time: Time to run the simulation
     """
-
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
-    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(basefile, new_filepath)
-    # Get logfile name
-    log_file: str = os.path.join(
-        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
-    )
-    # Run simulation - the process is as follows
-    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
-    # 2. Create a process (RunLumerical) to run the lumerical file
-    #       - This avoids problems when the simulation gives errors
-    results = Manager().dict()
-    run_process = RunLumerical(
-        LumMethod.CHARGE,
-        results=results,
-        solver="CHARGE",
-        log_queue=Queue(-1),
-        filepath=new_filepath,
-        properties=properties,
-        get_results=get_results,
-        get_info=get_info,
-        func=func,
-        lumerical_kw=device_kw,
-        **kwargs,
-    )
-    run_process.start()
-    # check_thread = CheckRunState(log_file, run_process, process_queue)
-    # check_thread.start()
-    logger.debug("Run Process Started...")
-    run_process.join()
-    logger.debug(f"Simulation finished")
-    results_keys = list(results.keys())
-    if "runtime" not in results_keys:
-        raise LumericalError("Simulation Finished Prematurely")
-    if delete:
-        logger.debug(f"Deleting unwanted files")
-        os.remove(new_filepath)
-        os.remove(log_file)
-    if "analysis runtime" not in results_keys:
-        raise LumericalError("Simulation Failed in Analysis")
-    if "Error" in results_keys:
-        raise LumericalError(results["Error"])
-    # Extract data from process
-    logger.debug(f"Simulation data:\n{results}")
-    # Check for other possible runtime problems
-    if "data" not in results_keys:
-        raise LumericalError("No data available from simulation")
-    return (
-        results["data"],
-        results["runtime"],
-        results["analysis runtime"],
-        results["data_info"],
-    )
-
+    solver = "CHARGE"
+    method = LumMethod.CHARGE
+    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
+                         override_prefix=override_prefix, delete=delete, delete_log=delete_log, solver=solver,
+                         method=method, lumerical_kw=lumerical_kw, **kwargs)
 
 def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
     """

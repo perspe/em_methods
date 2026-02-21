@@ -40,7 +40,7 @@ class TestCHARGE(unittest.TestCase):
         """Make a single run of a test file with everything default"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_planar_2d.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
-        get_results = {"CHARGE": "AZO"}
+        get_results = {"results": {"CHARGE": "AZO"}}
         try:
             charge_run(
                 charge_file,
@@ -56,7 +56,7 @@ class TestCHARGE(unittest.TestCase):
         """Make a single run of a test file with everything default"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_planar_2d.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
-        get_results = {"CHARGE": "AZO"}
+        get_results = {"results": {"CHARGE": "AZO"}}
         for i in range(100):
             try:
                 charge_run(
@@ -73,7 +73,7 @@ class TestCHARGE(unittest.TestCase):
         """Test run with internal function to charge"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_planar_2d.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
-        get_results = {"CHARGE": "AZO"}
+        get_results = {"results": {"CHARGE": "AZO"}}
         charge_run(
             charge_file,
             properties,
@@ -90,7 +90,7 @@ class TestCHARGE(unittest.TestCase):
         """Test run file that gives error"""
         charge_file: str = os.path.join(BASETESTPATH_CHARGE, "teste_run_error.ldev")
         properties = {"::model": {"tITO": 0.1e-6, "tSnO2": 0.04e-6, "tSpiro": 0.1e-6}}
-        get_results = {"CHARGE": "AZO"}
+        get_results = {"results": {"CHARGE": "AZO"}}
         charge_run(
             charge_file,
             properties,

@@ -7,6 +7,8 @@ from typing import Dict, List, Tuple, Union
 from uuid import uuid4
 import h5py
 import time
+import tempfile
+import pickle
 
 import numpy as np
 import numpy.typing as npt
@@ -17,64 +19,18 @@ from scipy.integrate import trapezoid
 
 from em_methods.lumerical.lum_helper import (
     LumMethod,
-    LumericalError,
     RunLumerical,
+    Job,
+    lumerical_run,
+    lumerical_batch,
     _get_lumerical_results,
+    __read_autoshutoff
 )
 from em_methods.utilities import jsc_files
 import lumapi
 
 # Get module logger
-logger = logging.getLogger("sim")
-
-""" Helper functions """
-
-
-def __read_autoshutoff(log_file: str) -> List:
-    # Gather info from log and the delete it
-    autoshut_off_re = re.compile(r"^[0-9]{0,3}.?[0-9]+%")
-    autoshut_off_list: List[Tuple[float, float]] = []
-    with open(log_file, mode="r") as log:
-        for log_line in log.readlines():
-            match = re.search(autoshut_off_re, log_line)
-            if match and not "initialized" in log_line:
-                autoshut_off_percent = float(log_line.split(" ")[0][:-1])
-                autoshut_off_val = float(log_line.split(" ")[-1])
-                autoshut_off_list.append((autoshut_off_percent, autoshut_off_val))
-    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
-    return autoshut_off_list
-
-def __close_simulation(results, new_filepath, delete, log_file, delete_log):
-    results_keys = results.keys()
-    if "runtime" not in results_keys:
-        raise LumericalError("Simulation Finished Prematurely")
-    autoshutoff = __read_autoshutoff(log_file)
-    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
-    if delete:
-        logger.debug(f"Deleting Main File")
-        os.remove(new_filepath)
-    if delete_log:
-        logger.debug(f"Deleting log file")
-        os.remove(log_file)
-    if "analysis runtime" not in results_keys:
-        raise LumericalError("Simulation Failed in Analysis")
-    if "Error" in results_keys:
-        raise LumericalError(results["Error"])
-    # Extract data from process
-    logger.debug(f"Simulation data:\n{results}")
-    # Check for other possible runtime problems
-    if "data" not in results_keys:
-        raise LumericalError("No data available from simulation")
-    data_results = results["data"]
-    data_results["autoshutoff"] = autoshutoff
-    logger.info(f"Autoshutoff: {autoshutoff[-1]}")
-    return (
-        data_results,
-        results["runtime"],
-        results["analysis runtime"],
-        results["data_info"],
-    )
-
+logger = logging.getLogger("sim_file")
 
 """ Main functions """
 
@@ -88,52 +44,44 @@ def fdtd_batch(
     savepath: Union[None, str] = None,
     delete: bool = True,
     delete_log: bool = True,
-    fdtd_kw={"hide": True},
+    lumerical_kw={"hide": True},
     **kwargs,):
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    final_results = []
-    files = []
-    log_files =[]
-    for index, property in enumerate(properties):
-        new_filepath: str = os.path.join(savepath, f"b{index}_" + basename)
-        files.append(new_filepath)
-        logger.debug(f"new_filepath:{new_filepath}")
-        shutil.copyfile(basefile, new_filepath)
-        # Get logfile name
-        log_file: str = os.path.join(
-            savepath, f"b{index}_{os.path.splitext(basename)[0]}_p0.log"
-        )
-        log_files.append(log_file)
-        # Run simulation - the process is as follows
-        # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
-        # 2. Create a process (RunLumerical) to run the lumerical file
-        #       - This avoids problems when the simulation gives errors
-        results = Manager().dict()
-        run_process = RunLumerical(
-            LumMethod.FDTD,
-            results=results,
-            solver="FDTD",
-            log_queue=Queue(-1),
-            filepath=new_filepath,
-            properties=property,
-            get_results=get_results,
-            get_info=get_info,
-            func=func,
-            lumerical_kw=fdtd_kw,
-            **kwargs,
-        )
-        final_results.append(run_process)
-        run_process.start()
-        logger.debug(f"Run {index} Process Started...")
-    run_process.join()
-    logger.debug(f"Simulation finished")
-    return_res = []
-    for final_result, file, log_file in zip(final_results, files, log_files):
-        res = __close_simulation(final_result, file, delete, log_file, delete_log)
-        return_res.append(res)
-    return return_res
+    """
+    This function is similar to fdtd_run/lumerical_run, but it can create multiple runs
+    at the same time. See fdtd_run for full description of args.
+    Note!!: This is made to be run via slurm, that can schedule and manage
+    runs and resources, please be careful when running this function
+    """
+    solver="FDTD"
+    method=LumMethod.FDTD
+    return lumerical_batch(basefile, properties, get_results, get_info=get_info,
+                           func=func,savepath=savepath, delete=delete, delete_log=delete_log,
+                           solver=solver, method=method, lumerical_kw=lumerical_kw, **kwargs)
+
+def rcwa_batch(
+    basefile: str,
+    properties: List[Dict],
+    get_results: Dict[str, Dict[str, Union[str, List]]],
+    *,
+    get_info: Dict[str, str] = {},
+    func=None,
+    savepath: Union[None, str] = None,
+    delete: bool = True,
+    delete_log: bool = True,
+    lumerical_kw={"hide": True},
+    **kwargs,):
+    """
+    This function is similar to rcwa_run/lumerical_run, but it can create multiple runs
+    at the same time. See fdtd_run for full description of args.
+    Note!!: This is made to be run via slurm, that can schedule and manage
+    runs and resources, please be careful when running this function
+    """
+    solver="RCWA"
+    method=LumMethod.FDTD
+    return lumerical_batch(basefile, properties, get_results, get_info=get_info,
+                           func=func,savepath=savepath, delete=delete, delete_log=delete_log,
+                           solver=solver, method=method, lumerical_kw=lumerical_kw, **kwargs)
+
 
 def fdtd_run(
     basefile: str,
@@ -146,7 +94,7 @@ def fdtd_run(
     override_prefix: Union[None, str] = None,
     delete: bool = True,
     delete_log: bool = True,
-    fdtd_kw={"hide": True},
+    lumerical_kw={"hide": True},
     **kwargs,
 ):
     """
@@ -161,75 +109,16 @@ def fdtd_run(
         savepath (default=.): Override default savepath for the new file
         override_prefix (default=None): Override prefix for the new file
         delete (default=False): Delete newly generated file
+        delete_log (default=False): Delete newly generated log file
     Return:
         results: Dictionary with all the results
         time: Time to run the simulation
     """
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
-    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(basefile, new_filepath)
-    # Get logfile name
-    log_file: str = os.path.join(
-        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
-    )
-    # Run simulation - the process is as follows
-    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
-    # 2. Create a process (RunLumerical) to run the lumerical file
-    #       - This avoids problems when the simulation gives errors
-    results = Manager().dict()
-    run_process = RunLumerical(
-        LumMethod.FDTD,
-        results=results,
-        solver="FDTD",
-        log_queue=Queue(-1),
-        filepath=new_filepath,
-        properties=properties,
-        get_results=get_results,
-        get_info=get_info,
-        func=func,
-        lumerical_kw=fdtd_kw,
-        **kwargs,
-    )
-    run_process.start()
-    # check_thread = CheckRunState(log_file, run_process, process_queue)
-    # check_thread.start()
-    logger.debug("Run Process Started...")
-    run_process.join()
-    logger.debug(f"Simulation finished")
-    results_keys = list(results.keys())
-    if "runtime" not in results_keys:
-        raise LumericalError("Simulation Finished Prematurely")
-    autoshutoff = __read_autoshutoff(log_file)
-    logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
-    if delete:
-        logger.debug(f"Deleting Main File")
-        os.remove(new_filepath)
-    if delete_log:
-        logger.debug(f"Deleting log file")
-        os.remove(log_file)
-    if "analysis runtime" not in results_keys:
-        raise LumericalError("Simulation Failed in Analysis")
-    if "Error" in results_keys:
-        raise LumericalError(results["Error"])
-    # Extract data from process
-    logger.debug(f"Simulation data:\n{results}")
-    # Check for other possible runtime problems
-    if "data" not in results_keys:
-        raise LumericalError("No data available from simulation")
-    data_results = results["data"]
-    data_results["autoshutoff"] = autoshutoff
-    logger.info(f"Autoshutoff: {autoshutoff[-1]}")
-    return (
-        data_results,
-        results["runtime"],
-        results["analysis runtime"],
-        results["data_info"],
-    )
-
+    solver = "FDTD"
+    method = LumMethod.FDTD
+    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
+                         override_prefix=override_prefix, delete=delete, delete_log=delete_log, solver=solver,
+                         method=method, lumerical_kw=lumerical_kw, **kwargs)
 
 def rcwa_run(
     basefile: str,
@@ -241,7 +130,7 @@ def rcwa_run(
     savepath: Union[None, str] = None,
     override_prefix: Union[None, str] = None,
     delete: bool = True,
-    fdtd_kw={"hide": True},
+    lumerical_kw={"hide": True},
     **kwargs,
 ):
     """
@@ -260,130 +149,11 @@ def rcwa_run(
         results: Dictionary with all the results
         time: Time to run the simulation
     """
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
-    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(basefile, new_filepath)
-    # Run simulation - the process is as follows
-    # 1. Create Manager to Store the data (Manager seems to be more capable of handling large datasets)
-    # 2. Create a process (RunLumerical) to run the lumerical file
-    #       - This avoids problems when the simulation gives errors
-    results = Manager().dict()
-    run_process = RunLumerical(
-        LumMethod.FDTD,
-        results=results,
-        solver="RCWA",
-        log_queue=Queue(-1),
-        filepath=new_filepath,
-        properties=properties,
-        get_results=get_results,
-        get_info=get_info,
-        func=func,
-        lumerical_kw=fdtd_kw,
-        **kwargs,
-    )
-    run_process.start()
-    # check_thread = CheckRunState(log_file, run_process, process_queue)
-    # check_thread.start()
-    logger.debug("Run Process Started...")
-    run_process.join()
-    logger.debug(f"Simulation finished")
-    results_keys = list(results.keys())
-    if "runtime" not in results_keys:
-        raise LumericalError("Simulation Finished Prematurely")
-    if delete:
-        logger.debug(f"Deleting unwanted files")
-        os.remove(new_filepath)
-    if "analysis runtime" not in results_keys:
-        raise LumericalError("Simulation Failed in Analysis")
-    if "Error" in results_keys:
-        raise LumericalError(results["Error"])
-    # Extract data from process
-    logger.debug(f"Simulation data:\n{results}")
-    # Check for other possible runtime problems
-    if "data" not in results_keys:
-        raise LumericalError("No data available from simulation")
-    data_results = results["data"]
-    return (
-        data_results,
-        results["runtime"],
-        results["analysis runtime"],
-        results["data_info"],
-    )
-
-
-def fdtd_run_large_data(
-    basefile: str,
-    properties: Dict[str, Dict[str, float]],
-    get_results: Dict[str, Dict[str, Union[str, List]]],
-    *,
-    savepath: Union[None, str] = None,
-    override_prefix: Union[None, str] = None,
-    delete: bool = True,
-    fdtd_kw: bool = {"hide": True},
-):
-    """
-    Generic function to run lumerical files from python
-    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
-    Args:
-            basefile: Path to the original file
-            properties: Dictionary with the property object and property names and values
-            get_results: Dictionary with the properties to be calculated
-            savepath (default=.): Override default savepath for the new file
-            override_prefix (default=None): Override prefix for the new file
-            delete (default=False): Delete newly generated file
-    Return:
-            results: Dictionary with all the results
-            time: Time to run the simulation
-    """
-    # Build the name of the new file and copy to a new location
-    basepath, basename = os.path.split(basefile)
-    savepath: str = savepath or basepath
-    override_prefix: str = override_prefix or str(uuid4())[0:5]
-    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
-    logger.debug(f"new_filepath:{new_filepath}")
-    shutil.copyfile(basefile, new_filepath)
-    # Update simulation properties, run and get results
-    with lumapi.FDTD(filename=new_filepath, **fdtd_kw) as fdtd:
-        # Update structures
-        for structure_key, structure_value in properties.items():
-            logger.debug(f"Editing: {structure_key}")
-            fdtd.select(structure_key)
-            for parameter_key, parameter_value in structure_value.items():
-                logger.debug(f"Updating: {parameter_key} to {parameter_value}")
-                fdtd.set(parameter_key, parameter_value)
-        # Note: The double fdtd.runsetup() is important for when the setup scripts
-        #       (such as the model script) depend on variables from other
-        #       scripts. For example the model scripts needs the internal property
-        #       of a layer generated from a structure group.
-        #       The first run updates internally all the values
-        #       The second run then updates all the structures with the updated values
-        fdtd.runsetup()
-        fdtd.runsetup()
-        logger.debug(f"Running...")
-        start_time = time.time()
-        fdtd.run()
-        fdtd_runtime = time.time() - start_time
-        start_time = time.time()
-        fdtd.runanalysis()
-        analysis_runtime = time.time() - start_time
-        results = _get_lumerical_results(fdtd, get_results)
-    # Gather info from log and the delete it
-    log_file: str = os.path.join(
-        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
-    )
-    autoshut_off_list = __read_autoshutoff(log_file)
-    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
-    logger.warning(
-        f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s | Autoshutoff: {autoshut_off_list[-1]}"
-    )
-    if delete:
-        os.remove(new_filepath)
-        os.remove(log_file)
-    return results, fdtd_runtime, analysis_runtime, autoshut_off_list
+    solver = "RCWA"
+    method = LumMethod.FDTD
+    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
+                         override_prefix=override_prefix, delete=delete, solver=solver,
+                         method=method, lumerical_kw=lumerical_kw, **kwargs)
 
 
 def fdtd_run_analysis(
@@ -625,3 +395,74 @@ def filtered_pabs(
     }
     jsc = jsc_files(pd.DataFrame(data_dict), am_spectrum=am_spectrum)[0].values[0]
     return {"jsc": jsc, "pabs_perovskite": pabs_perovskite, "pabs_wvl": pabs_wvl}
+
+def fdtd_run_large_data(
+    basefile: str,
+    properties: Dict[str, Dict[str, float]],
+    get_results: Dict[str, Dict[str, Union[str, List]]],
+    *,
+    savepath: Union[None, str] = None,
+    override_prefix: Union[None, str] = None,
+    delete: bool = True,
+    fdtd_kw: bool = {"hide": True},
+):
+    """
+    Generic function to run lumerical files from python
+    Steps: (Copy file to new location/Update Properties/Run/Extract Results)
+    Args:
+            basefile: Path to the original file
+            properties: Dictionary with the property object and property names and values
+            get_results: Dictionary with the properties to be calculated
+            savepath (default=.): Override default savepath for the new file
+            override_prefix (default=None): Override prefix for the new file
+            delete (default=False): Delete newly generated file
+    Return:
+            results: Dictionary with all the results
+            time: Time to run the simulation
+    """
+    logger.warning("This function is deprecated... Please favor running fdtd_run")
+    # Build the name of the new file and copy to a new location
+    basepath, basename = os.path.split(basefile)
+    savepath: str = savepath or basepath
+    override_prefix: str = override_prefix or str(uuid4())[0:5]
+    new_filepath: str = os.path.join(savepath, override_prefix + "_" + basename)
+    logger.debug(f"new_filepath:{new_filepath}")
+    shutil.copyfile(basefile, new_filepath)
+    # Update simulation properties, run and get results
+    with lumapi.FDTD(filename=new_filepath, **fdtd_kw) as fdtd:
+        # Update structures
+        for structure_key, structure_value in properties.items():
+            logger.debug(f"Editing: {structure_key}")
+            fdtd.select(structure_key)
+            for parameter_key, parameter_value in structure_value.items():
+                logger.debug(f"Updating: {parameter_key} to {parameter_value}")
+                fdtd.set(parameter_key, parameter_value)
+        # Note: The double fdtd.runsetup() is important for when the setup scripts
+        #       (such as the model script) depend on variables from other
+        #       scripts. For example the model scripts needs the internal property
+        #       of a layer generated from a structure group.
+        #       The first run updates internally all the values
+        #       The second run then updates all the structures with the updated values
+        fdtd.runsetup()
+        fdtd.runsetup()
+        logger.debug(f"Running...")
+        start_time = time.time()
+        fdtd.run()
+        fdtd_runtime = time.time() - start_time
+        start_time = time.time()
+        fdtd.runanalysis()
+        analysis_runtime = time.time() - start_time
+        results = _get_lumerical_results(fdtd, get_results)
+    # Gather info from log and the delete it
+    log_file: str = os.path.join(
+        savepath, f"{override_prefix}_{os.path.splitext(basename)[0]}_p0.log"
+    )
+    autoshut_off_list = __read_autoshutoff(log_file)
+    logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
+    logger.warning(
+        f"Simulation took: FDTD: {fdtd_runtime:0.2f}s | Analysis: {analysis_runtime:0.2f}s | Autoshutoff: {autoshut_off_list[-1]}"
+    )
+    if delete:
+        os.remove(new_filepath)
+        os.remove(log_file)
+    return results, fdtd_runtime, analysis_runtime, autoshut_off_list

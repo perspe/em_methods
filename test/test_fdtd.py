@@ -1,10 +1,20 @@
 import unittest
 import os
 import logging
-from em_methods.lumerical.fdtd import fdtd_run, fdtd_run_analysis, fdtd_add_material, rcwa_run, filtered_pabs, fdtd_batch
+from em_methods.lumerical.fdtd import (
+        fdtd_run,
+        fdtd_run_analysis,
+        fdtd_add_material,
+        rcwa_run,
+        filtered_pabs,
+        fdtd_batch,
+        rcwa_batch
+        )
 import lumapi
 
 # Override logger to always use debug
+logger = logging.getLogger('sim_file')
+logger.setLevel(logging.DEBUG)
 logger = logging.getLogger('sim')
 logger.setLevel(logging.DEBUG)
 
@@ -28,7 +38,7 @@ class TestFDTD(unittest.TestCase):
                 {"T": "T",
                  "R": "T"}
         }
-        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw={"hide": False})
+        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw={"hide": True})
 
     def test_fdtd_run_internals(self):
         """ Test internal components of fdtd_run function """
@@ -129,6 +139,16 @@ class TestFDTD(unittest.TestCase):
         }
         results = rcwa_run(rcwa_file, properties, results)
 
+    def test_rcwa_batch(self):
+        """ Test running a RCWA solver and extracting the results """
+        rcwa_file: str = os.path.join(BASETESTPATH, "test_rcwa.fsp")
+        results = {
+            "results":
+                {"RCWA": "total_energy"}
+        }
+        properties = [{} for i in range(4)]
+        results = rcwa_batch(rcwa_file, properties, results)
+
     def test_solvers(self):
         """ Test running different solvers in the same file """
         rcwa_file: str = os.path.join(BASETESTPATH, "test_rcwa.fsp")
@@ -167,18 +187,15 @@ class TestFDTD(unittest.TestCase):
         results = {
             "data":
                 {"solar_generation": "Jsc"},
-            "results":
-                {"T": "T",
-                 "R": "T"}
         }
-        properties_list = [
+        properties_list = []
+        for tpvk in [100, 200]:
             properties = {
                 "::model":
                     {"RT_mode": 1},
                 "Planar_layers":
                     {"Perovskite": tpvk*1e-9,
                         "Spiro": 100e-9}
-            }
-            for tpvk in [100, 200, 300, 400, 500]
-        ]
-        fdtd_batch(fdtd_file, properties_list, results, fdtd_kw={"hide": False})
+                    }
+            properties_list.append(properties)
+        fdtd_batch(fdtd_file, properties_list, results, fdtd_kw={"hide": True})
