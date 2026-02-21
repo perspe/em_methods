@@ -5,7 +5,7 @@ import numpy as np
 import unittest
 import random
 
-logger = logging.getLogger("sim")
+logger = logging.getLogger("sim_file")
 
 def test_func_1(x, y):
     return -np.exp(-(x**2)) * np.exp(-(y**2))

@@ -17,7 +17,7 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 
-logger = logging.getLogger("sim")
+logger = logging.getLogger("sim_file")
 # from em_methods.optimization.ui.pso_gui_main import init_gui
 
 CRASH = False
