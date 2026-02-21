@@ -4,7 +4,7 @@ build-backend="setuptools.build_meta"
 
 [project]
 name="em_methods"
-version="0.1"
+version="0.2"
 #authors = {
 #    {name="Miguel Alexandre", email = "m.alexandre@fct.unl.pt"}
 #}
@@ -13,10 +13,10 @@ version="0.1"
 #}
 description="Library with useful tools for modelling of solar cells"
 keywords=["EM","PWEM","SMM","TMM","RCWA", "Ansys Lumerical"]
-license= {file="LICENCE"}
+# license= {file="LICENCE"}
 # When license = {file=...} becomes deprecated change to bellow
 #license={text="GPL3-3.0-or-later"}
-#license-files=["LICENCE"]
+license-files=["LICENCE"]
 readme="README.md"
 requires-python = ">=3.9"
 dependencies=[
