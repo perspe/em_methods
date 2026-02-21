@@ -1,30 +1,23 @@
 import logging
-from multiprocessing import Manager, Queue, Pool
 import os
-import re
 import shutil
 from typing import Dict, List, Tuple, Union
 from uuid import uuid4
 import h5py
 import time
-import tempfile
-import pickle
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
-import scipy
 import scipy.constants as scc
 from scipy.integrate import trapezoid
 
 from em_methods.lumerical.lum_helper import (
     LumMethod,
-    RunLumerical,
-    Job,
     lumerical_run,
     lumerical_batch,
     _get_lumerical_results,
-    __read_autoshutoff
+    __read_autoshutoff,
 )
 from em_methods.utilities import jsc_files
 import lumapi
@@ -33,6 +26,7 @@ import lumapi
 logger = logging.getLogger("sim_file")
 
 """ Main functions """
+
 
 def fdtd_batch(
     basefile: str,
@@ -45,18 +39,31 @@ def fdtd_batch(
     delete: bool = True,
     delete_log: bool = True,
     lumerical_kw={"hide": True},
-    **kwargs,):
+    **kwargs,
+):
     """
     This function is similar to fdtd_run/lumerical_run, but it can create multiple runs
     at the same time. See fdtd_run for full description of args.
     Note!!: This is made to be run via slurm, that can schedule and manage
     runs and resources, please be careful when running this function
     """
-    solver="FDTD"
-    method=LumMethod.FDTD
-    return lumerical_batch(basefile, properties, get_results, get_info=get_info,
-                           func=func,savepath=savepath, delete=delete, delete_log=delete_log,
-                           solver=solver, method=method, lumerical_kw=lumerical_kw, **kwargs)
+    solver = "FDTD"
+    method = LumMethod.FDTD
+    return lumerical_batch(
+        basefile,
+        properties,
+        get_results,
+        get_info=get_info,
+        func=func,
+        savepath=savepath,
+        delete=delete,
+        delete_log=delete_log,
+        solver=solver,
+        method=method,
+        lumerical_kw=lumerical_kw,
+        **kwargs,
+    )
+
 
 def rcwa_batch(
     basefile: str,
@@ -69,18 +76,30 @@ def rcwa_batch(
     delete: bool = True,
     delete_log: bool = True,
     lumerical_kw={"hide": True},
-    **kwargs,):
+    **kwargs,
+):
     """
     This function is similar to rcwa_run/lumerical_run, but it can create multiple runs
     at the same time. See fdtd_run for full description of args.
     Note!!: This is made to be run via slurm, that can schedule and manage
     runs and resources, please be careful when running this function
     """
-    solver="RCWA"
-    method=LumMethod.FDTD
-    return lumerical_batch(basefile, properties, get_results, get_info=get_info,
-                           func=func,savepath=savepath, delete=delete, delete_log=delete_log,
-                           solver=solver, method=method, lumerical_kw=lumerical_kw, **kwargs)
+    solver = "RCWA"
+    method = LumMethod.FDTD
+    return lumerical_batch(
+        basefile,
+        properties,
+        get_results,
+        get_info=get_info,
+        func=func,
+        savepath=savepath,
+        delete=delete,
+        delete_log=delete_log,
+        solver=solver,
+        method=method,
+        lumerical_kw=lumerical_kw,
+        **kwargs,
+    )
 
 
 def fdtd_run(
@@ -116,9 +135,22 @@ def fdtd_run(
     """
     solver = "FDTD"
     method = LumMethod.FDTD
-    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
-                         override_prefix=override_prefix, delete=delete, delete_log=delete_log, solver=solver,
-                         method=method, lumerical_kw=lumerical_kw, **kwargs)
+    return lumerical_run(
+        basefile,
+        properties,
+        get_results,
+        get_info=get_info,
+        func=func,
+        savepath=savepath,
+        override_prefix=override_prefix,
+        delete=delete,
+        delete_log=delete_log,
+        solver=solver,
+        method=method,
+        lumerical_kw=lumerical_kw,
+        **kwargs,
+    )
+
 
 def rcwa_run(
     basefile: str,
@@ -151,9 +183,20 @@ def rcwa_run(
     """
     solver = "RCWA"
     method = LumMethod.FDTD
-    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
-                         override_prefix=override_prefix, delete=delete, solver=solver,
-                         method=method, lumerical_kw=lumerical_kw, **kwargs)
+    return lumerical_run(
+        basefile,
+        properties,
+        get_results,
+        get_info=get_info,
+        func=func,
+        savepath=savepath,
+        override_prefix=override_prefix,
+        delete=delete,
+        solver=solver,
+        method=method,
+        lumerical_kw=lumerical_kw,
+        **kwargs,
+    )
 
 
 def fdtd_run_analysis(
@@ -395,6 +438,7 @@ def filtered_pabs(
     }
     jsc = jsc_files(pd.DataFrame(data_dict), am_spectrum=am_spectrum)[0].values[0]
     return {"jsc": jsc, "pabs_perovskite": pabs_perovskite, "pabs_wvl": pabs_wvl}
+
 
 def fdtd_run_large_data(
     basefile: str,

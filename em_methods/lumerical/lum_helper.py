@@ -3,11 +3,11 @@ from uuid import uuid4
 import shutil
 import re
 import tempfile
-from multiprocessing import Process, Queue, get_context
+from multiprocessing import Process, Queue
 import os
 import sys
 import numpy as np
-from typing import List, Dict, Union, Callable, Any
+from typing import List, Dict, Union, Callable, Any, Tuple
 import logging
 import logging.handlers
 import time
@@ -45,16 +45,20 @@ import lumapi
 
 """ Objects for internal management """
 
+
 class LumMethod(Enum):
-    """ Enum class with the different Lumerical Simulation methods """
+    """Enum class with the different Lumerical Simulation methods"""
+
     CHARGE = 1
     DEVICE = 1
     FDTD = 2
     HEAT = 3
 
+
 @dataclass(frozen=True)
 class Job:
-    """ Dataclass with Job Information """
+    """Dataclass with Job Information"""
+
     ID: str
     METHOD: LumMethod
     SOLVER: str
@@ -68,6 +72,7 @@ class Job:
         if os.path.exists(self.LOGFILE) and log_file:
             os.remove(self.LOGFILE)
 
+
 class LumericalError(Exception):
     """
     Class to aggregate all lumerical exception errors
@@ -77,7 +82,9 @@ class LumericalError(Exception):
         self.message = message
         super().__init__(self.message)
 
+
 """ Helper Functions """
+
 
 def __read_autoshutoff(log_file: str) -> List:
     # Gather info from log and the delete it
@@ -93,8 +100,9 @@ def __read_autoshutoff(log_file: str) -> List:
     logger.debug(f"Autoshutoff:\n{autoshut_off_list}")
     return autoshut_off_list
 
-def __close_simulation(results):
-    """ This function checks simulation results for any error """
+
+def __close_simulation(results) -> None:
+    """This function checks simulation results for any error"""
     results_keys = list(results.keys())
     if "runtime" not in results_keys:
         raise LumericalError("Simulation Finished Prematurely")
@@ -103,6 +111,7 @@ def __close_simulation(results):
     data = results["data"]
     if isinstance(data, str) and data != "Success":
         raise LumericalError(f"No data available from simulation {data}")
+
 
 def _get_lumerical_results(
     lum_handler, get_results: Dict[str, Dict[str, Union[List, str]]]
@@ -141,8 +150,8 @@ def _get_lumerical_results(
     return results
 
 
-def _run_method(method: LumMethod) -> Union[None,Callable]:
-    """ Function that determines the Solver to be used for the simulation """
+def _run_method(method: LumMethod) -> Union[None, Callable]:
+    """Function that determines the Solver to be used for the simulation"""
     logger.debug(f"Method: {method}")
     if method == LumMethod.CHARGE or method == LumMethod.DEVICE:
         return lumapi.DEVICE
@@ -151,7 +160,9 @@ def _run_method(method: LumMethod) -> Union[None,Callable]:
     else:
         return None
 
+
 """ Generic function to run lumerical """
+
 
 def lumerical_batch(
     basefile: str,
@@ -166,7 +177,8 @@ def lumerical_batch(
     solver="FDTD",
     method=LumMethod.FDTD,
     lumerical_kw={"hide": True},
-    **kwargs,):
+    **kwargs,
+):
     """
     This function is similar to lumerical_run, but it can create multiple runs
     at the same time. See fdtd_run for full description of args.
@@ -208,14 +220,14 @@ def lumerical_batch(
         for process in process_list:
             process.join()
         logger.debug(f"Simulations finished")
-        return_res = [None]*len(jobs)
+        return_res = [None] * len(jobs)
         while not res_queue.empty():
-            jobid, result  = res_queue.get() 
+            jobid, result = res_queue.get()
             logger.debug(f"Simulation data:\n{jobid}\n---------\n{result}")
             for index, job in enumerate(jobs):
                 if job.ID == jobid:
                     __close_simulation(result)
-                    with open(job.STORE_PATH, 'rb') as file:
+                    with open(job.STORE_PATH, "rb") as file:
                         data_results = pickle.load(file)
                     if job.SOLVER == "FDTD":
                         autoshutoff = __read_autoshutoff(job.LOGFILE)
@@ -227,6 +239,7 @@ def lumerical_batch(
         for job in jobs:
             job.clear_files(delete, delete_log)
         return tuple(return_res)
+
 
 def lumerical_run(
     basefile: str,
@@ -297,26 +310,24 @@ def lumerical_run(
         logger.debug("Run Process Started...")
         run_process.join()
         logger.debug(f"Simulation finished")
-        _, results = res_queue.get() 
+        _, results = res_queue.get()
         logger.debug(f"Simulation data:\n{results}")
         __close_simulation(results)
         # Extract Data
-        with open(tmp_file, 'rb') as file:
+        with open(tmp_file, "rb") as file:
             data_results = pickle.load(file)
-        logger.debug(f"Read Results: {data_results.keys()}") 
+        logger.debug(f"Read Results: {data_results.keys()}")
         # Add autoshutoff to results - Only for FDTD
         if solver == "FDTD":
             autoshutoff = __read_autoshutoff(log_file)
             data_results["autoshutoff"] = autoshutoff
             logger.info(f"Autoshutoff: {autoshutoff[-1]}")
         job.clear_files(delete, delete_log)
-    return (
-        data_results,
-        results["runtime"],
-        results["analysis runtime"]
-    )
+    return (data_results, results["runtime"], results["analysis runtime"])
+
 
 """ Core process to run lumerical job """
+
 
 class RunLumerical(Process):
     """
@@ -349,7 +360,7 @@ class RunLumerical(Process):
         properties: Dict[str, Dict[str, float]],
         get_results: Dict[str, Dict[str, Union[str, List]]],
         get_info: Dict[str, str] = {},
-        func: Union[Callable, None]=None,
+        func: Union[Callable, None] = None,
         lumerical_kw: Dict = {},
         **kwargs,
     ):
@@ -372,10 +383,12 @@ class RunLumerical(Process):
         lum_run_function = _run_method(self.job_info.METHOD)
         if lum_run_function is None:
             raise LumericalError(
-                    f"Invalid Method {self.job_info.METHOD}: {[method_i for method_i in LumMethod]}"
-                    )
+                f"Invalid Method {self.job_info.METHOD}: {[method_i for method_i in LumMethod]}"
+            )
         logger.debug("Starting Lumerical")
-        with lum_run_function(filename=self.job_info.FILEPATH, **self.lum_kw) as lumfile:
+        with lum_run_function(
+            filename=self.job_info.FILEPATH, **self.lum_kw
+        ) as lumfile:
             # Guarantee simulation file is not in simulation mode
             lumfile.switchtolayout()
             # Update structures
@@ -433,7 +446,7 @@ class RunLumerical(Process):
                 logger.debug("Extracted Results Successfully...")
                 results["data"] = "Success"
                 logger.debug(f"Saving data to pkl file to {self.job_info.STORE_PATH}")
-                with open(self.job_info.STORE_PATH, 'wb') as file:
+                with open(self.job_info.STORE_PATH, "wb") as file:
                     pickle.dump(sim_data, file)
                 logger.debug(f"Saved Data")
             except lumapi.LumApiError as lum_error:
@@ -443,6 +456,7 @@ class RunLumerical(Process):
                 results["data"] = "Error: Unexpected Error"
             finally:
                 self.res_queue.put((self.job_info.ID, results))
+
 
 # class CheckRunState(Thread):
 #     """

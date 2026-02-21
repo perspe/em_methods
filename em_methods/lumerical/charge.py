@@ -1,11 +1,8 @@
 from dataclasses import dataclass
 from functools import partial, update_wrapper
 import logging
-from multiprocessing import Manager, Queue
 import os
-import shutil
 from typing import Dict, List, Tuple, Union
-from uuid import uuid4
 
 import numpy as np
 import numpy.typing as npt
@@ -21,11 +18,10 @@ from em_methods.lumerical.lum_helper import (
     LumMethod,
     LumericalError,
     _get_lumerical_results,
-    lumerical_run
+    lumerical_run,
 )
 from em_methods.utilities import iv_parameters
 import lumapi
-
 
 # Get module logger
 logger = logging.getLogger("sim_file")
@@ -461,9 +457,22 @@ def charge_run(
     """
     solver = "CHARGE"
     method = LumMethod.CHARGE
-    return lumerical_run(basefile, properties, get_results, get_info=get_info, func=func,savepath=savepath,
-                         override_prefix=override_prefix, delete=delete, delete_log=delete_log, solver=solver,
-                         method=method, lumerical_kw=lumerical_kw, **kwargs)
+    return lumerical_run(
+        basefile,
+        properties,
+        get_results,
+        get_info=get_info,
+        func=func,
+        savepath=savepath,
+        override_prefix=override_prefix,
+        delete=delete,
+        delete_log=delete_log,
+        solver=solver,
+        method=method,
+        lumerical_kw=lumerical_kw,
+        **kwargs,
+    )
+
 
 def charge_run_analysis(basefile: str, get_results, device_kw={"hide": True}):
     """
@@ -594,8 +603,8 @@ def run_iqe(
     fdtd_file: str,
     wavelengths: npt.ArrayLike,
     *,
-    wavelength_units: Units =  Units.NM,
-    fdtd_and_charge_args = {}
+    wavelength_units: Units = Units.NM,
+    fdtd_and_charge_args={},
 ):
     """
     Calculate the IQE for wavelengths
@@ -615,9 +624,7 @@ def run_iqe(
         "fdtd_file": fdtd_file,
     }
     if "override_bias_regime_args" in fdtd_and_charge_args.keys():
-        if fdtd_and_charge_args["override_bias_regime_args"][
-            "is_voltage_range"
-        ]:
+        if fdtd_and_charge_args["override_bias_regime_args"]["is_voltage_range"]:
             logger.warning("IQE simulations require constant voltage")
     fdtd_and_charge_args.update(
         {"override_bias_regime_args": {"voltage": 0, "is_voltage_range": False}}
@@ -657,7 +664,7 @@ def run_iqe(
             isc = charge_res_i[0][f"results.CHARGE.{active_region.Cathode}"][
                 "I"
             ].flatten()[0]
-            jsc = - isc / area
+            jsc = -isc / area
             iqe_results[active_region.SCName].append(jsc / jph)
             logger.info(f"IQE ({wavelength}): {jsc/jph} ({jsc:.3g}/{jph:.3g})")
     iqe_results = {key: np.array(value) for key, value in iqe_results.items()}
@@ -697,7 +704,7 @@ def run_fdtd_and_charge_to_iv(results, cathodes: Union[str, List[str]]) -> List[
         current_density = current.flatten() * 1e3 / (x_span * y_span * 1e4)
         voltage = voltage.flatten()
         res_i = iv_parameters(voltage, current_density)
-        return_res.append(res_i+(voltage, current_density))
+        return_res.append(res_i + (voltage, current_density))
     return return_res
 
 
