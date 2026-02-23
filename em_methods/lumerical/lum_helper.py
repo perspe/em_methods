@@ -1,4 +1,3 @@
-from threading import Thread
 from uuid import uuid4
 import shutil
 import re
@@ -160,6 +159,24 @@ def _run_method(method: LumMethod) -> Union[None, Callable]:
     else:
         return None
 
+""" Functions to override Standard Performance settings """
+
+def overrideSlurm(handler, ntasks: int):
+    if shutil.which("sbatch") is None:
+        raise LumericalError("Slurm is not Available")
+    scheduler_cmd = f"sbatch --ntasks={ntasks}"
+    handler.setresource("FDTD", 1, "scheduler command", scheduler_cmd)
+
+def setFDTDResources(handle, processes: int, threads: int, capacity: int):
+    """ Function to change the number of processes in lumerical """
+    handle.setresource("FDTD", 1, "processes", processes)
+    handle.setresource("FDTD", 1, "threads", threads)
+    handle.setresource("FDTD", 1, "capacity", capacity)
+
+def setRCWAResources(handle, threads: int, capacity: int):
+    """ Function to change the number of processes in lumerical """
+    handle.setresource("RCWA", 1, "threads", threads)
+    handle.setresource("RCWA", 1, "capacity", capacity)
 
 """ Generic function to run lumerical """
 
