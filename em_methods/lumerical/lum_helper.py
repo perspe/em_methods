@@ -234,7 +234,7 @@ def lumerical_batch(
                         logger.debug(f"Autoshutoff: {autoshutoff[-1]}")
                         result["autoshutoff"] = autoshutoff
                     result["data"] = data_results
-                    return_res.insert(index, result)
+                    return_res[index] = result
         logger.debug("All jobs were ordered properly...Clearing all files")
         for job in jobs:
             job.clear_files(delete, delete_log)

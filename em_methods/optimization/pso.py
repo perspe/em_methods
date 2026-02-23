@@ -611,7 +611,7 @@ def read_pso_summary(filename: str):
     )
     fom = float(split_info[2])
     best_parameters = pd.read_csv(
-        StringIO(split_info[4]), sep=": ", index_col=0, names=["Values"]
+        StringIO(split_info[4]), sep=": ", index_col=0, names=["Values"], engine="python"
     )
     # Convert DF to Series (easier access)
     best_parameters = best_parameters["Values"]

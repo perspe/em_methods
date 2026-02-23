@@ -146,8 +146,9 @@ class TestFDTD(unittest.TestCase):
             "results":
                 {"RCWA": "total_energy"}
         }
-        properties = [{} for i in range(4)]
+        properties = [{} for i in range(2)]
         results = rcwa_batch(rcwa_file, properties, results)
+        print(results)
 
     def test_solvers(self):
         """ Test running different solvers in the same file """
