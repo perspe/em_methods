@@ -66,7 +66,7 @@ def jsc_files(
     # Dictionary for cumulative results
     jsc_sum: Dict = {}
     results: Dict = {}
-    for item in input_list:
+    for index, item in enumerate(input_list):
         if isinstance(item, str):
             if os.path.isfile(item):
                 data = pd.read_csv(item, **read_csv_args)
@@ -75,7 +75,7 @@ def jsc_files(
                 raise ValueError(f"The string {item} is not a valid path.")
         elif isinstance(item, pd.DataFrame):
             data = item
-            source_name = "DataFrame"
+            source_name = f"DF_{index}"
         else:
             raise ValueError(f"Unsupported type: {type(item)}")
         wvl = data.iloc[:, 0]
