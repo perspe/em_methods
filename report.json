@@ -1,0 +1,117 @@
+{
+  "version": "1",
+  "pip_version": "23.3.1",
+  "install": [
+    {
+      "download_info": {
+        "url": "file:///C:/Users/MAlex/Documents/GitHub/em_methods",
+        "dir_info": {}
+      },
+      "is_direct": true,
+      "is_yanked": false,
+      "requested": true,
+      "metadata": {
+        "metadata_version": "2.4",
+        "name": "em_methods",
+        "version": "0.5",
+        "dynamic": [
+          "license-file"
+        ],
+        "summary": "Library with useful tools for modelling of solar cells",
+        "description": "# EM Software Repository\n\nThis repository contains many tools and functions, useful for electromagnetic\nsimulations, with a particular focus on the study of solar cells.\n\nThe tools are separated into different submodules, that refer to different\nstudies/works:\n\n1. (colour_algo) Algorithms to determine colour from reflection data\n2. (lumerical) Functions to interact with the Ansys Lumerical FDTD and CHARGE\n   software suites\n3. (formulas) Refractive index dispersion formulas\n4. (optics) Refractive index mixing, via Bruggerman\n4. (optimization) Particle swarm optimization algorithm\n5. (pv) Useful functions for PV analysis\n6. (smatrix) Scattering Matrix Method implementation\n7. (utilities) General useful function\n\n## Scientific Publications\n\nMost of these tools have been created to facilitate research in the area\nof solar cells, such that many of the components are associated with\nscientific publications. Considering that, if you used these tools, please\nadd a citation to either the repository, or to the relevant publication,\nassociated with the tool, as defined below.\n\n- colour_algo and lumerical: [Eva Almeida, et. al., ACS Omega, 2024](https://pubs.acs.org/doi/10.1021/acsomega.4c04979)\n- smatrix: [M. Alexandre, et. al., Journal of Open Research Software, 2024](https://openresearchsoftware.metajnl.com/articles/10.5334/jors.511)\n\nAll the relevant citations can be imported (to Mendeley or Zotero) via the\nCITATIONS.ciff file.\n\n**Note:** Opening the CITATIONS.ciff file in GitHub and using the\nZotero/Mendeley browser addons should work to import all the\ncitations.\n\n",
+        "description_content_type": "text/markdown",
+        "keywords": [
+          "EM",
+          "PWEM",
+          "SMM",
+          "TMM",
+          "RCWA",
+          "Ansys Lumerical"
+        ],
+        "requires_dist": [
+          "numpy>=1.2",
+          "scipy",
+          "matplotlib",
+          "pandas",
+          "h5py"
+        ],
+        "requires_python": ">=3.9"
+      }
+    },
+    {
+      "download_info": {
+        "url": "https://files.pythonhosted.org/packages/f7/20/e6c0ff62ca2ad1a396a34f4380bafccaaf8791ff8fccf3d995a1fc12d417/h5py-3.16.0-cp311-cp311-win_amd64.whl",
+        "archive_info": {
+          "hash": "sha256=17d1f1630f92ad74494a9a7392ab25982ce2b469fc62da6074c0ce48366a2999",
+          "hashes": {
+            "sha256": "17d1f1630f92ad74494a9a7392ab25982ce2b469fc62da6074c0ce48366a2999"
+          }
+        }
+      },
+      "is_direct": false,
+      "is_yanked": false,
+      "requested": false,
+      "metadata": {
+        "metadata_version": "2.4",
+        "name": "h5py",
+        "version": "3.16.0",
+        "dynamic": [
+          "license-file",
+          "requires-dist"
+        ],
+        "summary": "Read and write HDF5 files from Python",
+        "description": "The h5py package provides both a high- and low-level interface to the HDF5\r\nlibrary from Python. The low-level interface is intended to be a complete\r\nwrapping of the HDF5 API, while the high-level component supports  access to\r\nHDF5 files, datasets and groups using established Python and NumPy concepts.\r\n\r\nA strong emphasis on automatic conversion between Python (Numpy) datatypes and\r\ndata structures and their HDF5 equivalents vastly simplifies the process of\r\nreading and writing data from Python.\r\n\r\nWheels are provided for several popular platforms, with an included copy of\r\nthe HDF5 library (usually the latest version when h5py is released).\r\n\r\nYou can also `build h5py from source\r\n<https://docs.h5py.org/en/stable/build.html#source-installation>`_\r\nwith any HDF5 stable release from version 1.10.4 onwards, although naturally new\r\nHDF5 versions released after this version of h5py may not work.\r\nOdd-numbered minor versions of HDF5 (e.g. 1.13) are experimental, and may not\r\nbe supported.\r\n",
+        "description_content_type": "text/x-rst",
+        "author_email": "Andrew Collette <andrew.collette@gmail.com>",
+        "maintainer_email": "Thomas Kluyver <thomas@kluyver.me.uk>, Thomas A Caswell <tcaswell@bnl.gov>",
+        "classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Intended Audience :: Developers",
+          "Intended Audience :: Information Technology",
+          "Intended Audience :: Science/Research",
+          "Operating System :: Unix",
+          "Operating System :: POSIX :: Linux",
+          "Operating System :: MacOS :: MacOS X",
+          "Operating System :: Microsoft :: Windows",
+          "Programming Language :: Cython",
+          "Programming Language :: Python",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3.10",
+          "Programming Language :: Python :: 3.11",
+          "Programming Language :: Python :: 3.12",
+          "Programming Language :: Python :: 3.13",
+          "Programming Language :: Python :: 3.14",
+          "Programming Language :: Python :: Free Threading :: 1 - Unstable",
+          "Programming Language :: Python :: Implementation :: CPython",
+          "Topic :: Scientific/Engineering",
+          "Topic :: Database",
+          "Topic :: Software Development :: Libraries :: Python Modules"
+        ],
+        "requires_dist": [
+          "numpy>=1.21.2"
+        ],
+        "requires_python": ">=3.10",
+        "project_url": [
+          "Homepage, https://www.h5py.org/",
+          "Source, https://github.com/h5py/h5py",
+          "Documentation, https://docs.h5py.org/en/stable/",
+          "Release notes, https://docs.h5py.org/en/stable/whatsnew/index.html",
+          "Discussion forum, https://forum.hdfgroup.org/c/hdf5/h5py"
+        ]
+      }
+    }
+  ],
+  "environment": {
+    "implementation_name": "cpython",
+    "implementation_version": "3.11.6",
+    "os_name": "nt",
+    "platform_machine": "AMD64",
+    "platform_release": "10",
+    "platform_system": "Windows",
+    "platform_version": "10.0.19045",
+    "python_full_version": "3.11.6",
+    "platform_python_implementation": "CPython",
+    "python_version": "3.11",
+    "sys_platform": "win32"
+  }
+}

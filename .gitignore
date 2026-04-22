@@ -6,6 +6,8 @@ build
 dist
 *.egg-info
 *.eggs
+*.spyproject
+*.virtual_documents
 .cache
 .spyproject
 # wheelhouse

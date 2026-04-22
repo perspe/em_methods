@@ -4,7 +4,7 @@ build-backend="setuptools.build_meta"
 
 [project]
 name="em_methods"
-version="0.2"
+version="0.5"
 #authors = {
 #    {name="Miguel Alexandre", email = "m.alexandre@fct.unl.pt"}
 #}
@@ -24,7 +24,7 @@ dependencies=[
     "scipy",
     "matplotlib",
     "pandas",
-    "h5py"
+    "h5py",
 ]
 
 [tool.setuptools.packages.find]
