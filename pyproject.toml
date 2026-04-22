@@ -1,5 +1,5 @@
 [build-system]
-requires=["setuptools>=77.0.3", "cython", "wheel"]
+requires=["setuptools", "cython", "wheel"]
 build-backend="setuptools.build_meta"
 
 [project]
@@ -50,5 +50,6 @@ undef-macros=["NDEBUG"]
 language_level="3"
 
 [tool.cibuildwheel]
+build-verbosity = 1
 skip = ["pp*_*", "*musllinux*", "*i686"]
 # output-dir = "dist"
