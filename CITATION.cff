@@ -11,8 +11,10 @@ authors:
       orcid: "https://orcid.org/0000-0001-6593-8698"
     - family-names: "Almeida"
       given-names: "Eva"
+      orcid: "https://orcid.org/0009-0007-5362-553X"
     - family-names: "Dyreby"
       given-names: "Mónica"
+      orcid: "https://orcid.org/0009-0000-3642-3986"
 prefered-citations:
     - type: article
     title: "SCATMM: Easy-to-Use Graphical User Interface for Light Propagation in Arbitrary Multilayers"
@@ -69,7 +71,7 @@ prefered-citations:
     doi: 10.1117/1.APN.5.3.036016
     date-released: 2026-05-09
     journal: "Advanced Photonics Nexus"
-    month: 05
+    month: 5
     issue: 3
     volume: 5
     year: 2026
