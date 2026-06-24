@@ -48,12 +48,50 @@ prefered-citations:
     authors:
         - family-names: "Almeida"
           given-names: "Eva"
+          orcid: "https://orcid.org/0009-0007-5362-553X"
         - family-names: "Alexandre"
           given-names: "Miguel"
           orcid: "https://orcid.org/0000-0002-7533-9469"
         - family-names: "Santos"
           given-names: "Ivan M."
           orcid: "https://orcid.org/0000-0001-6593-8698"
+        - family-names: "Martins"
+          given-names: "Rodrigo"
+          orcid: "https://orcid.org/0000-0002-1997-7669"
+        - family-names: "Águas"
+          given-names: "Hugo"
+          orcid: "https://orcid.org/0000-0001-7350-649X"
+        - family-names: "Mendes"
+          given-names: "Manuel J."
+          orcid: "https://orcid.org/0000-0002-7374-0726"
+    - type: article
+    title: "Unveiling the potential of ultra-thin perovskite-silicon tandem photovoltaics boosted with photonic management"
+    doi: 10.1117/1.APN.5.3.036016
+    date-released: 2026-05-09
+    journal: "Advanced Photonics Nexus"
+    month: 05
+    issue: 3
+    volume: 5
+    year: 2026
+    authors:
+        - family-names: "Dyreby"
+          given-names: "Mónica"
+          orcid: "https://orcid.org/0009-0000-3642-3986"
+        - family-names: "Almeida"
+          given-names: "Eva"
+          orcid: "https://orcid.org/0009-0007-5362-553X"
+        - family-names: "Gonçalves"
+          given-names: "Rui"
+          orcid: "https://orcid.org/0009-0009-3697-8856"
+        - family-names: "Alexandre"
+          given-names: "Miguel"
+          orcid: "https://orcid.org/0000-0002-7533-9469"
+        - family-names: "Santos"
+          given-names: "Ivan M."
+          orcid: "https://orcid.org/0000-0001-6593-8698"
+        - family-names: "Fortunato"
+          given-names: "Elvira"
+          orcid: "https://orcid.org/0000-0002-4202-7047"
         - family-names: "Martins"
           given-names: "Rodrigo"
           orcid: "https://orcid.org/0000-0002-1997-7669"

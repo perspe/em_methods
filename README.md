@@ -26,6 +26,7 @@ associated with the tool, as defined below.
 
 - colour_algo and lumerical: [Eva Almeida, et. al., ACS Omega, 2024](https://pubs.acs.org/doi/10.1021/acsomega.4c04979)
 - smatrix: [M. Alexandre, et. al., Journal of Open Research Software, 2024](https://openresearchsoftware.metajnl.com/articles/10.5334/jors.511)
+- lumerical: [M. Dyreby et. al., Advanced Photonics Nexus, 2026](https://www.spiedigitallibrary.org/journals/advanced-photonics-nexus/volume-5/issue-03/036016/Unveiling-the-potential-of-ultra-thin-perovskite-silicon-tandem-photovoltaics/10.1117/1.APN.5.3.036016.full)
 
 All the relevant citations can be imported (to Mendeley or Zotero) via the
 CITATIONS.ciff file.
