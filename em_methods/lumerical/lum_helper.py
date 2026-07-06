@@ -18,7 +18,7 @@ from dataclasses import dataclass
 # Using any logger (such as dev) that log into
 # files may cause some problems in the end of the
 # program
-logger = logging.getLogger("sim")
+logger = logging.getLogger("sim_file")
 
 # Connect to Lumerical
 # Determine the base path for lumerical
@@ -327,6 +327,8 @@ def lumerical_run(
         logger.debug("Run Process Started...")
         run_process.join()
         logger.debug(f"Simulation finished")
+        if res_queue.empty():
+            raise LumericalError("No Results obtained from simulation")
         _, results = res_queue.get()
         logger.debug(f"Simulation data:\n{results}")
         __close_simulation(results)
@@ -454,6 +456,7 @@ class RunLumerical(Process):
             for info_obj, info_property in self.get_info.items():
                 lumfile.select(info_obj)
                 info_data[info_obj] = lumfile.get(info_property)
+                logger.debug(f"Extracted ({info_obj})")
             sim_data["data_info"] = info_data
             # Try get results
             # If data cannot be accessed pass the error to the main loop

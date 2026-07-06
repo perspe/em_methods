@@ -23,7 +23,7 @@ from em_methods.utilities import jsc_files
 import lumapi
 
 # Get module logger
-logger = logging.getLogger("sim_file")
+logger = logging.getLogger("sim")
 
 """ Main functions """
 
