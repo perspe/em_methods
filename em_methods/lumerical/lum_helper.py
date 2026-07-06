@@ -13,6 +13,7 @@ import time
 from enum import Enum
 import pickle
 from dataclasses import dataclass
+from glob import glob
 
 # Get module logger
 # Using any logger (such as dev) that log into
@@ -68,8 +69,15 @@ class Job:
     def clear_files(self, sim_file: bool, log_file: bool):
         if os.path.exists(self.FILEPATH) and sim_file:
             os.remove(self.FILEPATH)
+            file_base = os.path.splitext(self.FILEPATH)[0]
+            logger.debug(f"Deleting all files based on {file_base}")
+            outfiles = glob(f"{file_base}*.out")
+            for file in outfiles:
+                os.remove(file)
         if os.path.exists(self.LOGFILE) and log_file:
             os.remove(self.LOGFILE)
+
+
 
 
 class LumericalError(Exception):
