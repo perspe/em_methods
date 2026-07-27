@@ -32,7 +32,7 @@ class TestFDTD(unittest.TestCase):
             "Planar_layers": {"Perovskite": 250e-9, "Spiro": 100e-9},
         }
         results = {"data": {"solar_generation": "Jsc"}, "results": {"T": "T", "R": "T"}}
-        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw={"hide": True})
+        fdtd_run(fdtd_file, properties, results, delete=True, lumerical_kw={"hide": True, "resources": ("CPU", "Local Host")})
 
     def test_fdtd_run_internals(self):
         """Test internal components of fdtd_run function"""
@@ -68,6 +68,16 @@ class TestFDTD(unittest.TestCase):
         results = {"results": {"T": "T", "solar_generation": "Jsc", "R": "T"}}
         res = fdtd_run_analysis(fdtd_file, results)
         self.assertAlmostEqual(res["results.solar_generation.Jsc"], 183.453, 3)
+
+    def test_fdtd_resources(self):
+        """Make a single run of a test file with everything default"""
+        fdtd_file: str = os.path.join(BASETESTPATH, "test_planar.fsp")
+        properties = {
+            "::model": {"RT_mode": 1},
+            "Planar_layers": {"Perovskite": 250e-9, "Spiro": 100e-9},
+        }
+        results = {"data": {"solar_generation": "Jsc"}, "results": {"T": "T", "R": "T"}}
+        fdtd_run(fdtd_file, properties, results, delete=True, fdtd_kw={"hide": True, "resources": ("CPU", "CW1")})
 
     def test_fdtd_graphical(self):
         """Test if FDTD interface opens with the proper arguments"""

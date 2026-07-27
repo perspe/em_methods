@@ -78,8 +78,6 @@ class Job:
             os.remove(self.LOGFILE)
 
 
-
-
 class LumericalError(Exception):
     """
     Class to aggregate all lumerical exception errors
@@ -448,7 +446,10 @@ class RunLumerical(Process):
             logger.debug(f"Running...")
             start_time = time.time()
             lumfile.switchtolayout()
-            lumfile.run(self.job_info.SOLVER)
+            logger.debug(f"Using resources: {self.lum_kw}")
+            resources = self.lum_kw["resources"] if "resources" in self.lum_kw.keys() else ()
+            logger.debug(f"Using resources: {resources}")
+            lumfile.run(self.job_info.SOLVER, *resources)
             runtime = time.time() - start_time
             results["runtime"] = runtime
             start_time = time.time()
