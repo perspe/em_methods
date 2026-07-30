@@ -242,7 +242,7 @@ def lumerical_batch(
             process_list.append(run_process)
         for process in process_list:
             process.join()
-        logger.debug(f"Simulations finished")
+        logger.info(f"Simulations finished")
         return_res = [None] * len(jobs)
         while not res_queue.empty():
             jobid, result = res_queue.get()
@@ -332,7 +332,7 @@ def lumerical_run(
         run_process.start()
         logger.debug("Run Process Started...")
         run_process.join()
-        logger.debug(f"Simulation finished")
+        logger.info(f"Simulation finished")
         if res_queue.empty():
             raise LumericalError("No Results obtained from simulation")
         _, results = res_queue.get()
@@ -479,7 +479,8 @@ class RunLumerical(Process):
                     pickle.dump(sim_data, file)
                 logger.debug(f"Saved Data")
             except lumapi.LumApiError as lum_error:
-                results["data"] = f"Error: {lum_error}"
+                results["data"] = f"LumAPI Error: {lum_error}"
+                logger.warning(results["data"])
             except:
                 logger.warning("Unexpected Error... Please Try to Find Error Source")
                 results["data"] = "Error: Unexpected Error"
