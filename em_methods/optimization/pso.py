@@ -3,6 +3,7 @@ Implementation of the particle swarm optimization algorithm
 Functions:
     - particle_swarm: Implements the algorithm
 """
+
 import glob
 from io import StringIO
 import logging
@@ -24,44 +25,46 @@ CRASH = False
 DEFAULT_STATE_FILE = ".pso_status.pkl"
 
 PSO_FUNC_ARGS = [
-        "func",
-        "param_dict",
-        "maximize",
-        "inert_prop",
-        "ind_cog",
-        "soc_learning",
-        "particles",
-        "iterations",
-        "tolerance",
-        "progress",
-        "export",
-        "export_summary",
-        "basepath",
-        "func_kwargs"
+    "func",
+    "param_dict",
+    "maximize",
+    "inert_prop",
+    "ind_cog",
+    "soc_learning",
+    "particles",
+    "iterations",
+    "tolerance",
+    "progress",
+    "export",
+    "export_summary",
+    "basepath",
+    "func_kwargs",
 ]
-    
+
 PSO_PROGRESS_ARGS = [
-        "iteration",
-        "gbest_array",
-        "tol_array",
-        "param_space",
-        "vel_space",
-        "func_results",
-        "gbest",
-        "pbest",
-        "gfitness",
-        "pfitness"
-    ]
+    "iteration",
+    "gbest_array",
+    "tol_array",
+    "param_space",
+    "vel_space",
+    "func_results",
+    "gbest",
+    "pbest",
+    "gfitness",
+    "pfitness",
+]
+
 
 def __save_state(filename: str, *args):
     """
     Update the current state of the PSO to filename
     """
     state = {}
-    for arg_name, arg_i in zip(PSO_FUNC_ARGS+PSO_PROGRESS_ARGS, args):
+    for arg_name, arg_i in zip(PSO_FUNC_ARGS + PSO_PROGRESS_ARGS, args):
         state[arg_name] = arg_i
     with open(filename, "wb") as f:
         pickle.dump(state, f)
+
 
 def __load_state(filename: str) -> Tuple[dict, dict]:
     """
@@ -70,6 +73,7 @@ def __load_state(filename: str) -> Tuple[dict, dict]:
     """
     with open(filename, "rb") as f:
         return pickle.load(f)
+
 
 def _update_parameters(
     param, vel, max_param, min_param, inertia_w, ind_cog, soc_learning, pbest, gbest
@@ -144,7 +148,7 @@ def _preview_results(
     FoM: List[float],
     best_array: npt.NDArray,
     param_names: List[str],
-    basepath: str
+    basepath: str,
 ):
     """Update the global plot preview of the results"""
     ax[0].clear()
@@ -183,7 +187,9 @@ def particle_swarm(
     basepath: str = "PSO_Results",
     state_file: Union[str, None] = DEFAULT_STATE_FILE,
     **func_kwargs,
-) -> Tuple[float, npt.NDArray[np.floating], npt.NDArray[np.floating], npt.NDArray[np.floating]]:
+) -> Tuple[
+    float, npt.NDArray[np.floating], npt.NDArray[np.floating], npt.NDArray[np.floating]
+]:
     """Implementation of the particle swarm algorithm
     Args:
         - func: optimization function
@@ -274,7 +280,7 @@ def particle_swarm(
         pfitness = state["pfitness"]
         logger.info(f"Loading saved state from iteration {iteration}...")
     # Run the first iteration
-    if iteration==1:
+    if iteration == 1:
         func_input = {
             param_name: param_space[i] for i, param_name in enumerate(param_names)
         }
@@ -369,7 +375,12 @@ def particle_swarm(
         iteration += 1
         if progress:
             _preview_results(
-                ax, np.arange(iteration), gbest_array, pbest[:, -1], param_names, basepath
+                ax,
+                np.arange(iteration),
+                gbest_array,
+                pbest[:, -1],
+                param_names,
+                basepath,
             )
         if export:
             export_data = np.c_[param_space.T, func_results, vel_space.T]
@@ -484,7 +495,7 @@ def particle_swarm(
 
 
 def pso_resume(
-    state_file: str = DEFAULT_STATE_FILE
+    state_file: str = DEFAULT_STATE_FILE,
 ) -> Tuple[float, npt.ArrayLike, npt.ArrayLike, npt.ArrayLike]:
     """Resumes the Particle Swarm Optimization process from the last checkpoint."""
     if not os.path.exists(state_file):
@@ -598,6 +609,76 @@ def pso_iter_plt(
     return scatter_handler
 
 
+def optimization_summary(
+    optimizations,
+    variables,
+    limits,
+    *,
+    ax=None,
+    optimization_labels=None,
+    override_variables=None,
+    convert_units=None,
+    marker="*",
+    markersize=25,
+):
+    """
+    Functions to summarize the results obtained in multiple optimizations.
+    The functions can be ran multiples times via the ax variables to also add
+    the results from zoom runs
+    Args:
+        optimizations: List with the direct results of multiple pso's
+        variables: List with the variables to be ploted
+        limits: List with the proper limits for each variable
+        ax: Axes object or list to plot the data (None to create new)
+        optimization_labels: Override basic names for the name of each optimization
+        override_variables: Change the xlabel name for each variable
+        conver_units: List with units to convert the variable values (None for no conversion)
+        marker, markersize: Change the marker and size
+    """
+    subplot_config = {
+        "box_aspect": 0.05,
+        "yticklabels": [],
+    }
+    gridspec = {"hspace": 4}
+    override_variables = override_variables or variables
+    convert_units = convert_units or [1] * len(variables)
+    optimization_labels = optimization_labels or [
+        "Opt" + str(i + 1) for i in range(len(optimizations))
+    ]
+    if len(override_variables) != len(variables):
+        raise Exception("override_variables and variables should have same size")
+    if len(convert_units) != len(variables):
+        raise Exception("convert_units and variables should have same size")
+    if ax is None:
+        _, ax = plt.subplots(
+            len(variables) + 1,
+            1,
+            subplot_kw=subplot_config,
+            gridspec_kw=gridspec,
+            figsize=(4, 0.8 * len(variables)),
+        )
+    for ax_i in ax:
+        ax_i.tick_params(axis="both", length=0, pad=0.5)
+        ax_i.grid(axis="x")
+    for optimization_i, optimization_label in zip(optimizations, optimization_labels):
+        # Plot the data for the FoM
+        fom = optimization_i[0]
+        ax[0].scatter(fom, 0, marker=marker, s=markersize, label=optimization_label)
+        ax[0].set_xlabel("FoM", labelpad=0.5)
+        # Plot the data for all variables
+        opt_i_data = optimization_i[1].to_dict().items()
+        iterator = zip(ax[1:], opt_i_data, convert_units)
+        for ax_i, (param, value), units_i in iterator:
+            if param in variables:
+                ax_i.scatter(value * units_i, 0, marker=marker, s=markersize)
+    ax[0].legend(bbox_to_anchor=(-0.01, 1.5))
+    # Set proper xlabels and limits (only for variables)
+    for ax_i, lim_i, label_i in zip(ax[1:], limits, override_variables):
+        ax_i.set_xlabel(label_i)
+        ax_i.set_xlim(lim_i)
+    return ax
+
+
 def read_pso_summary(filename: str):
     """
     Extract pso information from the summary file
@@ -611,7 +692,11 @@ def read_pso_summary(filename: str):
     )
     fom = float(split_info[2])
     best_parameters = pd.read_csv(
-        StringIO(split_info[4]), sep=": ", index_col=0, names=["Values"], engine="python"
+        StringIO(split_info[4]),
+        sep=": ",
+        index_col=0,
+        names=["Values"],
+        engine="python",
     )
     # Convert DF to Series (easier access)
     best_parameters = best_parameters["Values"]
