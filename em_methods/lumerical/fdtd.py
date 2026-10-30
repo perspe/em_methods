@@ -397,7 +397,7 @@ def filtered_pabs(
         am_spectrum: AM spectrum to calculate photocurrent - am0 or am1.5
         tol: tolerance to compare the index values of the absorber with the rest
     Return:
-        results: Dictionary with jsc, filtered Pabs and pabs_lambdas
+        results: (jsc, wvl, abs)
     """
     if (
         f"results.{pabs_monitor_name}.Pabs"
@@ -431,13 +431,13 @@ def filtered_pabs(
     int_x = trapezoid(pabs_filtered, x=x, axis=0)
     int_y = trapezoid(int_x, x=y, axis=0)
     int_z = trapezoid(int_y, x=z, axis=0)
-    pabs_perovskite = int_z
+    pabs_absorber = int_z
     data_dict = {
         "Wavelength": pabs_wvl.flatten() * 10**9,
-        "Pabs_total": pabs_perovskite,
+        "Pabs_total": pabs_absorber,
     }
     jsc = jsc_files(pd.DataFrame(data_dict), am_spectrum=am_spectrum)[0].values[0]
-    return {"jsc": jsc, "pabs_perovskite": pabs_perovskite, "pabs_wvl": pabs_wvl}
+    return jsc, pabs_wvl, pabs_absorber
 
 
 def fdtd_run_large_data(
