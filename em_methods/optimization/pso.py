@@ -707,6 +707,75 @@ def read_pso_summary(filename: str):
     return fom, best_parameters, best_particles, fom_iterations
 
 
+def optimization_summary(
+    optimizations: List,
+    variables: List[str],
+    limits: List[Tuple],
+    *,
+    ax=None,
+    optimization_labels: Union[None, List[str]] = None,
+    override_variables: Union[None, List[str]] = None,
+    convert_units: Union[None, List[int]] = None,
+    marker: str = "*",
+    markersize: int = 25,
+):
+    """
+    Summarizes the results of multiple optimizations
+    This function can be stacked on the save plots via use of the ax variable
+    Args:
+        optimizations: List with the direct results of multiple PSO's
+        variables: List with the variables to be plotted
+        limits: List with the proper limits for each variable
+        ax: Axes object or list to plot the data (None to create new)
+        optimization_labels: Override basic names for the name of each optimization
+        override_variables: Change the xlabel name for each variable
+        convert_units: List with units to convert the variable values (None for no conversion)
+        marker, markersize: Change marker symbol or size in plot
+    """
+    subplot_config = {
+        "box_aspect": 0.05,
+        "yticklabels": [],
+    }
+    gridspec = {"hspace": 3}
+    override_variables = override_variables or variables
+    convert_units = convert_units or [1] * len(variables)
+    optimization_labels = optimization_labels or [
+        "Opt" + str(i + 1) for i in range(len(optimizations))
+    ]
+    if len(override_variables) != len(variables):
+        raise Exception("override_variables and variables should have same size")
+    if len(convert_units) != len(variables):
+        raise Exception("convert_units and variables should have same size")
+    if ax is None:
+        _, ax = plt.subplots(
+            len(variables) + 1,
+            1,
+            subplot_kw=subplot_config,
+            gridspec_kw=gridspec,
+            figsize=(4, 0.8 * len(variables)),
+        )
+    for ax_i in ax:
+        ax_i.tick_params(axis="both", length=0, labelsize=10, pad=0)
+        ax_i.grid(axis="x")
+    for optimization_i, optimization_label in zip(optimizations, optimization_labels):
+        # Plot the data for the FoM
+        fom = optimization_i[0]
+        ax[0].scatter(fom, 0, marker=marker, s=markersize, label=optimization_label)
+        ax[0].set_xlabel("FoM", fontsize=11, labelpad=1)
+        # Plot the data for all variables
+        opt_i_data = optimization_i[1].to_dict().items()
+        iterator = zip(ax[1:], opt_i_data, convert_units)
+        for ax_i, (param, value), units_i in iterator:
+            if param in variables:
+                ax_i.scatter(value * units_i, 0, marker=marker, s=markersize)
+    ax[0].legend(bbox_to_anchor=(-0.01, 1.5))
+    # Set proper xlabels and limits (only for variables)
+    for ax_i, lim_i, label_i in zip(ax[1:], limits, override_variables):
+        ax_i.set_xlabel(label_i, fontsize=11)
+        ax_i.set_xlim(lim_i)
+    return ax
+
+
 if __name__ == "__main__":
 
     def test_func(x, y):
