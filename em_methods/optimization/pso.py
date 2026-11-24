@@ -215,7 +215,7 @@ def particle_swarm(
     """
     # Create export path
     if export and not os.path.isdir(basepath):
-        logger.info(f"Creating {basepath=}...")
+        logger.debug(f"Creating {basepath=}...")
         os.mkdir(basepath)
     min_iteration, max_iteration, iteration_check = iterations
     if max_iteration < min_iteration and iteration_check:
@@ -399,7 +399,7 @@ def particle_swarm(
                 state_args.append(locals()[arg_i])
             logger.debug(f"PSO Save Args: {state_args}")
             __save_state(state_file, *state_args)
-            logger.info("Updating state file...")
+            logger.debug("Updating state file...")
         # Test crash for pso_resume function
         if CRASH and iteration == 6:
             logger.critical("Forced crash at iteration 6...")

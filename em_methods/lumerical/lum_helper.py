@@ -242,7 +242,6 @@ def lumerical_batch(
             process_list.append(run_process)
         for process in process_list:
             process.join()
-        logger.info(f"Simulations finished")
         return_res = [None] * len(jobs)
         while not res_queue.empty():
             jobid, result = res_queue.get()
@@ -332,7 +331,6 @@ def lumerical_run(
         run_process.start()
         logger.debug("Run Process Started...")
         run_process.join()
-        logger.info(f"Simulation finished")
         if res_queue.empty():
             raise LumericalError("No Results obtained from simulation")
         _, results = res_queue.get()
