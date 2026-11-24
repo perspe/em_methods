@@ -245,7 +245,7 @@ def fdtd_add_material(
         if not edit:
             material = fdtd.addmaterial("Sampled 3D data")
             fdtd.setmaterial(material, "name", name)
-            fdtd.setmaterial(name, "sampled data", np.c_[freq, permitivity])
+        fdtd.setmaterial(name, "sampled data", np.c_[freq, permitivity])
         for key, value in kwargs.items():
             fdtd.setmaterial(name, key, value)
         if savefit is not None:
